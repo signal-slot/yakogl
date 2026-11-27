@@ -236,12 +236,21 @@ fn max_draw_buffers_is_four_in_a_version_100_shader() {
     assert!(o.compiled && o.linked && o.error == GL_NO_ERROR, "{o:?}");
 }
 
+/// With the stand-in unset the constant is the build's own count
+/// (`backend::DRAW_TARGETS`: 4 on the PowerVR, 3 on the others): `a`
+/// compiles only for at most that, `b` only for at least that.
 #[test]
-fn max_draw_buffers_is_three_at_the_build_count() {
+fn max_draw_buffers_is_the_build_count() {
     let _g = context_with(0);
     let _r = Restore;
-    let body = "float a[4 - gl_MaxDrawBuffers]; a[0] = 1.0; gl_FragColor = vec4(a[0]);";
-    let o = build(&fs100("", body));
+    let n = backend::DRAW_TARGETS;
+    let body = format!(
+        "float a[{} - gl_MaxDrawBuffers]; float b[gl_MaxDrawBuffers - {}]; a[0] = 1.0; b[0] = 1.0; \
+         gl_FragColor = vec4(a[0] + b[0]);",
+        n + 1,
+        n - 1
+    );
+    let o = build(&fs100("", &body));
     assert!(o.compiled && o.linked && o.error == GL_NO_ERROR, "{o:?}");
 }
 

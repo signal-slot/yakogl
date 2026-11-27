@@ -598,14 +598,19 @@ const ATT: [GLenum; 4] = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_A
 
 /* ---- the queries and the state --------------------------------------------------- */
 
-/// The count is the stand-in's under it and the build's own (3) without.
+/// The count is the stand-in's under it and the build's own without: the
+/// PowerVR build answers four (`backend::DRAW_TARGETS`), and a stand-in of
+/// three still answers three.
 #[test]
-fn the_limits_are_four_under_the_stand_in_and_three_without() {
+fn the_limits_are_the_stand_ins_and_four_without() {
     let _r = rig(4);
     assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(4));
     assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(4));
     backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
-    assert_eq!(backend::DRAW_TARGETS, 3, "the PowerVR build answers three until a board run flips it");
+    assert_eq!(backend::DRAW_TARGETS, 4, "the PowerVR build answers four in the ES 3.0 report");
+    assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(4));
+    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(4));
+    backend::HOST_DRAW_TARGETS.store(3, Ordering::Relaxed);
     assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(3));
     assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(3));
 }
@@ -636,12 +641,12 @@ fn attachment_3_and_four_draw_buffers_are_accepted() {
     }
     release(fb, &rbs);
 
-    /* without the stand-in there is no point 3 */
-    backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
+    /* at three draw targets (the stand-in at 3) there is no point 3 */
+    backend::HOST_DRAW_TARGETS.store(3, Ordering::Relaxed);
     let (fb, rbs) = framebuffer(3);
     // SAFETY: plain GL call.
     unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_RENDERBUFFER, rbs[0]) };
-    assert_ne!(err(), GL_NO_ERROR, "a three-target build has no attachment point 3");
+    assert_ne!(err(), GL_NO_ERROR, "a three-target back end has no attachment point 3");
     release(fb, &rbs);
 }
 

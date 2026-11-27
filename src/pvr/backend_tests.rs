@@ -5699,18 +5699,18 @@ fn a_clear_of_two_integer_attachments_writes_each_ones_packed_dwords() {
 /// register after the one-dword one, as the emit lays them out, so the
 /// clear writes four registers with register 1 left 0. On a four-pair
 /// backend (the GL core's draw-target count 4, `backend_draws_targets`)
-/// that is the four-dword background program; a three-pair backend has no
-/// kick for it, so the clear is the per-attachment quads over the frame's
-/// load ([`clear_by_target_quads`]), attachment 1's quad writing registers
-/// 2 and 3.
+/// that is the four-dword background program; a three-pair backend (the
+/// count 3: a `report-es2` build's own) has no kick for it, so the clear is
+/// the per-attachment quads over the frame's load
+/// ([`clear_by_target_quads`]), attachment 1's quad writing registers 2 and
+/// 3. The count is set either way, so both arms run whatever
+/// `backend::DRAW_TARGETS` the build has.
 #[test]
 fn a_clear_of_an_aligned_integer_attachment_pair_fills_four_registers_or_falls_back() {
     for four in [false, true] {
         let rig = Rig::new();
-        if four {
-            rig.gl.backend_draws_targets(4);
-            restart_with_arenas(4, 1024, 768);
-        }
+        rig.gl.backend_draws_targets(if four { 4 } else { 3 });
+        restart_with_arenas(4, 1024, 768);
         assert_eq!(rig.b().eot_pairs, if four { 4 } else { 3 }, "the backend's pairs");
         let mut d = rig.draw(0);
         two_targets(&mut d, [GLES_SURF_RGBA8UI, GLES_SURF_RGBA16UI]);
