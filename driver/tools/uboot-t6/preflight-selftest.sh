@@ -71,6 +71,8 @@ mkrows "$W/rows_noentry" "$C1"; sed -i '/B01/d' "$W/rows_noentry/SHA256SUMS"
 mkrows "$W/rows_badsha" "$C1"; printf 'tampered' >"$W/rows_badsha/A00/zephyr/zephyr.bin"
 mkrows "$W/rows_nocommit" ""
 mkrows "$W/rows_nobin" "$C1"; rm "$W/rows_nobin/B01/zephyr/zephyr.bin"
+mkrows "$W/rows_logs" "$C1"; echo log >"$W/rows_logs/A00.log"; echo log >"$W/rows_logs/B01.log"
+mkrows "$W/rows_orphan" "$C1"; echo log >"$W/rows_orphan/X.log"
 mkrows "$W/rows_stray" "$C1"; echo stray >"$W/rows_stray/not_an_image.bin"
 
 S1=secret-uart-value-1
@@ -124,7 +126,12 @@ has 'FAIL c: no build commit'; check "row dir without COMMIT: FAIL c" $?
 run "$W/rows_nobin" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
 has 'FAIL c: B01/zephyr/zephyr.bin is missing'; check "row dir whose label has no zephyr.bin: FAIL c names it" $?
 run "$W/rows_stray" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
-has 'FAIL c: top-level file of a row image directory, not a <LABEL>.built, SHA256SUMS or COMMIT: not_an_image.bin'; check "row dir with a stray top-level file: FAIL c names it" $?
+has 'FAIL c: top-level file of a row image directory, not a <LABEL>.built, SHA256SUMS or COMMIT (a <LABEL>.log needs its .built): not_an_image.bin'; check "row dir with a stray top-level file: FAIL c names it" $?
+run "$W/rows_logs" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
+check "row dir with <LABEL>.log beside <LABEL>.built: exit 0 (rc $rc)" "$rc"
+run "$W/rows_orphan" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
+has 'FAIL c: top-level file of a row image directory'; check "row dir with an orphan X.log: FAIL c" $?
+grep -q 'directory.*: X.log' <<<"$out"; check "orphan X.log is named" $?
 run "$W/none" T6_UART=$S1 T6_HAND=$S2
 [ "$rc" = 2 ]; check "missing dir: usage exit 2 (rc $rc)" $?
 
