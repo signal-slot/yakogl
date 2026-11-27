@@ -42,7 +42,12 @@
 #       and OK.
 #   c8  no /dev/tty(USB|ACM), IPv4 address or login (a user name, '@',
 #       a host name with a domain) in tools/cts/log/*-imx8mp-gles3-* and
-#       *-imx8mp-es2-*.
+#       *-imx8mp-es2-*; and imx8mp-gles3-redact.py --check over those
+#       directories exits 0 (its rules are the stronger ones).
+#   p1  (not a c-check) git diff --stat of the protected paths since
+#       38132404 (--since REV): third_party, driver/src/v3d/generated,
+#       driver/src/pvr/generated, driver/src/fw/pvr_fw_blob.h. FAIL when any
+#       is touched, or when git cannot tell.
 #
 # One line per check on stdout, 'c<N> ok|FAIL <detail>', then a summary.
 # Exit 0 only when all pass, 1 otherwise, 2 on a usage error.
@@ -53,7 +58,8 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DATE=
-USAGE="usage: $0 [--date YYYY-MM-DD] [--commit [x2-]HASH8] [<repo root>]"
+USAGE="usage: $0 [--date YYYY-MM-DD] [--commit [x2-]HASH8] [--since REV] [<repo root>]"
+SINCE=38132404
 COMMIT=
 BOARDONLY=
 while [ $# -gt 0 ]; do
@@ -61,6 +67,11 @@ while [ $# -gt 0 ]; do
 	--date)
 		[ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }
 		DATE=$2
+		shift 2
+		;;
+	--since)
+		[ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }
+		SINCE=$2
 		shift 2
 		;;
 	--commit)
@@ -96,6 +107,11 @@ LOG="$CTS/log"
 FAILS=0
 TOTAL=0
 
+pres() { # pres <ok|FAIL> <detail>: the protected-path check, named p1
+	TOTAL=$((TOTAL + 1))
+	[ "$1" = ok ] || FAILS=$((FAILS + 1))
+	printf 'p1 %s %s\n' "$1" "$2"
+}
 res() { # res <n> <ok|FAIL> <detail>
 	TOTAL=$((TOTAL + 1))
 	[ "$2" = ok ] || FAILS=$((FAILS + 1))
@@ -279,12 +295,30 @@ else
 		-e '([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?' \
 		-e '[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.[A-Za-z]' \
 		-- "${gles3[@]}" "${es2[@]}" 2>/dev/null)
-	if [ -z "$hits" ]; then
-		res 8 ok "no device path, address or login in the imx8mp logs"
-	else
+	rout=$(tool imx8mp-gles3-redact.py --check "${gles3[@]}" "${es2[@]}" 2>&1)
+	rrc=$?
+	if [ -n "$hits" ]; then
 		printf '%s\n' "$hits" | head -5 | cut -c1-200 >&2
 		res 8 FAIL "$(printf '%s\n' "$hits" | wc -l) line(s) match (first: $(printf '%s\n' "$hits" | head -1 | cut -d: -f1,2))"
+	elif [ $rrc -ne 0 ]; then
+		printf '%s\n' "$rout" | head -5 | cut -c1-200 >&2
+		res 8 FAIL "redact --check exit $rrc: $(printf '%s\n' "$rout" | tail -1)"
+	else
+		res 8 ok "no device path, address or login in the imx8mp logs; redact --check clean"
 	fi
+fi
+
+# p1
+prot=(third_party driver/src/v3d/generated driver/src/pvr/generated driver/src/fw/pvr_fw_blob.h)
+if ! git -C "$ROOT" rev-parse -q --verify "$SINCE^{commit}" >/dev/null 2>&1; then
+	pres FAIL "cannot tell: no commit $SINCE in $ROOT"
+elif ! stat=$(git -C "$ROOT" diff --stat "$SINCE" -- "${prot[@]}" 2>&1); then
+	pres FAIL "git diff failed: $(printf '%s\n' "$stat" | tail -1)"
+elif [ -n "$stat" ]; then
+	printf '%s\n' "$stat" >&2
+	pres FAIL "protected paths touched since $SINCE: $(printf '%s\n' "$stat" | tail -1)"
+else
+	pres ok "protected paths untouched since $SINCE"
 fi
 
 echo "summary: $((TOTAL - FAILS)) ok, $FAILS FAIL of $TOTAL"
