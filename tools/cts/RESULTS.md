@@ -615,8 +615,8 @@ areas are 31.5 MiB each.
 
 Zephyr images started out of the board's Armbian by kexec
 (`driver/tools/kexec-zephyr/nanopc-t6.sh`) and judged against the predicted
-record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result: the
-sign-off form (U-Boot starting the image) has not run. The steps Z1 to Z4,
+record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result;
+the runs by U-Boot's `go` are in the next section. The steps Z1 to Z4,
 their predicted records and the result of Z1's first half (`t6_hello`,
 2026-10-19) are in `driver/docs/nanopc-t6-mali.md`; a step gets its row
 here when it has run. The rows after Z4 are gl_test, the dEQP-GLES2 tree
@@ -769,6 +769,28 @@ record screen on the capture unit's pictures
   `GL_INVALID_OPERATION` at a draw 8, "got invalid value" 4, "expected
   GL_TRUE" 3, 1 without a text. The picture on the screen was not checked:
   the images draw to their own surface and read it back.
+
+## Mali: NanoPC-T6 on Zephyr (by U-Boot's `go`)
+
+The same images read from the eMMC and started by U-Boot's `go`, with no
+Linux before them (`driver/tools/uboot-t6/prompt-go.sh`: the tool types the
+commands at the U-Boot prompt), judged by `t6-verdict.sh` with
+`T6_ROUTE=uboot`. A development result too: U-Boot starting the image by
+itself, with nothing typed, has not run. Not run on this route: gl_test,
+the dEQP-GLES2 tree, glmark2 and Slint. After the reset at the end of the
+two display runs the UART reader saw no Linux login (the network UART
+adapter's stream stopped); the tool proved the reboot over ssh by a new
+boot id.
+
+| Step | Image | Result | Build | Run | Record |
+|---|---|---|---|---|---|
+| Z1, first half: the counter | `t6_hello` | **PASS**, `VERDICT t6_hello PASS`: `t6_hello: PASS: counted 10 s in 10004 ms` | `v0.1.0-3259-g3dd1795214` | 2026-11-24 10:34 JST | `records/nanopc-t6/20261124-103406-t6-uboot-go` |
+| Z1, second half: the GPU power-on | `t6_gpu` | **PASS**, `VERDICT t6_gpu PASS`: `t6_gpu: PASS: GPU_ID 0xa8670005, L2 ready, 19 ms` | `v0.1.0-3259-g3dd1795214` | 2026-11-24 10:38 JST | `records/nanopc-t6/20261124-103839-t6-uboot-go` |
+| Z2: AS0 and a cache flush | `t6_mmu` | **PASS**, `VERDICT t6_mmu PASS`: `t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010028000, three cache flush round trips, 13 ms` | `v0.1.0-3259-g3dd1795214` | 2026-11-24 10:40 JST | `records/nanopc-t6/20261124-104043-t6-uboot-go` |
+| Z3: the firmware boots | `t6_fw` | **PASS**, `VERDICT t6_fw PASS`: `t6_fw: PASS` | `v0.1.0-3259-g3dd1795214` | 2026-11-24 10:49 JST | `records/nanopc-t6/20261124-104930-t6-uboot-go` |
+| Z4: one frame submitted from our kernel side | `t6_submit` | **PASS**, `VERDICT t6_submit PASS`: `t6_submit: PASS` | `v0.1.0-3259-g3dd1795214` | 2026-11-24 10:51 JST | `records/nanopc-t6/20261124-105135-t6-uboot-go` |
+| D9: the display from cold, 1920x1080, the four-colour pattern | `t6_cold` | **PASS**, `VERDICT t6_cold PASS`: `t6_cold: chain rc 0 in 63 ms`, 60 frames in 999961 us, `HPD 1` after the 90 s hold, `t6_cold: PASS: Esmart0 of VP0 shows 0x10020000, frames run, no underflow, no bus error`; the pattern is on the capture unit's pictures | `v0.1.0-3328-g30aca2e5ea` | 2026-11-24 21:21 JST | `records/nanopc-t6/20261124-212159-t6-uboot-go` |
+| D9: the triangle on HDMI; no picture to adopt (stop 4), so the first show runs the cold chain | `examples/triangle` | **PASS**, `VERDICT triangle PASS`: `board: chain rc 0 in 64 ms`, `triangle: check PASS (every pixel read back)`, `triangle: PASS`; 0 wrong pixels, 0 of 23 glReadPixels points differ; the triangle is on the capture unit's pictures | `v0.1.0-3332-gd80ec98fce` | 2026-11-24 21:13 JST | `records/nanopc-t6/20261124-211350-t6-uboot-go` |
 
 ## Vivante: STM32MP257F-DK (GC8000) on Zephyr (one-shot off the card's U-Boot)
 
