@@ -116,6 +116,9 @@ option(YAKOGL_COLOR_BUFFER_FLOAT "claim GL_EXT_color_buffer_float where the back
 # and a shift) instead of the GL core drawing instance by instance
 # (docs/notes/instanceid-per-draw.md, row "P3 (full path)"). OFF by default.
 option(YAKOGL_PVR_INSTANCE_DIVISOR "let the PowerVR back end take instance divisors above 1 in hardware (the crate's pvr-instance-divisor feature)" OFF)
+# The STM32MP257F's GCNANOULTRA31_VIP2 as the Vivante back end's active profile
+# (the crate's `vivante-st` feature, implies gpu-vivante). OFF = the i.MX8MP's.
+option(YAKOGL_VIVANTE_ST "build the Vivante back end with the STM32MP257F's profile (the crate's vivante-st feature)" OFF)
 # The gl_test runner (the crate's `gl-test-runner` feature): the walker of
 # driver/tools/pvrlab/gl_test.c, which a build that links that file needs
 # (gl_test_run calls it). OFF in a product build.

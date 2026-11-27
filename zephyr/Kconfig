@@ -203,6 +203,17 @@ config YAKOGL_PVR_INSTANCE_DIVISOR
 	  lifts that. A dEQP-GLES3 or gl_test image that wants the hardware
 	  path selects it; a product image leaves it off.
 
+config YAKOGL_VIVANTE_ST
+	bool "Vivante: the STM32MP257F's GCNANOULTRA31_VIP2 profile (the crate's vivante-st feature)"
+	depends on YAKOGL_GPU_VIVANTE
+	default n
+	help
+	  The Vivante back end's active profile is ST's GCNANOULTRA31_VIP2
+	  (model 0x8000, revision 0x6205; the STM32MP257F-DK, issue #1281)
+	  instead of the i.MX8MP's GC7000UL: its limits, its backend name and
+	  a line width clamped to [1, 1]. Off by default; the DK images'
+	  board files select it, every other board's image leaves it off.
+
 config YAKOGL_GC_POOL_NO_REUSE
 	bool "GC7000: never reuse freed GPU memory (a measurement; leaks)"
 	depends on YAKOGL_GPU_VIVANTE
