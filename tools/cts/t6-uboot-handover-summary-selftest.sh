@@ -5,7 +5,7 @@
 #   tools/cts/t6-uboot-handover-summary-selftest.sh
 #
 # Host-only check of tools/cts/t6-uboot-handover-summary.py on synthetic
-# records built in $TMPDIR: a prompt-reads answers.txt and a t6_cold go
+# records built in $TMPDIR: a prompt-reads answers.txt and a t6_gpu go
 # record (image.log, verdict.txt), in the line formats of prompt-reads.py and
 # of tools/probes/nanopc_t6/common/t6_z1.c. Covers keep, move and refuse
 # (stops 9 and 10) of gpu_clock_set, the supply on and off, the WDT0 gates
@@ -74,7 +74,8 @@ reads() {
 	} >"$d/answers.txt"
 }
 
-# go KIND DIR: a t6_cold go record. KIND: keep, move, supply-on (a move with
+# go KIND DIR: a t6_gpu go record (the hand-over lines are t6_z1.c's, which t6_gpu
+# links; t6_cold prints none of them). KIND: keep, move, supply-on (a move with
 # the supply on at hand-over), refuse9, refuse10, bare (no hand-over lines).
 go() {
 	local kind=$1 d=$2 supply=off clk="" en="" stop=""
@@ -94,11 +95,11 @@ go() {
 	refuse9)
 		clk="kept 0, CPLL 1188000000 Hz, wrote CLKSEL_CON(158) 0x00000000 (159) 0x00000000, now 0x00001f24 0x00000000: clk_gpu_src 0 Hz"
 		en="not sent; POWER_EN0 0x0e BUCK1_ON_VSEL 0x1c after, waited 0 us"
-		stop="t6_cold: Z1 stopped: stop 9 (the GPU clock is on no OPP rate and the CPLL is not 1500 MHz (nothing written)), refusal 0, detail 0x0000000046e3f0e0" ;;
+		stop="t6_gpu: Z1 stopped: stop 9 (the GPU clock is on no OPP rate and the CPLL is not 1500 MHz (nothing written)), refusal 0, detail 0x0000000046e3f0e0" ;;
 	refuse10)
 		clk="kept 0, CPLL 1500000000 Hz, wrote CLKSEL_CON(158) 0x00001f24 (159) 0x00000000, now 0x00001f04 0x00000000: clk_gpu_src 0 Hz"
 		en="not sent; POWER_EN0 0x0e BUCK1_ON_VSEL 0x1c after, waited 0 us"
-		stop="t6_cold: Z1 stopped: stop 10 (the clock set did not read back), refusal 158, detail 0x0000000000001f04" ;;
+		stop="t6_gpu: Z1 stopped: stop 10 (the clock set did not read back), refusal 158, detail 0x0000000000001f04" ;;
 	esac
 	{
 		echo "T6:A EL2 HCR_EL2 0x0000000080000020 -> 0x0000000080000000"
@@ -106,35 +107,35 @@ go() {
 		echo "t6: WDT0 armed: CR 0x00000008 -> 0x00000009 (was stopped), TORR 0x00000000 -> 0x0000000d, CCVR 0x1ffffff3, PARAM_1 0x10000ac0, version 0x3131302a, flags 0x0: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s"
 		echo "*** Booting Zephyr OS build v4.2.0 ***"
 		if [ "$kind" != bare ]; then
-			echo "t6_cold: PD_GPU at hand-over: PWR_GATE 0x0000ffff STATUS 0x00000000 BUS_IDLE_REQ 0x0000e3cf ACK 0x000a9fff ST 0x000a9fff REPAIR_STATUS 0xfad40001: off or idle"
-			echo "t6_cold: CRU at hand-over: CLKSEL_CON(158) 0x00001f24 CLKSEL_CON(159) 0x00000000 CLKGATE_CON(66) 0x00000000 MODE_CON0 0x00000155 PLL_CON 0x000000fa 0x00000042 0x00000000: clk_gpu_src 300000000 Hz"
+			echo "t6_gpu: PD_GPU at hand-over: PWR_GATE 0x0000ffff STATUS 0x00000000 BUS_IDLE_REQ 0x0000e3cf ACK 0x000a9fff ST 0x000a9fff REPAIR_STATUS 0xfad40001: off or idle"
+			echo "t6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x00001f24 CLKSEL_CON(159) 0x00000000 CLKGATE_CON(66) 0x00000000 MODE_CON0 0x00000155 PLL_CON 0x000000fa 0x00000042 0x00000000: clk_gpu_src 300000000 Hz"
 			if [ "$supply" = on ]; then
-				echo "t6_cold: RK806 at hand-over: POWER_EN0 0x0f POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x1c: vdd_gpu_s0 on, 675000 uV"
+				echo "t6_gpu: RK806 at hand-over: POWER_EN0 0x0f POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x1c: vdd_gpu_s0 on, 675000 uV"
 			else
-				echo "t6_cold: RK806 at hand-over: POWER_EN0 0x0e POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x1c: vdd_gpu_s0 off, 675000 uV"
+				echo "t6_gpu: RK806 at hand-over: POWER_EN0 0x0e POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x1c: vdd_gpu_s0 off, 675000 uV"
 			fi
-			echo "t6_cold: clock set: $clk"
-			echo "t6_cold: vdd_gpu_s0 enable: $en"
+			echo "t6_gpu: clock set: $clk"
+			echo "t6_gpu: vdd_gpu_s0 enable: $en"
 			if [ -n "$stop" ]; then
 				echo "$stop"
 			else
-				echo "t6_cold: GPU PLL on: PLL_CON6 0x00009c00 at hand-over, was on 1, waited 0 us, PLL_CON6 0x00009c00"
-				echo "t6_cold: PD_GPU on: gates opened 0xf, was on 0, waited 3/2/2 us"
-				echo "t6_cold: PD_GPU after: PWR_GATE 0x0000fffe STATUS 0x00000000 BUS_IDLE_REQ 0x0000e3ce ACK 0x000a9ffe ST 0x000a9ffe REPAIR_STATUS 0xfad40003: on"
+				echo "t6_gpu: GPU PLL on: PLL_CON6 0x00009c00 at hand-over, was on 1, waited 0 us, PLL_CON6 0x00009c00"
+				echo "t6_gpu: PD_GPU on: gates opened 0xf, was on 0, waited 3/2/2 us"
+				echo "t6_gpu: PD_GPU after: PWR_GATE 0x0000fffe STATUS 0x00000000 BUS_IDLE_REQ 0x0000e3ce ACK 0x000a9ffe ST 0x000a9ffe REPAIR_STATUS 0xfad40003: on"
 			fi
 		fi
 	} >"$d/image.log"
 	if [ "$kind" = bare ]; then
 		rm -f "$d/verdict.txt"
 	elif [ -n "$stop" ]; then
-		echo "VERDICT t6_cold FAIL" >"$d/verdict.txt"
+		echo "VERDICT t6_gpu FAIL" >"$d/verdict.txt"
 	else
-		echo "VERDICT t6_cold PASS" >"$d/verdict.txt"
+		echo "VERDICT t6_gpu PASS" >"$d/verdict.txt"
 	fi
 }
 
 R="$W/20261125-1000-reads-0123abcd"; reads 00000000 off "$R"
-RC1="$W/20261125-1010-t6_cold-keep-0123abcd"
+RC1="$W/20261125-1010-t6_gpu-keep-0123abcd"
 
 # 1. keep, supply on
 go keep "$RC1"; run "$R" "$RC1"
@@ -142,9 +143,9 @@ rc_is "keep: exit 0" 0
 has "keep: names the choice" "gpu_clock_set took: keep"
 has "keep: supply on" "vdd_gpu_s0 on, 675000 uV"
 has "keep: enable not sent" "vdd_gpu_s0 enable: not sent"
-has "keep: both record names" "records: prompt reads 20261125-1000-reads-0123abcd; go 20261125-1010-t6_cold-keep-0123abcd"
+has "keep: both record names" "records: prompt reads 20261125-1000-reads-0123abcd; go 20261125-1010-t6_gpu-keep-0123abcd"
 hasnt "keep: no full path echoed" "$W"
-has "keep: verdict" "verdict: VERDICT t6_cold PASS"
+has "keep: verdict" "verdict: VERDICT t6_gpu PASS"
 has "reads: WDT0 gates open" "PCLK open, TCLK open -> open"
 has "reads: WDT0 CR decoded" "WDT_CR 0x00000008 (WDT_EN 0, RMOD 0, RPL 2), WDT_TORR 0x0000000e (TOP 14)"
 has "reads: WDT0 identity" "COMP_VERSION 0x3131302a"
@@ -156,7 +157,7 @@ has "reads: QoS not read" "GPU QoS words: not read"
 has "reads: CPLL words over two md lines" "000000fa 00000042 00000000 00000000 00000000 00000000 00009c00"
 
 # 2. move, supply off
-RC2="$W/20261125-1020-t6_cold-move-0123abcd"; go move "$RC2"; run "$R" "$RC2"
+RC2="$W/20261125-1020-t6_gpu-move-0123abcd"; go move "$RC2"; run "$R" "$RC2"
 rc_is "move: exit 0" 0
 has "move: names the choice" "gpu_clock_set took: move: CLKSEL_CON(158) written, both words read back"
 has "move: words written and read back" "words written: CLKSEL_CON(158) 0x00001f24, (159) 0x00000000; read back: 0x00001f24 0x00000000"
@@ -165,21 +166,21 @@ has "supply off: enable sent" "vdd_gpu_s0 enable: frame sent; POWER_EN0 0x0f BUC
 has "move: PD_GPU after" "PD_GPU after: PWR_GATE 0x0000fffe"
 
 # 2b. move with the supply on and a (159) write
-RC2b="$W/20261125-1025-t6_cold-supplyon-0123abcd"; go supply-on "$RC2b"; run "$R" "$RC2b"
+RC2b="$W/20261125-1025-t6_gpu-supplyon-0123abcd"; go supply-on "$RC2b"; run "$R" "$RC2b"
 has "move, supply on: both words written" "written and (159), both words read back"
 has "supply on: read" "vdd_gpu_s0 on, 675000 uV"
 
 # 3. refuse, stop 9 (nothing written)
-RC3="$W/20261125-1030-t6_cold-refuse9-0123abcd"; go refuse9 "$RC3"; run "$R" "$RC3"
+RC3="$W/20261125-1030-t6_gpu-refuse9-0123abcd"; go refuse9 "$RC3"; run "$R" "$RC3"
 rc_is "refuse 9: exit 0" 0
 has "refuse 9: names the choice" "gpu_clock_set took: refuse: NoTableRate, nothing written"
 has "refuse 9: the CPLL rate" "CPLL 1188000000 Hz;"
 has "refuse 9: stop line" "image stop: stop 9"
-has "refuse 9: verdict FAIL" "verdict: VERDICT t6_cold FAIL"
+has "refuse 9: verdict FAIL" "verdict: VERDICT t6_gpu FAIL"
 has "refuse 9: PD_GPU after not read" "PD_GPU after: not read"
 
 # 4. refuse, stop 10 (written, did not read back)
-RC4="$W/20261125-1040-t6_cold-refuse10-0123abcd"; go refuse10 "$RC4"; run "$R" "$RC4"
+RC4="$W/20261125-1040-t6_gpu-refuse10-0123abcd"; go refuse10 "$RC4"; run "$R" "$RC4"
 has "refuse 10: names the choice" "gpu_clock_set took: refuse: the clock set did not read back"
 has "refuse 10: written and read back" "written: CLKSEL_CON(158) 0x00001f24, (159) 0x00000000; read back: 0x00001f04 0x00000000"
 
@@ -192,7 +193,7 @@ has "reads: WDT0 not read" "WDT_CR / WDT_TORR: not read (gates closed: WDT0 is n
 has "reads: WDT0 identity not read" "COMP_PARAM_1 / COMP_VERSION / COMP_TYPE: not read"
 
 # 6. values missing: a bare image.log, an answers.txt without md answers
-RB="$W/20261125-1060-t6_cold-bare-0123abcd"; go bare "$RB"
+RB="$W/20261125-1060-t6_gpu-bare-0123abcd"; go bare "$RB"
 mkdir -p "$W/emptyreads"; printf '## version\nU-Boot\n' >"$W/emptyreads/answers.txt"
 run "$W/emptyreads" "$RB"
 rc_is "missing values: exit 0" 0
@@ -206,12 +207,12 @@ hasnt "missing: nothing decoded as keep or move" "gpu_clock_set took"
 # 7. files instead of directories
 run "$R/answers.txt" "$RC2/image.log"
 rc_is "files given: exit 0" 0
-has "files given: picks verdict.txt next to image.log" "verdict: VERDICT t6_cold PASS"
+has "files given: picks verdict.txt next to image.log" "verdict: VERDICT t6_gpu PASS"
 
 # 8. redaction refusals: each kind, in image.log; nothing may be echoed
 i=0
 for kind in "rfc2217://192.0.2.9:4001/x" "/dev/ttyUSB7" "aa:bb:cc:dd:ee:0f" "$IP2"; do
-	RX="$W/20261125-107$i-t6_cold-move-0123abcd"; go move "$RX"
+	RX="$W/20261125-107$i-t6_gpu-move-0123abcd"; go move "$RX"
 	echo "console: $kind" >>"$RX/image.log"
 	run "$R" "$RX"
 	rc_is "redaction ($kind): exit 3" 3
@@ -222,7 +223,7 @@ done
 RM="$W/reads-mac"; reads 00000000 off "$RM"
 sed -i 's/^## reset/## md.l 0xfd7c0c10 1\nfd7c0c10: aa:bb:cc:dd:ee:0f\n## reset/' "$RM/answers.txt"
 run "$RM" "$RC1"; rc_is "redaction: MAC in a md.l answer: exit 3" 3
-RV="$W/20261125-1080-t6_cold-move-0123abcd"; go move "$RV"; echo "VERDICT t6_cold PASS via /dev/ttyS0" >>"$RV/verdict.txt"
+RV="$W/20261125-1080-t6_gpu-move-0123abcd"; go move "$RV"; echo "VERDICT t6_gpu PASS via /dev/ttyS0" >>"$RV/verdict.txt"
 run "$R" "$RV"; rc_is "redaction: /dev/tty in verdict.txt: exit 3" 3
 RN="$W/$IP3-t6_cold"; go move "$RN"; run "$R" "$RN"
 rc_is "redaction: address in a record name: exit 3" 3
@@ -243,7 +244,7 @@ RU="$W/20261125-1100-reads-0123abcd"; reads 00000000 off "$RU"
 	echo "# UART2 clock select: CLKSEL_CON(43) 0x00000090, (44) 0x00010003, (45) 0x00000001: source cpll / 5 * 1 / 3"
 	echo "# UART2 input clock 100000000 Hz; divisor 1 gives 6250000 baud (clk / 16); the PLL mode is not applied"
 } >>"$RU/answers.txt"
-RG="$W/20261125-1110-t6_cold-gic-0123abcd"; go keep "$RG"
+RG="$W/20261125-1110-t6_gpu-gic-0123abcd"; go keep "$RG"
 {
 	echo "# SYNTHETIC lines: GIC and feeder, not a measurement"
 	echo "t6: GIC active state: GICD_TYPER 0x0000ff25 GICR_TYPER 0x0000000000000000 GICR_ISACTIVER0 0x08000000 as found, 1 INTID(s) active (INTIDs 27), 16 word(s) written ICACTIVER, 0 still active"
@@ -260,7 +261,7 @@ hasnt "feed: not absent" "feeder timer never ticked"
 # the new lines come after the old ones
 if [ "$(grep -n 'verdict:' <<<"$OUT" | head -1 | cut -d: -f1)" -lt "$(grep -n 'UART2 at the prompt' <<<"$OUT" | head -1 | cut -d: -f1)" ]; then ok "new lines are appended after the verdict"; else bad "new lines are appended after the verdict"; fi
 # no redistributor, no first feed
-RH="$W/20261125-1120-t6_cold-nogic-0123abcd"; go keep "$RH"
+RH="$W/20261125-1120-t6_gpu-nogic-0123abcd"; go keep "$RH"
 echo "t6: GIC active state: GICD_TYPER 0x0000ff25, no redistributor with affinity 0x00000000 in 1 frame(s): SGIs and PPIs not scanned, 0 INTID(s) active (none), 15 word(s) written ICACTIVER, 0 still active" >>"$RH/image.log"
 run "$R" "$RH"
 has "gic: no redistributor" "no redistributor matched"
@@ -271,6 +272,35 @@ has "uart2 absent: not read" "UART2 at the prompt: not read"
 run "$R" "$RB"
 has "gic absent: not read" "GIC active state line: not read"
 has "first feed absent on a bare log" "first feed: absent"
+
+# 11. a t6_cold-only record has no hand-over lines: not read, with the hint;
+# t6_cold plus t6_gpu takes the hand-over from t6_gpu and says so.
+RCold="$W/20261125-1130-t6_cold-0123abcd"; mkdir -p "$RCold"
+{
+	echo "T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369"
+	echo "*** Booting Zephyr OS build v4.2.0 ***"
+	echo "t6_cold: display chain: VOP2 found, scan-out adopted"
+} >"$RCold/image.log"
+echo "VERDICT t6_cold PASS" >"$RCold/verdict.txt"
+run "$R" "$RCold"
+rc_is "t6_cold only: exit 0" 0
+has "t6_cold only: clock not read" "gpu_clock_set: not read"
+has "t6_cold only: RK806 not read" "RK806 at hand-over: not read"
+has "t6_cold only: PD_GPU at hand-over not read" "PD_GPU at hand-over: not read"
+has "t6_cold only: CRU not read" "CRU at hand-over: not read"
+has "t6_cold only: hint names t6_gpu" "pass the t6_gpu go record"
+has "t6_cold only: WDT0 arm still read" "rc 0, CR 0x00000009, period 22369 ms"
+hasnt "t6_cold only: single record has no source tags" "[from "
+run "$R" "$RCold" "$RC2"
+rc_is "two records: exit 0" 0
+has "two records: both names" "go 20261125-1130-t6_cold-0123abcd, 20261125-1020-t6_gpu-move-0123abcd"
+has "two records: clock from t6_gpu" "gpu_clock_set took: move: CLKSEL_CON(158) written, both words read back [from 20261125-1020-t6_gpu-move-0123abcd]"
+has "two records: PD_GPU from t6_gpu" "PD_GPU at hand-over: PWR_GATE 0x0000ffff"
+has "two records: WDT0 arm from t6_cold" "rc 0, CR 0x00000009, period 22369 ms [from 20261125-1130-t6_cold-0123abcd]"
+has "two records: verdict of each" "verdict (20261125-1130-t6_cold-0123abcd): VERDICT t6_cold PASS"
+has "two records: second verdict" "verdict (20261125-1020-t6_gpu-move-0123abcd): VERDICT t6_gpu PASS"
+hasnt "two records: no hint" "hint:"
+run "$R" "$RCold" "$W/nowhere"; rc_is "second go record unreadable: exit 4" 4
 
 # 9. usage and unreadable
 run; rc_is "no arguments: exit 2" 2

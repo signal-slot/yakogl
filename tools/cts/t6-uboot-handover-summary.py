@@ -3,12 +3,21 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """The measured U-Boot hand-over of the NanoPC-T6 as one plain-text block.
 
-    python3 -I tools/cts/t6-uboot-handover-summary.py READS GO
+    python3 -I tools/cts/t6-uboot-handover-summary.py READS GO [GO ...]
 
 READS is a prompt-reads record (driver/tools/uboot-t6/prompt-reads.sh): the
 directory, or its answers.txt ("## command" and the command's output, as
-prompt-reads.py writes it). GO is a t6_cold record of prompt-go.sh: the
+prompt-reads.py writes it). GO is a go record of prompt-go.sh: the
 directory, or its image.log (the verdict.txt next to it is read too).
+The hand-over lines ("clock set:", "RK806 at hand-over", "vdd_gpu_s0
+enable", "PD_GPU at hand-over", "PD_GPU on", "CRU at hand-over") are printed
+by tools/probes/nanopc_t6/common/t6_z1.c, which t6_gpu, t6_fw, t6_submit and
+t6_mmu link: give the t6_gpu go record. t6_cold prints only the display
+chain and the WDT0 lines (T6:A3, "t6: WDT0 armed"), so a t6_cold record
+alone reads "not read" for every hand-over line. More than one GO may be
+given (t6_cold for its WDT0 and display lines, t6_gpu for the hand-over): each
+field is taken from the first record that has its line, and with more than
+one GO the line says "[from RECORD]". With one GO the output is as before.
 
 The block gives
   - the prompt reads and what they say: PD_GPU (the PMU words, decided as
@@ -62,6 +71,29 @@ ADDRESS = (
     ("a MAC address", re.compile(r"(?<![0-9a-f])(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])", re.I)),
     ("a 100.64/10 address", re.compile(r"(?<![\d.])100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(?![\d])")),
 )
+
+
+class Go:
+    """The go records, searched in the order given. search() returns the
+    match of the first record that has it; src() names that record."""
+
+    def __init__(self, recs):
+        self.recs = recs  # [(name, image.log text, verdict text or None)]
+        self.last = None
+
+    def search(self, rx):
+        for name, img, _ in self.recs:
+            m = rx.search(img)
+            if m:
+                self.last = name
+                return m
+        self.last = None
+        return None
+
+    def src(self):
+        """' [from NAME]' for the record of the last match when there are
+        several records, else ''."""
+        return " [from %s]" % self.last if len(self.recs) > 1 and self.last else ""
 
 
 class Refused(Exception):
@@ -245,7 +277,7 @@ CLOCK_STOPS = {9: "refuse: NoTableRate, nothing written (the CPLL is not 1500 MH
 
 def clock_block(img):
     L = []
-    cl, stop = CLK_RX.search(img), STOP_RX.search(img)
+    cl = img.search(CLK_RX); csrc = img.src(); stop = img.search(STOP_RX)
     if cl is None:
         L.append("  gpu_clock_set: %s (no 'clock set:' line: the image stopped before it or printed none)" % NR)
         if stop and int(stop.group(1)) in CLOCK_STOPS:
@@ -265,61 +297,70 @@ def clock_block(img):
         took = "move: CLKSEL_CON(158) written%s, both words read back" % (" and (159)" if w159 else "")
     else:
         took = "not decided (kept 0 but no word written and no clock refusal in the record)"
-    L.append("  gpu_clock_set took: %s" % took)
+    L.append("  gpu_clock_set took: %s%s" % (took, csrc))
     L.append("  CPLL %d Hz; words written: CLKSEL_CON(158) 0x%08x, (159) 0x%08x; read back: 0x%08x 0x%08x; "
              "clk_gpu_src %d Hz" % (cpll, w158, w159, n158, n159, hz))
-    pl = PLL_RX.search(img)
+    pl = img.search(PLL_RX)
     if pl:
-        L.append("  GPU PLL: PLL_CON6 0x%s at hand-over, was on %s, waited %s us, PLL_CON6 0x%s after" % (
-            pl.group(1), pl.group(2), pl.group(3), pl.group(4)))
+        L.append("  GPU PLL: PLL_CON6 0x%s at hand-over, was on %s, waited %s us, PLL_CON6 0x%s after%s" % (
+            pl.group(1), pl.group(2), pl.group(3), pl.group(4), img.src()))
     return L
 
 
 def supply_block(img):
     L = []
-    rk, en = RK_RX.search(img), EN_RX.search(img)
+    rk = img.search(RK_RX)
     if rk is None:
         L.append("  RK806 at hand-over: %s" % NR)
     else:
         L.append("  RK806 at hand-over: POWER_EN0 0x%s POWER_SLP_EN0 0x%s BUCK1_CONFIG 0x%s BUCK1_ON_VSEL 0x%s: "
-                 "vdd_gpu_s0 %s, %s uV" % (rk.group(1), rk.group(2), rk.group(3), rk.group(4), rk.group(5), rk.group(6)))
+                 "vdd_gpu_s0 %s, %s uV%s" % (rk.group(1), rk.group(2), rk.group(3), rk.group(4), rk.group(5),
+                                             rk.group(6), img.src()))
+    en = img.search(EN_RX)
     if en is None:
         L.append("  vdd_gpu_s0 enable: %s" % NR)
     else:
-        L.append("  vdd_gpu_s0 enable: %s; POWER_EN0 0x%s BUCK1_ON_VSEL 0x%s after, waited %s us" % (
-            en.group(1), en.group(2), en.group(3), en.group(4)))
+        L.append("  vdd_gpu_s0 enable: %s; POWER_EN0 0x%s BUCK1_ON_VSEL 0x%s after, waited %s us%s" % (
+            en.group(1), en.group(2), en.group(3), en.group(4), img.src()))
     return L
 
 
 def pd_block(img):
     L = []
-    got = {m.group(1): m for m in PD_RX.finditer(img)}
     for when in ("at hand-over", "after"):
-        m = got.get(when)
+        m = img.search(re.compile(PD_RX.pattern.replace("(at hand-over|after)", "(%s)" % when), re.M))
         if m is None:
             L.append("  PD_GPU %s: %s" % (when, NR))
         else:
-            L.append("  PD_GPU %s: PWR_GATE 0x%s STATUS 0x%s BUS_IDLE_REQ 0x%s ACK 0x%s ST 0x%s REPAIR_STATUS 0x%s: %s" % (
-                (when,) + m.groups()[1:]))
+            L.append("  PD_GPU %s: PWR_GATE 0x%s STATUS 0x%s BUS_IDLE_REQ 0x%s ACK 0x%s ST 0x%s REPAIR_STATUS 0x%s: %s%s" % (
+                (when,) + m.groups()[1:] + (img.src(),)))
         if when == "at hand-over":
-            on = PDON_RX.search(img)
-            L.append("  PD_GPU on step: %s" % (NR if on is None else "gates opened 0x%s, was on %s, waited %s/%s/%s us" % on.groups()))
+            on = img.search(PDON_RX)
+            L.append("  PD_GPU on step: %s" % (NR if on is None else "gates opened 0x%s, was on %s, waited %s/%s/%s us%s" % (
+                on.groups() + (img.src(),))))
     return L
 
 
 def wdt_block(img):
     L = []
-    a, w = ARM_RX.search(img), WDT_RX.search(img)
-    L.append("  image's WDT0 arm (T6:A3): %s" % (NR if a is None else "rc %s, CR 0x%s, period %s ms" % (a.group(1), a.group(2), a.group(3))))
+    a = img.search(ARM_RX)
+    L.append("  image's WDT0 arm (T6:A3): %s" % (NR if a is None else "rc %s, CR 0x%s, period %s ms%s" % (
+        a.group(1), a.group(2), a.group(3), img.src())))
+    w = img.search(WDT_RX)
     if w is None:
         L.append("  image's WDT0 line: %s" % NR)
     else:
         L.append("  image's WDT0 line: CR 0x%s -> 0x%s (%s), TORR 0x%s -> 0x%s, CCVR 0x%s, PARAM_1 0x%s, version 0x%s, "
-                 "flags 0x%s, period %s ms (TOP %s)" % w.groups())
+                 "flags 0x%s, period %s ms (TOP %s)%s" % (w.groups() + (img.src(),)))
     return L
 
 
-def go_block(img, verdict):
+HINT = ("  hint: no hand-over line in the go record(s): t6_cold prints only the display chain and WDT0 lines; "
+        "the hand-over lines come from t6_z1.c, linked by t6_gpu, t6_fw, t6_submit and t6_mmu: "
+        "pass the t6_gpu go record (more than one GO is accepted)")
+
+
+def go_block(img):
     L = ["Hand-over as the image found and set it (go record)"]
     L.append("gpu_clock_set:")
     L += clock_block(img)
@@ -327,15 +368,20 @@ def go_block(img, verdict):
     L += supply_block(img)
     L.append("PD_GPU:")
     L += pd_block(img)
-    cru = CRU_RX.search(img)
+    cru = img.search(CRU_RX)
     L.append("CRU at hand-over: %s" % (NR if cru is None else "CLKSEL_CON(158) 0x%s (159) 0x%s CLKGATE_CON(66) 0x%s "
-                                       "MODE_CON0 0x%s PLL_CON 0x%s 0x%s 0x%s: clk_gpu_src %s Hz" % cru.groups()))
+                                       "MODE_CON0 0x%s PLL_CON 0x%s 0x%s 0x%s: clk_gpu_src %s Hz%s" % (
+                                           cru.groups() + (img.src(),))))
+    if not any(img.search(r) for r in (CLK_RX, RK_RX, CRU_RX, EN_RX)) and not img.search(PD_RX):
+        L.append(HINT)
     L.append("WDT0 in the image:")
     L += wdt_block(img)
-    st = STOP_RX.search(img)
-    L.append("image stop: %s" % ("none printed" if st is None else "stop %s (%s), refusal %s, detail 0x%s" % st.groups()))
-    last = [x for x in (verdict or "").splitlines() if x.strip()]
-    L.append("verdict: %s" % (NR if not last else last[-1].strip()))
+    st = img.search(STOP_RX)
+    L.append("image stop: %s" % ("none printed" if st is None else "stop %s (%s), refusal %s, detail 0x%s%s" % (
+        st.groups() + (img.src(),))))
+    for name, _, verdict in img.recs:
+        last = [x for x in (verdict or "").splitlines() if x.strip()]
+        L.append("verdict%s: %s" % (" (%s)" % name if len(img.recs) > 1 else "", NR if not last else last[-1].strip()))
     return L
 
 
@@ -356,52 +402,56 @@ def tail_block(reads_text, img):
     L = ["", "UART2 at the prompt (prompt reads)"]
     L += uart2_block(reads_text)
     L.append("GIC redistributor wake and active reset (image)")
-    g = GIC_RX.search(img)
+    g = img.search(GIC_RX)
     if g is None:
         L.append("  GIC active state line: %s" % NR)
     else:
-        L.append("  GIC active state: " + g.group(1).rstrip())
+        L.append("  GIC active state: " + g.group(1).rstrip() + img.src())
         if "no redistributor with affinity" in g.group(1):
             L.append("  no redistributor matched: the wake timed out or the affinity has no frame; "
                      "SGIs and PPIs were not scanned")
         else:
             L.append("  a redistributor matched and was woken or found awake")
     L.append("WDT0 feeder (image)")
-    f = FEED_RX.search(img)
+    f = img.search(FEED_RX)
     if f is None:
         L.append("  first feed: absent (no 'yakogl-wdt: nanopc_t6 first feed' line: the feeder timer never ticked)")
     else:
-        L.append("  first feed at %s ms" % f.group(1))
+        L.append("  first feed at %s ms%s" % (f.group(1), img.src()))
     return L
 
 
-def summary(reads_arg, go_arg):
+def summary(reads_arg, go_args):
     rname, rf = locate(reads_arg, "answers.txt")
-    gname, gf = locate(go_arg, "image.log", ("verdict.txt",))
+    recs = []
+    for go_arg in go_args:
+        gname, gf = locate(go_arg, "image.log", ("verdict.txt",))
+        scan(gf["image.log"], "image.log")
+        if gf["verdict.txt"]:
+            scan(gf["verdict.txt"], "verdict.txt")
+        recs.append((gname, gf["image.log"], gf["verdict.txt"]))
+    go = Go(recs)
     ans, notes = sections(rf["answers.txt"])
     # Only the md.l answers are scanned: printenv and bdinfo carry the board's
     # own MAC and IP, and are never read here.
     scan("\n".join(v for k, v in ans.items() if k.startswith("md.l ")), "the md.l answers")
-    scan(gf["image.log"], "image.log")
-    if gf["verdict.txt"]:
-        scan(gf["verdict.txt"], "verdict.txt")
     out = ["NanoPC-T6 U-Boot hand-over, measured",
-           "records: prompt reads %s; go %s" % (rname, gname),
+           "records: prompt reads %s; go %s" % (rname, ", ".join(r[0] for r in recs)),
            "",
            "Prompt reads (U-Boot's state before go)"]
     out += reads_block(ans, notes)
     out.append("")
-    out += go_block(gf["image.log"], gf["verdict.txt"])
-    out += tail_block(rf["answers.txt"], gf["image.log"])
+    out += go_block(go)
+    out += tail_block(rf["answers.txt"], go)
     return "\n".join(out) + "\n"
 
 
 def main(argv):
-    if len(argv) != 3 or argv[1] in ("-h", "--help"):
+    if len(argv) < 3 or argv[1] in ("-h", "--help"):
         sys.stderr.write(__doc__)
         return 2
     try:
-        sys.stdout.write(summary(argv[1], argv[2]))
+        sys.stdout.write(summary(argv[1], argv[2:]))
     except Refused as e:
         sys.stderr.write("t6-uboot-handover-summary: %s\n" % e)
         return 3
