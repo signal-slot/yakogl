@@ -335,7 +335,7 @@ int pvr_pds_render_vertex_program_ids_base(uint64_t vs_usc_exec_offset,
  *    (TA_STATE_PDS_VARYINGBASE). Port of pvr_pds_coefficient_loading()
  *    driven by pvr_graphics_pipeline_setup_fragment_coeff_program():
  *    one iterator per varying, the 1/w plane first when the FS uses it.
- *    See docs/gpu-recipes/multivarying_coeff_recipe.md (silicon-verified with
+ *    See driver/docs/gpu-recipes/multivarying_coeff_recipe.md (silicon-verified with
  *    two smooth varyings + W).
  * ------------------------------------------------------------------------- */
 enum pvr_pds_coeff_interp {

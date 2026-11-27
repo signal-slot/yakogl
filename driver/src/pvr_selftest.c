@@ -51,7 +51,7 @@ _Static_assert(PVR_USC_VS_PASSTHROUGH_TEMPS <= PVR_PDS_DOUTU_MAX_TEMPS,
 _Static_assert(PVR_USC_CLEAR_FS_TEMPS <= PVR_PDS_DOUTU_MAX_TEMPS,
 	       "clear FS needs more temporaries than the DOUTU field can hold");
 /* The bring-up paths that replayed data captured from the DDK's closed
- * user-space (ddk_closure.h: PVR_DDK_REPLAY and its PVR_REPLAY_* knobs,
+ * user-space (the retired ddk_closure.h: PVR_DDK_REPLAY and its PVR_REPLAY_* knobs,
  * PVR_FULL_PANEL, PVR_USE_DDK_VTX, PVR_USE_DDK_PPP, and the DDK vertex and
  * pixel shaders PVR_GRADIENT used without PVR_MULTIVARY) were removed: that
  * data was the output of proprietary software, which no licence lets us
@@ -1827,7 +1827,7 @@ int pvr_render_ta3d(mm_reg_t regs)
 	 * EMPIRICALLY REQUIRED on this silicon: with only the geom kick queued, the
 	 * geom TA never finalizes and idles to the 93.75M-tick deadline -> HWR; with
 	 * both queued the render actually executes (the 3D's PR-fence makes the FW
-	 * order them correctly). See gpu-powervr-port.md 2026-09-07. */
+	 * order them correctly). Found in the 2026-09-07 bring-up; the notes file is retired. */
 	pm_snap(regs, "T2-prekick");
 #ifdef PVR_COMBINED_KICK
 	/* Mainline (pvr_cccb_send_kccb_combined_kick) submits geom+frag as ONE
