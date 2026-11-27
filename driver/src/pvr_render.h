@@ -85,7 +85,10 @@ struct pvr_render_static {
 	/* The same, for a render whose LAST attachment comes from a tile buffer:
 	 * a pixel has four output registers, so a fragment shader with more
 	 * outputs than fit stores the rest to memory and the end-of-tile program
-	 * loads each one back before emitting it. */
+	 * loads each one back before emitting it. [2] is two attachments, the
+	 * second from tile buffer 0. [1], which no render of one attachment
+	 * uses, is THREE attachments, the last TWO from tile buffers 0 and 1
+	 * (its PDS info is the three-attachment one, [3]). */
 	uint64_t eot_doutu_src0_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
 	uint32_t event_pixel_pds_info_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
 	/* Four attachments, the last k (index 1..PVR_RENDER_TILE_BUFFERS) from

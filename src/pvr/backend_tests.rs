@@ -6169,8 +6169,8 @@ fn integer_targets_refuse_partial_masks_and_company() {
 
     /* the same RGBA8 + R32UI draw under the program of its mixed key is
      * drawn; under blending or a colour mask that keeps some channels (the
-     * mixed key carries neither) it is refused by name, and so are layouts
-     * past the pixel's four registers and an sRGB attachment in the mix */
+     * mixed key carries neither) it is refused by name, and so are a list
+     * under another list's program and an sRGB attachment in the mix */
     use super::super::target_keys::*;
     let mut fs = ShcShader::ZERO;
     fs.meta_off = SHC_NO_META;
@@ -6203,16 +6203,22 @@ fn integer_targets_refuse_partial_masks_and_company() {
     /* every channel off is the ISP's: nothing of the mask reaches the program */
     let off = GlesDraw { color_write: false, color_mask: 0, ..m };
     assert_eq!(int_targets_drawn(&off, Some(&fs)), Ok(()));
-    for (why, formats) in [
-        (REFUSE_FOUR_REGISTERS, [GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI]),
-        (REFUSE_ONE_LAYOUT_PAST_FOUR, [GLES_SURF_RGBA32UI, GLES_SURF_RGBA32UI]),
-        (REFUSE_SRGB, [GLES_SURF_SRGB8_A8, GLES_SURF_R32UI]),
-    ] {
+    {
+        let (why, formats) = (REFUSE_SRGB, [GLES_SURF_SRGB8_A8, GLES_SURF_R32UI]);
         let mut w = m;
         two_targets(&mut w, formats);
         assert_eq!(int_targets_drawn(&w, Some(&fs)), Err(why));
         assert_eq!(draw(&w), -util::ENOTSUP, "{why}");
         assert!(rig.logs().iter().any(|l| l == why), "{why}: {:?}", rig.logs());
+    }
+    /* past the pixel's four registers the second attachment is stored to a
+     * tile buffer (tests/pvr_int_spill.rs): such a list is refused here
+     * only for its program, `fs` being another list's */
+    for formats in [[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI], [GLES_SURF_RGBA32UI, GLES_SURF_RGBA32UI]] {
+        let mut w = m;
+        two_targets(&mut w, formats);
+        assert_eq!(int_targets_drawn(&w, Some(&fs)), Err(REFUSE_NOT_A_MIX), "{formats:?}");
+        assert_eq!(draw(&w), -util::ENOTSUP, "{formats:?}");
     }
     /* an integer attachment 0: `blend` is off for it whatever GL_BLEND is
      * (ES 3.0 4.1.8), so the factors decide; the replace is drawn */

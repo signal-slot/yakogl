@@ -18,8 +18,10 @@ pub const REFUSE_SRGB: &str =
 pub const REFUSE_MIX_TARGETS: &str =
     "yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment, past the three draw buffers a mixed key carries";
 /// A layout past the pixel's four output registers whose spill no end-of-tile
-/// program emits (`shc_mixed_out_places`: two targets with the second
-/// spilled, three with the last two).
+/// program emits (`shc_mixed_out_places`). No list of up to
+/// `SHC_MIXED_MAX_TARGETS` targets reaches it since `eot2_tb1` and
+/// `eot3_tb12` are uploaded: every spill of two or three targets has its
+/// program. The check stays for a table that loses one.
 pub const REFUSE_FOUR_REGISTERS: &str =
     "yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers";
 /// The list is not a mix (or a format has no per-target key): the line the
@@ -139,12 +141,25 @@ mod tests {
         assert_eq!(draw_target_keys(&d), Err(REFUSE_SRGB));
     }
 
+    /// Past the four registers every list of two or three targets spills
+    /// to tile buffers an end-of-tile program reads back: none is refused
+    /// for its registers.
     #[test]
     fn past_four_registers() {
+        // RGBA8 at r0, RGBA32UI in tile buffer 0 (`eot2_tb1`)
         let d = draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI]);
-        assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
+        let (k, n) = draw_target_keys(&d).unwrap();
+        assert_eq!(shc_mixed_out_places(&k[..n]), Some(([0, 0, 0], 1, 1)));
+        assert_eq!(draw_mixed_key(&d), Ok(shc_blend_key_mixed(&k[..n]).unwrap()));
+        // RGBA32UI at r0-3, the two after it in tile buffers 0 and 1 (`eot3_tb12`)
         let d = draw(&[GLES_SURF_RGBA32UI, GLES_SURF_R32UI, GLES_SURF_R32UI]);
-        assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
+        let (k, n) = draw_target_keys(&d).unwrap();
+        assert_eq!(shc_mixed_out_places(&k[..n]), Some(([0, 0, 0], 4, 2)));
+        assert!(draw_mixed_key(&d).is_ok());
+        // two RGBA32UI: keys, one layout everywhere, so no mixed key
+        let d = draw(&[GLES_SURF_RGBA32UI, GLES_SURF_RGBA32UI]);
+        assert_eq!(draw_target_keys(&d).map(|k| k.1), Ok(2));
+        assert_eq!(draw_mixed_key(&d), Err(REFUSE_NOT_A_MIX));
     }
 
     /// Three targets whose last does not fit the four registers: it spills

@@ -111,8 +111,9 @@ fn model_layout(t: &[Class]) -> Option<(Vec<u8>, u8)> {
 
 /// The targets a list spills when it passes the four registers and an
 /// end-of-tile program emits that spill (src/pvr/mrt_layout.rs: the first
-/// target that does not fit and every one after it; captured for three
-/// targets with the last one spilled, `eot3_tb`), else `None`.
+/// target that does not fit and every one after it; captured for two
+/// targets with the second spilled, `eot2_tb1`, and three with the last
+/// one, `eot3_tb`, or the last two, `eot3_tb12`), else `None`.
 fn model_spill(t: &[Class]) -> Option<u8> {
     let (mut next, mut spilled) = (0u8, 0u8);
     for &c in t {
@@ -124,7 +125,7 @@ fn model_spill(t: &[Class]) -> Option<u8> {
             spilled += 1;
         }
     }
-    matches!((t.len(), spilled), (3, 1)).then_some(spilled)
+    matches!((t.len(), spilled), (2, 1) | (3, 1 | 2)).then_some(spilled)
 }
 
 /// Section 2.2's mixed key, or `None` when the list is not a mix
@@ -172,7 +173,9 @@ fn worked_registers_of_section_3() {
     for (t, want) in cases {
         let got = model_layout(t);
         assert_eq!(got, want.map(|(s, n)| (s.to_vec(), n)), "{t:?}");
-        assert_eq!(encode(t).is_some(), want.is_some(), "{t:?}");
+        /* a key where the mix fits the registers, and where its last
+         * targets spill (the two lists with no register layout) */
+        assert_eq!(encode(t).is_some(), want.is_some() || model_spill(t).is_some(), "{t:?}");
     }
 }
 
@@ -183,7 +186,7 @@ fn none_where_the_note_says_none() {
     assert_eq!(encode(&[Rgba8, Rgba8]), None, "no integer target");
     assert_eq!(encode(&[R32UI, R32UI]), None, "one layout everywhere");
     assert_eq!(encode(&[RG32I, RG32I, RG32I]), None, "one layout everywhere");
-    assert_eq!(encode(&[Rgba8, RGBA32UI]), None, "five registers");
+    assert!(encode(&[Rgba8, RGBA32UI]).is_some(), "five registers: the second spills");
     assert_eq!(encode(&[]), None);
     assert_eq!(encode(&[R32UI, Rgba8, Rgba8, Rgba8]), None, "four targets");
 }
@@ -390,7 +393,8 @@ fn production_refuses_what_the_model_refuses() {
     assert_eq!(shc_blend_key_mixed(&keys(&[])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, Rgba16f, R32f])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, R32UI])), None);
-    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, RGBA32UI])), None);
+    assert!(shc_blend_key_mixed(&keys(&[Rgba8, RGBA32UI])).is_some(), "the second spills");
+    assert_eq!(shc_blend_key_mixed(&keys(&[RGBA32UI, RGBA32UI])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, Rgba8, Rgba8, Rgba8])), None);
     assert_eq!(shc_mixed_out_layout(&[]), None);
     assert_eq!(shc_mixed_out_layout(&keys(&[Rgba8; 4])), None);

@@ -22,6 +22,12 @@
 //! pvr-accept (mixed-class draws) must not move any of them. Mixed-class draws
 //! are refused today and are not drawn here.
 //!
+//! Integer targets past the pixel's four output registers (issue #313) are
+//! pinned the same way: three RG32I, two and three RGBA32UI, and RGBA8
+//! beside RGBA32UI, each with the tile-buffer end-of-tile program of its
+//! layout and source position 0 on the targets loaded back from tile
+//! buffers.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_eot_words_pin
 //! ```
@@ -844,11 +850,67 @@ fn two_r32f() {
     pin(&[&R32F, &R32F], 0x1002, &[0x0000_1b00, 0x0001_5b00]);
 }
 
+/* Integer targets past the pixel's four output registers (issue #313): the
+ * first target that does not fit and every one after it are stored to tile
+ * buffers by the fragment program, and the end-of-tile program is the one
+ * that loads them back -- `p_query`'s `eot_doutu_src0_tb_n` values: [3]
+ * 0x2003 three targets with the last spilled (`eot3_tb`), [2] 0x2002 two
+ * with the second spilled (`eot2_tb1`), [1] 0x2001 three with the last two
+ * spilled (`eot3_tb12`, in the slot of a count no tile-buffer render has).
+ * A spilled target's source position is 0: its tile buffer's dword 0. */
+
+/// [`pin`] for a list whose last `fmts.len() - in_registers` targets come
+/// back from tile buffers: the register targets walk the registers as
+/// `pin` checks, the spilled ones read from position 0.
+fn pin_spilled(fmts: &[&Fmt], in_registers: usize, doutu: u64, word1: &[u32]) {
+    let s = draw(fmts).unwrap_or_else(|| panic!("draw refused: {:?}", logs()));
+    assert_eq!(s.doutu, doutu, "end-of-tile program");
+    let got: Vec<u32> = s.words.iter().map(|w| w[1]).collect();
+    assert_eq!(got, word1, "STATE_WORD1 (address bits cleared) {got:#010x?}");
+    let mut next = 0u32;
+    for (i, f) in fmts.iter().enumerate() {
+        if f.dwords >= 2 {
+            next = next.next_multiple_of(2);
+        }
+        let want = if i < in_registers { next } else { 0 };
+        assert!(i >= in_registers || next + f.dwords <= 4, "{} (slot {i}) fits the registers", f.name);
+        assert_eq!(source_pos(got[i]), want, "{} (slot {i}) source_pos", f.name);
+        assert_eq!(mrt_index(got[i]), i as u32, "{} (slot {i}) mrt_index", f.name);
+        next += f.dwords;
+    }
+    assert!(!logs().iter().any(|l| l.contains("not emitted")), "{:?}", logs());
+}
+
+#[test]
+fn three_rg32i_spill_the_third() {
+    pin_spilled(&[&RG32I, &RG32I, &RG32I], 2, 0x2003, &[0x0008_1480, 0x0009_9480, 0x000a_1480]);
+}
+
+/* dEQP's shader executor for `modf` of vec3/vec4, and for a matrix result
+ * of two vec3/vec4 columns: two RGBA32UI */
+#[test]
+fn two_rgba32ui_spill_the_second() {
+    pin_spilled(&[&RGBA32UI, &RGBA32UI], 1, 0x2002, &[0x0008_0580, 0x0009_0580]);
+}
+
+/* dEQP `fragment_out.array.uint.rgba32ui_*`: three RGBA32UI */
+#[test]
+fn three_rgba32ui_spill_the_last_two() {
+    pin_spilled(&[&RGBA32UI, &RGBA32UI, &RGBA32UI], 1, 0x2001, &[0x0008_0580, 0x0009_0580, 0x000a_0580]);
+}
+
+/* an RGBA8 target beside RGBA32UI, either way round */
+#[test]
+fn rgba32ui_beside_rgba8_spills_the_second() {
+    pin_spilled(&[&RGBA8, &RGBA32UI], 1, 0x2002, &[0x0008_2000, 0x0009_0580]);
+    pin_spilled(&[&RGBA32UI, &RGBA8], 1, 0x2002, &[0x0008_0580, 0x0009_2000]);
+}
+
 /* The output-register dword count per format, as the source position of a
  * following target shows it. The table is tests/pvr_pbe_mixed_words.rs's
  * (RGBA8, R32UI: 1; RGBA16F, RG32UI: 2), extended; only the formats an
  * accepted pair shows are read off the words, the others are the table's
- * (RGBA32UI has no accepted pair today). */
+ * (a pair of RGBA32UI spills the second, so its position shows nothing). */
 #[test]
 fn dwords_per_format_from_source_positions() {
     for (f, dw) in [(&RGBA8, 1), (&RGB10_A2, 1), (&R32UI, 1), (&RG32I, 2), (&RGBA16F, 2), (&R32F, 1)] {

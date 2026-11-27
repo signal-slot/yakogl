@@ -34,16 +34,18 @@
 //! slot `eot_doutu_src0_tb_n[3]`), its PBE state reading from dword 0. D,
 //! three RG32UI and E, three RGBA16I, are one integer layout everywhere
 //! (the layout's own key, compiled per target); F, R32I + R16I + RGBA32UI
-//! (`fragment_out.random` seed 9), is a mix. Checked: the draw is accepted,
-//! the kick's three targets, the end-of-tile program, each PBE state, and
-//! the record of the key's program (its registers, its one tile buffer, its
+//! (`fragment_out.random` seed 9), is a mix. G, RGBA8 + RGBA32UI, is two
+//! targets with the second spilled (`eot2_tb1`, `eot_doutu_src0_tb_n[2]`;
+//! refused by name until that program was captured). Checked: the draw is
+//! accepted, the kick's targets, the end-of-tile program, each PBE state,
+//! and the record of the key's program (its registers, its tile buffer, its
 //! key). The byte model has no tile-buffer store, so a spilled program is
 //! not run through it (tests/es3_pvr_mrt4.rs reads the stores).
 //!
 //! HOST-ONLY: no GPU runs and no pixel is read back. The draws are made
 //! without a colour clear (the clear of a mix is the item pvr-clear-load's).
-//! The back end draws the three accepted cases (`pvr::backend::
-//! int_targets_drawn`) and refuses the two by name.
+//! The back end draws the accepted cases (`pvr::backend::
+//! int_targets_drawn`) and refuses the others by name.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_int_mixed_gl
@@ -899,18 +901,22 @@ const U32U32U32U32: u32 = 0x0b;
 const U32U32: u32 = 0x28;
 const S16: u32 = 0x32;
 /// The stood-in static slots (`p_query`): `eot_doutu_src0_tb_n[3]`, three
-/// emits with the last from tile buffer 0 (`eot3_tb`).
+/// emits with the last from tile buffer 0 (`eot3_tb`), and `[2]`, two emits
+/// with the second from tile buffer 0 (`eot2_tb1`).
 const DOUTU_EOT3_TB: u64 = 0x2003;
+const DOUTU_EOT2_TB1: u64 = 0x2002;
 
 /// One list whose last target spills: the attachments' formats, the
 /// fragment shader, the PBE state of each attachment (the spilled one from
-/// dword 0) and the registers the program's register targets span.
+/// dword 0), the registers the program's register targets span and the
+/// end-of-tile program.
 struct Spill {
     name: &'static str,
     formats: &'static [GLenum],
     fs: &'static str,
     pbe: &'static [Emit],
     span: u8,
+    doutu: u64,
 }
 
 /// D: three RG32UI (dEQP `fragment_out.array.uint.rg32ui_*`): r0-r1, r2-r3,
@@ -930,6 +936,7 @@ void main() {
 ",
     pbe: &[emit(U32U32, 0, SOURCE_8, 0, 0), emit(U32U32, 0, SOURCE_8, 2, 1), emit(U32U32, 0, SOURCE_8, 0, 2)],
     span: 4,
+    doutu: DOUTU_EOT3_TB,
 };
 
 /// E: three RGBA16I (dEQP `fragment_out.array.int.rgba16i_*`): two dwords
@@ -953,6 +960,7 @@ void main() {
         emit(S16S16S16S16, 0, SOURCE_8, 0, 2),
     ],
     span: 4,
+    doutu: DOUTU_EOT3_TB,
 };
 
 /// F: dEQP `fragment_out.random` seed 9's list, R32I at r0, R16I at r1 and
@@ -974,6 +982,27 @@ void main() {
 ",
     pbe: &[emit(S32, 0, SOURCE_8, 0, 0), emit(S16, 0, SOURCE_8, 1, 1), emit(U32U32U32U32, 0, SOURCE_8, 0, 2)],
     span: 2,
+    doutu: DOUTU_EOT3_TB,
+};
+
+/// G: RGBA8 at r0 and RGBA32UI, which needs the four registers to itself,
+/// in tile buffer 0: two targets with the second spilled.
+const SPILL_G: Spill = Spill {
+    name: "G: RGBA8 + RGBA32UI",
+    formats: &[GL_RGBA8, GL_RGBA32UI],
+    fs: "#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out uvec4 o1;
+void main() {
+    o0 = vec4(1.0);
+    o1 = uvec4(1u, 2u, 3u, 4u);
+}
+",
+    pbe: &[emit(U8U8U8U8, 1, SOURCE_8, 0, 0), emit(U32U32U32U32, 0, SOURCE_8, 0, 1)],
+    span: 1,
+    doutu: DOUTU_EOT2_TB1,
 };
 
 /// The record of the fragment program `src` under the variant `key`: its
@@ -1017,7 +1046,7 @@ fn check_spill(m: &Spill) {
      * attachment's PBE state, the spilled one's source at dword 0 */
     let frame = drawn(m.fs).unwrap_or_else(|e| panic!("{}: draw error {e:#x}: {:?}", m.name, logs()));
     assert_eq!(frame.num_rt as usize, n, "{}: kick num_rt", m.name);
-    assert_eq!(frame.doutu, DOUTU_EOT3_TB, "{}: the end-of-tile program", m.name);
+    assert_eq!(frame.doutu, m.doutu, "{}: the end-of-tile program", m.name);
     assert_eq!(frame.emits[..n], *m.pbe, "{}: PBE states", m.name);
     assert!(frame.emits[n..].iter().all(|e| *e == decode(0)), "{}: no further state", m.name);
     let bad = ["refused", "no fragment shader variant", "not emitted"];
@@ -1043,6 +1072,11 @@ fn spill_f_r32i_r16i_rgba32ui_draws() {
     check_spill(&SPILL_F);
 }
 
+#[test]
+fn spill_g_rgba8_beside_rgba32ui_draws() {
+    check_spill(&SPILL_G);
+}
+
 /// A colour mask that keeps some channels is still refused with an integer
 /// attachment beside another: no frame, no kick.
 #[test]
@@ -1054,27 +1088,5 @@ fn partial_color_mask_stays_refused_by_name() {
     let (e, frame) = try_draw(MIX_A.fs);
     assert!(frame.is_none(), "refused, not drawn: {e:#x}: {:?}", logs());
     assert!(logs().iter().any(|l| l.contains("refused")), "named: {:?}", logs());
-    assert!(KICKS.lock().unwrap().is_empty(), "no kick");
-}
-
-/// An RGBA32UI attachment beside RGBA8 needs five output registers: refused
-/// by name (the pixel has four), not drawn with the wrong packing.
-#[test]
-fn rgba32ui_beside_rgba8_stays_refused_by_name() {
-    let _g = rig();
-    let _f = Fbo::new(&[GL_RGBA8, GL_RGBA32UI]);
-    let fs = "#version 300 es
-precision highp float;
-precision highp int;
-layout(location = 0) out vec4 o0;
-layout(location = 1) out uvec4 o1;
-void main() {
-    o0 = vec4(1.0);
-    o1 = uvec4(1u, 2u, 3u, 4u);
-}
-";
-    let (e, frame) = try_draw(fs);
-    assert!(frame.is_none() && e == GL_INVALID_OPERATION, "refused, not drawn: {e:#x}: {:?}", logs());
-    assert!(logs().iter().any(|l| l.contains("draw refused")), "named: {:?}", logs());
     assert!(KICKS.lock().unwrap().is_empty(), "no kick");
 }

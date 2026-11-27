@@ -7035,21 +7035,22 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
 ///   emit reads attachment `n` from when every attachment takes `d`
 ///   registers: dEQP's shader executor (modf's `out0` and `out1`). Past the
 ///   pixel's four output registers the program is the per-target one
-///   (`chain::build_fragment_with`) that stores the last attachment to tile
-///   buffer 0, drawn where an end-of-tile program emits that layout
-///   ([`super::mrt_layout::layout`]: three RG32UI or RGBA16I, `eot3_tb`),
-///   and refused by name where none does (two RGBA32UI).
+///   (`chain::build_fragment_with`) that stores the attachments that do not
+///   fit to tile buffers, drawn where the end-of-tile emit reads that
+///   layout back ([`super::mrt_layout::layout`], [`spill_emit_program`]:
+///   three RG32UI or RGBA16I, `eot3_tb`; two RGBA32UI, `eot2_tb1`; three,
+///   `eot3_tb12`; four RG32UI, `eot4_tb2`; four RGBA32UI, `eot4_tb3`).
 /// - A mix (integer beside float, or integer layouts that differ, dense, at
 ///   most `SHC_MIXED_MAX_TARGETS`, no sRGB): `fs` is the variant of the
 ///   draw's mixed key ([`super::target_keys::draw_mixed_key`]) writing the
 ///   registers the layout spans. The compiler puts target `i` at
 ///   `shc_mixed_out_places`'s start `i` (each after the one before, one of
 ///   two or more dwords on an even register), the walk the end-of-tile emit
-///   and the frame load make ([`attachment_out_reg`]), and stores the last
-///   of three to tile buffer 0 when it does not fit (R32I, R16I, RGBA32UI:
-///   `eot3_tb`). The key carries no blend and no colour mask, so a draw with
-///   either is refused by name, as is a layout past the four registers with
-///   no end-of-tile program for its spill (RGBA8 beside RGBA32UI).
+///   and the frame load make ([`attachment_out_reg`]), and stores the first
+///   target that does not fit and every one after it to tile buffers (R32I,
+///   R16I, RGBA32UI: `eot3_tb`; RGBA8 beside RGBA32UI: `eot2_tb1`). The key
+///   carries no blend and no colour mask, so a draw with either is refused
+///   by name.
 pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'static str> {
     use super::target_keys::*;
     let n = (d.num_targets as usize).min(d.targets.len());
@@ -7062,12 +7063,12 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
                 return Err(REFUSE_NOT_A_MIX);
             }
             let rt = shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
-            /* in the registers (`n * d` dwords), or the last attachment in
-             * tile buffer 0 where an end-of-tile program emits that layout */
+            /* in the registers (`n * d` dwords), or the last attachments in
+             * tile buffers, which the end-of-tile emit reads back
+             * ([`spill_emit_program`]) */
             let per = [rt.dwords() as u8; super::mrt_layout::MAX_TARGETS];
-            let lay = match super::mrt_layout::layout(&per[..n.min(per.len())]) {
-                Ok(lay) if lay.tile_buffers <= 1 => lay,
-                _ => return Err(REFUSE_ONE_LAYOUT_PAST_FOUR),
+            let Ok(lay) = super::mrt_layout::layout(&per[..n.min(per.len())]) else {
+                return Err(REFUSE_ONE_LAYOUT_PAST_FOUR);
             };
             let ok = d.target_gpu != 0
                 && d.targets[1..n].iter().all(|t| t.gpu != 0)
@@ -7109,6 +7110,21 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
     } else {
         Err(REFUSE_NOT_A_MIX)
     }
+}
+
+/// The end-of-tile program of a frame of `targets` emitted attachments whose
+/// last `spilled` (one or more) come back from tile buffers 0..spilled
+/// ([`super::mrt_layout::program_for`]): `eot2_tb1`; `eot3_tb` and
+/// `eot3_tb12`; `eot4_tb`, `eot4_tb2` and `eot4_tb3`. The end-of-tile emit
+/// ([`flush`]'s emit loop) takes one spilled attachment, the last, from
+/// `eot_doutu_src0_tb_n[targets]` as it always did, and several only for a
+/// frame with an integer attachment ([`int_targets_drawn`] accepted its
+/// draws): the float classes' frames are emitted as before.
+fn spill_emit_program(targets: u8, spilled: u8) -> Option<super::mrt_layout::EotProgram> {
+    if spilled == 0 {
+        return None;
+    }
+    super::mrt_layout::program_for(targets, spilled)
 }
 
 /// The float class (RGBA16F, R16F or R32F) a fragment program laid several
@@ -10242,6 +10258,9 @@ fn flush(p: &mut Pvr) -> i32 {
      * (gpu 0, a GL_NONE draw buffer) is skipped, so emit j can be slot i > j. */
     let mut slot_of = [0usize; PVR_BACKEND_MAX_RT as usize];
     let mut tb_emit = false;
+    /* the emitted attachments that come back from tile buffers, the k-th of
+     * them from tile buffer k (0 unless `tb_emit`) */
+    let mut tb_emits = 0u32;
     /* this kick stores every sample of its target too ([`MsStore`]) */
     let store_samples;
     {
@@ -10298,11 +10317,30 @@ fn flush(p: &mut Pvr) -> i32 {
             if regs >= 2 && (spos & 1) != 0 {
                 spos += 1;
             }
-            if spos + regs > PVR_BACKEND_MAX_OUT_REGS {
-                /* Only the last attachment can come from a tile buffer (the
-                 * compiler spills in output order, and one program per count
-                 * is captured). */
-                if b.frame_tile_buffers != 0 && i + 1 == nrt_want && b.st.eot_doutu_src0_tb_n[nrt_want as usize] != 0 {
+            if tb_emit {
+                /* after a spilled attachment every later one is spilled too
+                 * (`mrt_layout::layout`), whatever it would take */
+                spos = 0;
+            } else if spos + regs > PVR_BACKEND_MAX_OUT_REGS {
+                /* The compiler spills in output order, this attachment and
+                 * every one after it (`chain::target_layout`), the k-th
+                 * spilled one read back from tile buffer k: the last
+                 * attachment alone, or, in a frame with an integer
+                 * attachment, the last several ([`spill_emit_program`]).
+                 * Those are all present (no GL_NONE slot,
+                 * [`int_targets_drawn`]), and the program stored each. */
+                let rest = nrt_want - i;
+                /* (two attachments or more: slot [1] of the table is the
+                 * three-attachment program of two spilled, not a
+                 * one-attachment one) */
+                let last = rest == 1 && nrt_want >= 2 && b.st.eot_doutu_src0_tb_n[nrt_want as usize] != 0;
+                let several = rest >= 2
+                    && frame_int_beside_another(b) != 0
+                    && b.frame_tile_buffers >= rest
+                    && a != 0
+                    && (i + 1..nrt_want).all(|k| b.targets[k as usize].gpu != 0)
+                    && spill_emit_program(nrt_want as u8, rest as u8).is_some_and(|p| p.doutu(&b.st) != 0);
+                if b.frame_tile_buffers != 0 && (last || several) {
                     spos = 0;
                     tb_emit = true;
                 } else {
@@ -10334,6 +10372,7 @@ fn flush(p: &mut Pvr) -> i32 {
             let j = nrt as usize;
             slot_of[j] = i as usize;
             nrt += 1;
+            tb_emits += u32::from(tb_emit);
             /* A z-only frame (no colour target, i == 0 with a == 0): its one
              * emit is the empty-tile state ([`pbe_emit_words_z_only`]). */
             let words = if a == 0 { pbe_emit_words_z_only() } else { pbe_emit_words(a, fmt, spos, j as u32) };
@@ -10379,7 +10418,10 @@ fn flush(p: &mut Pvr) -> i32 {
                 b.st.event_pixel_pds_info_n[nrt as usize]
             );
         }
-        let doutu = if tb_emit {
+        let doutu = if tb_emits > 1 {
+            /* the last several from tile buffers 0.. */
+            spill_emit_program(nrt as u8, tb_emits as u8).map_or(0, |p| p.doutu(&b.st))
+        } else if tb_emit {
             b.st.eot_doutu_src0_tb_n[nrt as usize]
         } else if b.st.eot_doutu_src0_n[nrt as usize] != 0 {
             b.st.eot_doutu_src0_n[nrt as usize]

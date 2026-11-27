@@ -162,7 +162,7 @@ def eot_h(p):
     tbdw = TB_DWORDS["eot2_tb"]
     assert all(d == tbdw for d in TB_DWORDS.values()), "every spilled emit flushes the same size"
     addr = {n: tb_addr_bytes(n, p[n][0], p[n][2]) for n in TB_PROGRAMS}
-    for n in ("eot2_tb", "eot3_tb"):
+    for n in ("eot2_tb1", "eot2_tb", "eot3_tb"):
         assert addr[n][0][0] % 4 == 0 and addr[n][0][1] % 4 == 0, f"{n}: the one-spill sentinel is dword aligned"
     tbsym = lambda w: "PVR_USC_EOT_TB_ADDR_LO" if w == TB_LO else "PVR_USC_EOT_TB_ADDR_HI" if w == TB_HI else hexw(w)
     cname = lambda n: "pvr_usc_eot_words" if n == "eot1" else f"pvr_usc_{n}_words"
@@ -181,7 +181,23 @@ def eot_h(p):
     def lens(names):
         return ", ".join(str(len(p[n][2])) if n else "0" for n in names)
 
-    tb_n = [None, None, "eot2_tb", "eot3_tb", "eot4_tb"]
+    def spills(names):
+        return ", ".join(str(len(addr[n])) if n else "0" for n in names)
+
+    def emits(n):
+        return int(p[n][0].split()[1])
+
+    def spilled(n):
+        return [int(e) for e in p[n][0].split()[2:]]
+
+    # [2..4]: that many emits, the last from tile buffer 0. [1], which no
+    # render of one target uses: three emits, the last two from tile buffers
+    # 0 and 1. eot2_tb (`eot 3 1`: three emits, a register emit after the
+    # spilled one) is in no table: no layout asks for it.
+    tb_n = [None, "eot3_tb12", "eot2_tb1", "eot3_tb", "eot4_tb"]
+    for i in (2, 3, 4):
+        assert (emits(tb_n[i]), spilled(tb_n[i])) == (i, [i - 1]), f"{tb_n[i]}: {i} emits, the last spilled"
+    assert (emits(tb_n[1]), spilled(tb_n[1])) == (3, [1, 2]), f"{tb_n[1]}: three emits, the last two spilled"
     tb4_k = [None, "eot4_tb", "eot4_tb2", "eot4_tb3"]
     plain_n = [None, "eot1", "eot2", "eot3", "eot4"]
     progs = "".join(f"static const uint32_t {cname(n)}[] = {{\n{word_lines(p[n][2])}\n}};\n" for n in ("eot2", "eot3", "eot4"))
@@ -213,9 +229,10 @@ def eot_h(p):
  * spilled emits has them at any byte, not on a dword). The first sentinel,
  * PVR_USC_EOT_TB_ADDR_LO/HI, is the one-spill programs'. As captured,
  * pvr_usc_eot2_tb_words and pvr_usc_eot3_tb_words are BOTH three-emit
- * programs: the tile buffer on emit 1 and on emit 2 (the arguments above; a
- * two-emit program with the tile buffer on its last emit, capture_usc eot 2
- * 1, is a different program).
+ * programs: the tile buffer on emit 1 and on emit 2 (the arguments above).
+ * pvr_usc_eot2_tb_words, a register emit after the spilled one, is a layout
+ * no render has and is in no table below; the two-emit program with the
+ * tile buffer on its last emit is pvr_usc_eot2_tb1_words.
  *
 {GENERATED_OURS} * eot4 and the tile-buffer programs stay pco's: our encoder has no list line
  * for four emits, and no builder for the loads from memory. Do not edit.
@@ -250,12 +267,15 @@ static const uint8_t pvr_usc_eot_bytes[] = {{
 #define PVR_USC_EOT_TB_MAX_SPILLS {TB_MAX_SPILLS}
 
 {tbprogs}
-/* index by render-target count (2..4), the LAST emit from tile buffer 0;
- * [0] and [1] unused */
+/* index by render-target count (2..4), the LAST emit from tile buffer 0.
+ * [1], which no render of one target uses: three render targets, the last
+ * TWO emits from tile buffers 0 and 1. [0] unused. */
 static const uint32_t *const pvr_usc_eot_tb_n_words[5] = {{
    {ptrs(tb_n)},
 }};
 static const uint32_t pvr_usc_eot_tb_n_dwords[5] = {{ {lens(tb_n)} }};
+/* the spilled emits of each, one tile buffer each */
+static const uint8_t pvr_usc_eot_tb_n_spills[5] = {{ {spills(tb_n)} }};
 static const uint16_t pvr_usc_eot_tb_n_addr_bytes[5][PVR_USC_EOT_TB_MAX_SPILLS][2] = {{
 {addr_rows(tb_n)}
 }};
