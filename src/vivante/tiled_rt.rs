@@ -288,8 +288,12 @@ pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
 /// `tilt_*.frag` 57 and `bloom_*.frag` 32, `normalmap.frag` 20,
 /// `luminance.frag` 7, `overlay.frag` 2. 64 lies between the terrain pass and
 /// the longest blur, so terrain's pass qualifies and the blits and overlays
-/// do not. The notes carry no instruction counts for the shadow and refract
-/// programs; this threshold is not derived from them.
+/// do not. glmark2's other fragment programs
+/// (`tests/gc_sr_shader_count.rs`, same compiler): refract 64, ground 13,
+/// depth 3, horse 1. Refract sits exactly on the inclusive threshold, so it
+/// qualifies and shadow's ground, depth and horse passes do not; a compiler
+/// change that takes one instruction off refract flips the verdict, which
+/// that test pins.
 pub const LONG_PROGRAM_INSTRS: u32 = 64;
 
 /// Whether a fragment program of `usc_dw` dwords of shader code (the shader

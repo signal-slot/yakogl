@@ -26,8 +26,11 @@ use core::ffi::c_char;
 use std::path::Path;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
-/// Instructions and temporaries of one compile.
-fn count(stage: u32, src: &str) -> (u32, u32) {
+/// Dwords of shader code and temporaries of one compile.
+fn compile(stage: u32, src: &str) -> (u32, u32) {
+    // The online back end keeps one global compile state: tests run in turn.
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     yakogl::shaderc::online::backend::forget_compiled();
     let (mut sh, mut log) = (ShcShader::ZERO, [0 as c_char; 1024]);
     let text = format!("{src}\0");
@@ -36,7 +39,13 @@ fn count(stage: u32, src: &str) -> (u32, u32) {
     let rc = unsafe { f(stage, text.as_ptr() as *const c_char, &mut sh, log.as_mut_ptr(), log.len()) };
     let msg: String = log.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
     assert_eq!(rc, 0, "compile failed: {msg}");
-    (sh.usc_dw / 4, sh.temps.into())
+    (sh.usc_dw, sh.temps.into())
+}
+
+/// Instructions and temporaries of one compile.
+fn count(stage: u32, src: &str) -> (u32, u32) {
+    let (dw, temps) = compile(stage, src);
+    (dw / 4, temps)
 }
 
 /// (text hash, stage, ours: instructions and temps, etna_shc's in the comment)
@@ -138,4 +147,42 @@ fn shadow_and_refract_shaders_count() {
         }
     }
     assert!(wrong.is_empty(), "counts moved; re-pin with the note's table:\n{}", wrong.join("\n"));
+}
+
+/// W6's fallback rule (`tiled_rt::long_program` at `LONG_PROGRAM_INSTRS`) over
+/// glmark2's fragment programs: only refract's 64 instructions qualify (the
+/// threshold is inclusive), and a compiler change that moves refract below 64
+/// or ground, depth or horse up to it flips a verdict here. Same corpus rules
+/// as the test above.
+#[test]
+fn glmark2_fragment_programs_against_long_program() {
+    use yakogl::vivante::tiled_rt::{long_program, LONG_PROGRAM_INSTRS};
+    let named = std::env::var_os("GLMARK2_CORPUS");
+    let dir = match &named {
+        Some(d) => std::path::PathBuf::from(d),
+        None => Path::new(env!("CARGO_MANIFEST_DIR")).join("build/glmark2-host/shaders"),
+    };
+    let files: Vec<String> = std::fs::read_dir(&dir)
+        .map(|r| r.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    if files.is_empty() && named.is_none() {
+        eprintln!("SKIP gc_sr_shader_count long_program: no corpus at {}", dir.display());
+        return;
+    }
+    assert_eq!(LONG_PROGRAM_INSTRS, 64, "the pins below assume the 64 threshold");
+    for (name, hash, instrs, long) in [
+        ("refract", "3fae89c9ab969ea3", 64, true),
+        ("ground", "cf4bf899d84af04d", 13, false),
+        ("depth", "928e172a68b7f175", 3, false),
+        ("horse", "474800a67afed087", 1, false),
+    ] {
+        let suffix = format!("-{hash}.frag.glsl");
+        let f =
+            files.iter().find(|f| f.ends_with(&suffix)).unwrap_or_else(|| panic!("{} has no *{suffix}", dir.display()));
+        let src = std::fs::read_to_string(dir.join(f)).expect("a shader file");
+        let (dw, _) = compile(SHC_STAGE_FRAGMENT, &src);
+        println!("gc7000 {name} fragment: {} instructions ({dw} dwords)", dw / 4);
+        assert_eq!(dw / 4, instrs, "{name}: instructions");
+        assert_eq!(long_program(dw, LONG_PROGRAM_INSTRS), long, "{name}: long_program at {LONG_PROGRAM_INSTRS}");
+    }
 }
