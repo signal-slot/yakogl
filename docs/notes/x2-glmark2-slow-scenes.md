@@ -412,3 +412,40 @@ X2_STOP_APPS=1 tools/cts/x2-glmark2-scenes.sh --commit origin/main <outdir> terr
 
 In each record, check `board_measured=`, and when the opt-in acted, the
 `undo=`, `app_stop=` and `app_back=` lines of `meta.txt`.
+
+## The crash route's interrupt check refused the jumps, 2026-11-27 (plan #417, items dtpu-x2 and gm-before-x2)
+
+Plan #417's first two X2 sessions — case 222 `dtpu` (item dtpu-x2) and the
+glmark2 before run (item gm-before-x2) — reached the board and were refused
+at the jump by the crash route's interrupt check: `crash_irq_check` and its
+measured-chip list `crash_irq_chips` in
+`driver/tools/kexec-zephyr/crash_irq.h` (`84e7adff`, wired into
+`kexec_zephyr --crash` by `4c0626d1`, both 2026-11-15, measured on the
+NanoPC-T6). The X2 keeps handlers on two chips the T6 does not: `gpio-mxc`
+(PWROFF, pca9450, REBOOT, rv8803, SW1, mmc cd) and `irqsteer` (dw-hdmi-cec,
+imx-lcdifv3-crtc.1), so those rows of its `/proc/interrupts` were outside the
+list. Readiness was fine (`containers 0`), the images built and the dry runs
+read right; then the loader on the board printed "an interrupt is left on a chip
+the crash route was not measured with ... not triggering", brought the CPUs
+back and unloaded the crash image. Linux never went down, so the runner's
+`not_back` line (rc 5) reports a jump that never happened: no verdict page,
+no `gc_wdog_arm: armed` on the console, no ms a frame. The glmark2 run
+stopped at its first scene (shadow); refract and terrain were not reached.
+The full session records are `gc-depth-sample.md` ("The X2 session of
+2026-11-27") and `gc-slow-shadow-refract.md` (its before table); until the
+loader accepts the X2, no cell of those tables could fill.
+
+**Fixed in `fa8dcf85`: `crash_irq.h` takes a per-board chip list.** The list
+is picked at run time from the device tree's compatible string
+(`crash_irq_board_imx8mp`): `fsl,imx8mp` adds `gpio-mxc` and `irqsteer` to
+the measured chips; any other board, and an unreadable compatible, keeps the
+T6 list alone. The two chips are MMIO chips that set no irq bus lock, so the
+chip bus lock the panic path takes is the kernel's no-op and never sleeps;
+the evidence for them is the X2's own crash-route jumps of 2026-11-06 and
+2026-11-11, made with loaders from before the check existed. `crash_irq_test.c`
+covers the parsing on the host. With the X2 list picked, the loader prints
+`crash: i.MX 8M Plus (fsl,imx8mp): gpio-mxc and irqsteer rows are let
+through`, and the first jump with it is watched on the X2 console: that line
+is what shows the X2 list was in use. The next X2 sessions run with it: the
+dtpu rerun of `gc-depth-sample.md` unchanged, and the glmark2 before rerun
+can reuse its three images (built from `02c5c9af`).
