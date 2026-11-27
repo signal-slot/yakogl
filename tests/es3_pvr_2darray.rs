@@ -25,7 +25,7 @@ use yakogl::shaderc::online::powervr::isa::ops_for;
 use yakogl::shaderc::online::powervr::operands::{dsts, srcs};
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
-use yakogl::shaderc::ShcShader;
+use yakogl::shaderc::{IfLowering, ShcShader};
 
 mod usc_exec;
 
@@ -407,7 +407,22 @@ type InputFn<'a> = dyn Fn(&str, u32) -> u32 + 'a;
 /// the native array on for both the compile and the IR; the packed pixels,
 /// each asserted equal to the IR's. The shader must read no varying.
 fn run_against_ir(src: &str, inputs: &[&InputFn<'_>]) -> Vec<u32> {
+    run_against_ir_lowered(None, src, inputs)
+}
+
+/// [`run_against_ir`] with the compile's `if` lowering set to `lowering`
+/// (when given) under the same lock, and put back after it.
+fn run_against_ir_lowered(lowering: Option<IfLowering>, src: &str, inputs: &[&InputFn<'_>]) -> Vec<u32> {
     with_native_array(true, || {
+        struct Put(Option<IfLowering>);
+        impl Drop for Put {
+            fn drop(&mut self) {
+                if let Some(l) = self.0 {
+                    yakogl::shaderc::set_compile_if_lowering(l);
+                }
+            }
+        }
+        let _put = Put(lowering.map(yakogl::shaderc::set_compile_if_lowering));
         store::with_scratch(|a| {
             let _keep = store::begin_keep().expect("keep");
             let text = a.alloc_str(src).unwrap();
@@ -777,6 +792,51 @@ fn the_stacked_path_cannot_address_the_smallest_levels_of_the_same_array() {
         } else {
             assert_eq!(rows, 1, "level 6 is one row");
             assert_eq!(read, vec![0, 0, 0], "level 6: the three layers read the same row");
+        }
+    }
+}
+
+/// A sample in a predicated arm keeps its layer address with it (select.rs
+/// `guard_sample`, 955affda): with the arms forced to predication
+/// (`IfLowering::Predicate`), an array look-up whose level or coordinates
+/// the arm computes, inside an `if`, an `if` / `else` and a nested `if`,
+/// compiles with native arrays on (without the fix selection refuses it:
+/// 'a layer address with no array sample after it')
+/// and gives the IR's pixel on both sides of the condition, the taken arm
+/// reading the layer its `z` names.
+#[test]
+fn an_array_sample_in_a_predicated_arm_keeps_its_address_and_agrees_with_the_ir() {
+    let arms = [
+        ("if (l > 0.5) { o = ", "; }"),
+        ("if (l > 0.5) { o = vec4(1.0, 0.0, 1.0, 1.0); } else { o = ", "; }"),
+        ("if (l > 0.5) { if (l < 0.9) { o = ", "; } }"),
+    ];
+    for (open, close) in arms {
+        /* computed levels and coordinates: what guard_sample guards (an
+         * operand that is a uniform as it stands is not guarded) */
+        for look in [
+            "textureLod(s, c, l * 2.0)",
+            "textureLod(s, vec3(c.xy * l, c.z), log2(l) + 1.0)",
+            "texture(s, c, l - 0.5)",
+            "textureLodOffset(s, c, l * 2.0, ivec2(1, -1))",
+        ] {
+            let src = fragment("uniform highp sampler2DArray s;", &format!("o = vec4(0.25); {open}{look}{close}"));
+            let cases: Vec<Box<InputFn<'_>>> = [0.2f32, 0.7]
+                .into_iter()
+                .map(|l| -> Box<InputFn<'_>> {
+                    Box::new(move |n: &str, k: u32| match n {
+                        "c" => [0.3f32, 0.8, 2.0][k as usize].to_bits(),
+                        "l" => l.to_bits(),
+                        _ => 0,
+                    })
+                })
+                .collect();
+            let refs: Vec<&InputFn<'_>> = cases.iter().map(|b| b.as_ref()).collect();
+            let _ = usc_exec::take_layers();
+            let px = run_against_ir_lowered(Some(IfLowering::Predicate), &src, &refs);
+            assert_ne!(px[0], px[1], "{open}{look}: both sides of the condition gave {:08x}", px[0]);
+            let layers = usc_exec::take_layers();
+            assert!(layers.contains(&2), "{open}{look}: the arm read layers {layers:?}, not 2");
         }
     }
 }
