@@ -125,11 +125,13 @@ entry for it is **XBGR8888**: format code `RGBA8888` (7) with order `ABGR`
 inverse map `:108-114`, Linux's use of these two orders `:22-27`). The plane
 must therefore be XBGR8888, not the XRGB8888 `rpi5_scanout32` uses today
 (`tools/probes/rpi_5/rpi5_scanout32/README.md:6`, the `u3 plane` line at
-`tools/probes/rpi_5/rpi5_scanout32/src/main.c:1053-1056`). The writer cannot
-express XBGR8888 yet: `enum hvs6w_format` has XRGB8888, ARGB8888 and RGB565
-only (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:47-55`) and
-picks order `ARGB` for every 32-bit format (`:131-134`). Adding
-`HVS6W_XBGR8888` (code 7, order ABGR) is item G1. Whether the 7.1 store can
+`tools/probes/rpi_5/rpi5_scanout32/src/main.c:1053-1056`). The writer can
+express it (item G1, merged as g1-xbgr): `enum hvs6w_format` has XRGB8888,
+ARGB8888, RGB565, XBGR8888 and ABGR8888
+(`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:47-55`); the two
+ABGR formats get code `RGBA8888` with order `ABGR`, every other 32-bit
+format order `ARGB` (`:125-135`). No probe uses it yet: `rpi5_scanout32`
+still places XRGB8888. Whether the 7.1 store can
 swap R and B is **unverified** (glscan-survey found no such setting);
 XRGB8888 would need it, so it is not the plan. If the byte-order answer at
 G2/G4 turns out reversed, the plane becomes XRGB8888 and G1 is dropped.
@@ -236,9 +238,10 @@ of the same bytes). Step 2 plus G4's pixel samples are the test.
 ## 6. The frame loop
 
 It reuses `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h`
-unchanged; the sequence below is the library's (`:114-154`). **Precondition:**
-the placement refusal of section 2 is fixed in the probe or the library
-first; until then every swap line is **unverified** on this firmware.
+unchanged; the sequence below is the library's (`:114-154`), except the
+placement of step 2, which `rpi5_scanout32` does itself. The placement
+refusal of section 2 is fixed (section 10, item 1); the swap lines below
+ran on the board on 2026-11-27 with an XRGB8888 plane (section 2).
 
 1. **Snapshot** the firmware's `LPTRS` and its list walked entry by entry to
    its END (`hvs6s_snapshot`,
@@ -246,13 +249,20 @@ first; until then every swap line is **unverified** on this firmware.
    `:115-121`, 256-word window `:284-289`), hashing the span with the declared
    hardware words left out (`:156-164`).
 2. **Place** two slots, 20 words (10 each — `HVS6W_LIST_WORDS` at
-   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:63-64`, the pair
-   span at `tools/probes/rpi_5/rpi5_scanout32/src/main.c:166`): the first
-   fit at or after word 32
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:72-75,122-123`)
-   whose words all read zero, clear of the firmware's span and of every
-   channel's `HEADE`/`LACT` (`:73-79`,
-   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:433`). A refusal names
+   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:69`, the pair
+   span at `tools/probes/rpi_5/rpi5_scanout32/src/main.c:165-166`): the
+   firmware's list is walked to its END over the whole list memory and our
+   pair starts at the word after that END, never below word 32, inside the
+   list memory and the 12-bit `LPTRS` field, clear of the other channels'
+   lists, `HEADE` and `LACT`
+   (`swap_place_after_end` at
+   `tools/probes/rpi_5/rpi5_scanout32/src/swap_check.h:824`, rule at
+   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:19-28`; the library's
+   zero-word first fit, `hvs6s_place_io`, is not used because the unused
+   list memory holds a `0xb0b0b0b0` fill). No word value decides it, and
+   no END means refusal. On the board: `u3 walk: heade=672 end=928 ...
+   place=929`, slot A at 929 and slot B at 939
+   (`tools/probes/rpi_5/rpi5_scanout32/README.md:268,456`). A refusal names
    the reason and writes nothing
    (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:409-432`,
    `tools/probes/rpi_5/rpi5_scanout32/src/main.c:1019-1024`).
@@ -436,10 +446,11 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
 
 ## 9. The ordered items
 
-- **G1 — XBGR plane format.** `hvs6w_format` gains `HVS6W_XBGR8888` (code
-  7, order ABGR) and `hvs6w_write_plane` writes it
+- **G1 — XBGR plane format** (writer part merged as g1-xbgr).
+  `hvs6w_format` has `HVS6W_XBGR8888` (code 7, order ABGR) and
+  `hvs6w_write_plane` writes it
   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:47-55`,
-  `:131-134`); the format table already knows the entry
+  `:125-135`); the format table already knows the entry
   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_fmt.h:77`). Its host mock and
   check script exist and get the case
   (`driver/zephyr/lib/board/test/hvs6_dlist_write_mock.c`,
