@@ -632,6 +632,20 @@ spread is the prediction; a gain of up to 2 ms would be early depth on a draw
 the host does not show; a slowdown of 0.2 to 1 ms (800x600) or 1 to 4 ms
 (1600x1200) a job is an RS tile-in or copy back the host harness does not have.
 
+### Where W8 and W9 pay off (`gc-tiled-wire.md`, commit `d18a8132`)
+
+`gc-tiled-wire.md` W8 and W9 ("Host-priced", item w8w9-host-price) count the
+fills as the RS writes them, padded. **Terrain is the only scene where W8 and
+W9 pay off as wired**: 1.92 MB of colour (800x600x4, unpadded and padded) and
+2.13 MB of depth (832x640x4 padded; 1.92 MB unpadded, the figure used above)
+a frame are removed, 4.05 MB of the 11.07 MB of terrain's fills. Shadow and
+refract: **0 B** as wired. Their offscreen depth, 1600x1216, **7.78 MB** a
+frame padded (7.68 MB unpadded; the "7.68 MB" above), is a depth texture, which
+`tiled_rt::spec_of` refuses, so it is reachable **only through W12** (a
+super-tiled depth surface with a TS and a TS-aware CPU depth resolve). Refract's
+7.68 MB colour fill needs W10 to W12 as well. Where a row below says "after
+W12" or "with W10 to W12", it is this dependency.
+
 ### Across the three scenes
 
 - Only terrain's D can be large: from about -14 to +3 ms of about 250. Shadow's
