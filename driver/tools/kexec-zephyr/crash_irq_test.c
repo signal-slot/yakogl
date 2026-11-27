@@ -48,6 +48,8 @@ static struct {
 	const char *dir;        /* NUL-separated names; NULL: no directory */
 	size_t dirlen;
 	const char *table;      /* /proc/interrupts */
+	const char *compat;     /* device-tree compatible, NUL-separated; NULL: none */
+	size_t compatlen;
 	const char *table_after; /* /proc/interrupts after an unbind; NULL: the same */
 	int fail_unbind, fail_bind, unbound;
 	char writes[4096];      /* "path=text\n" for every write */
@@ -58,6 +60,14 @@ static long read_small(const char *path, char *buf, long max)
 	const char *t = fk.unbound && fk.table_after ? fk.table_after : fk.table;
 	long n;
 
+	if (strcmp(path, "/proc/device-tree/compatible") == 0) {
+		if (!fk.compat) {
+			return -2;
+		}
+		memcpy(buf, fk.compat, fk.compatlen);
+		buf[fk.compatlen] = 0;
+		return (long)fk.compatlen;
+	}
 	if (strcmp(path, "/proc/interrupts") != 0) {
 		return -2;
 	}
@@ -326,6 +336,59 @@ int main(int argc, char **argv)
 	board(NULL, 0, big, NULL);
 	rc = crash_irq_gate();
 	check("a table that fills the whole buffer is refused (its end was not read)", rc == 1 && has(out, "fills the"));
+
+	/* Per board: the compatible string picks the list. */
+	{
+		static const char x2c[] = "atmark-techno,armadillo-x2\0fsl,imx8mp";
+		static const char t6c[] = "friendlyarm,nanopc-t6\0rockchip,rk3588";
+		static const char evk[] = "fsl,imx8mp-evk";
+		static const char imx8mp_rows[] =
+			"           CPU0       CPU1\n"
+			" 30:          0          0 GICv3  26 Level     arch_timer\n"
+			" 40:          3          0 gpio-mxc  10 Level     pca9450-irq\n"
+			" 41:          0          0 irqsteer   2 Level     lcdif\n";
+		static const char imx8mp_unknown[] =
+			"           CPU0       CPU1\n"
+			" 40:          3          0 gpio-mxc  10 Level     pca9450-irq\n"
+			" 42:          0          0 regmap-irq   2 Level     sleeper\n";
+
+		board(NULL, 0, imx8mp_rows, NULL);
+		fk.compat = x2c;
+		fk.compatlen = sizeof(x2c) - 1;
+		rc = crash_irq_gate();
+		check("X2 compatible: gpio-mxc and irqsteer rows are let through", rc == 0 && has(out, "i.MX 8M Plus"));
+		board(NULL, 0, imx8mp_unknown, NULL);
+		fk.compat = x2c;
+		fk.compatlen = sizeof(x2c) - 1;
+		rc = crash_irq_gate();
+		check("X2 compatible: an unmeasured chip is refused, only its row named",
+		      rc == 1 && has(out, "'42:") && has(out, "chip 'regmap-irq'") && !has(out, "'40:"));
+		board(NULL, 0, imx8mp_rows, NULL);
+		fk.compat = t6c;
+		fk.compatlen = sizeof(t6c) - 1;
+		rc = crash_irq_gate();
+		check("T6 compatible: gpio-mxc and irqsteer rows are refused",
+		      rc == 1 && has(out, "chip 'gpio-mxc'") && has(out, "chip 'irqsteer'") && !has(out, "'30:"));
+		board(NULL, 0, imx8mp_rows, NULL);
+		rc = crash_irq_gate();
+		check("no compatible readable: the T6 list alone, gpio-mxc refused", rc == 1 && has(out, "chip 'gpio-mxc'"));
+		board(NULL, 0, "           CPU0\n 40:          3 gpio-mxcx  10 Level     x\n"
+			       " 41:          0 irqsteer-2   2 Level     y\n", NULL);
+		fk.compat = x2c;
+		fk.compatlen = sizeof(x2c) - 1;
+		rc = crash_irq_gate();
+		check("X2 compatible: names close to gpio-mxc and irqsteer are refused", rc == 1 && has(out, "'40:") && has(out, "'41:"));
+		board(NULL, 0, imx8mp_rows, NULL);
+		fk.compat = evk;
+		fk.compatlen = sizeof(evk) - 1;
+		rc = crash_irq_gate();
+		check("a compatible item that only starts with fsl,imx8mp is not the i.MX 8M Plus", rc == 1);
+		board(measured_dir, sizeof(measured_dir) - 1, bound, after);
+		fk.compat = t6c;
+		fk.compatlen = sizeof(t6c) - 1;
+		rc = crash_irq_gate();
+		check("T6 compatible with the T6 fixture: unchanged, goes on once unbound", rc == 0 && strcmp(fk.writes, UNBIND) == 0);
+	}
 
 	printf("crash_irq_selftest: %d checks run, %d failed\n", run, failed);
 	free(bound);

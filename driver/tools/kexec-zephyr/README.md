@@ -121,6 +121,18 @@ procedure" and "Z4 board procedure"; they are not repeated here. Both runs
 need the owner's go-ahead and someone at the power switch, and neither has
 been run on the board.
 
+The crash route's interrupt check (`crash_irq.h`, last step before the
+panic) refuses the jump while `/proc/interrupts` has a row with a handler on a
+chip not measured with the crash route. The list depends on the board, picked
+from the device tree's `compatible`: the NanoPC-T6's list is `GICv3`,
+`GICv3-23`, `ITS-PCI-MSI-*`, `ITS-PCI-MSIX-*` and `rockchip_gpio_irq`; a board
+whose compatible has `fsl,imx8mp` (the Armadillo-X2) adds `gpio-mxc` and
+`irqsteer`, both MMIO chips whose bus lock does not sleep (the X2 went
+through the crash route with them on 2026-11-06 and 2026-11-11, before the
+check existed; the first jump with the list is to be watched on its console).
+Any other chip stays refused. `crash_irq_selftest.sh` tests both lists on the
+host.
+
 The display probe `t6_display` (step D2, `driver/docs/nanopc-t6-display.md`,
 section 2 route (a)) adopts the picture Linux leaves running, so it needs the
 crash route (`--crash`: `kexec --crash` into a `crashkernel=` reservation that

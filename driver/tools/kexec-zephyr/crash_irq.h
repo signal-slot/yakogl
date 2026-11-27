@@ -23,7 +23,29 @@
  *
  * User space cannot ask a chip whether its bus lock sleeps. So the check
  * lets an interrupt through only on a chip the crash route went through on
- * the board (crash_irq_chips) and refuses any other.
+ * the board (crash_irq_chips, and on an i.MX 8M Plus crash_irq_chips_imx8mp
+ * after it) and refuses any other.
+ *
+ * The Armadillo-X2 (i.MX 8M Plus) has rows on two chips the T6 does not:
+ * "gpio-mxc" (drivers/gpio/gpio-mxc.c, the generic-chip name of the GPIO
+ * banks' interrupts) and "irqsteer" (drivers/irqchip/irq-imx-irqsteer.c, the
+ * display/media subsystem's interrupt steering). Both are MMIO chips: they
+ * set no irq_bus_lock/irq_bus_sync_unlock, so the chip bus lock the panic
+ * takes is the kernel's no-op and never sleeps. The PMIC pca9450's interrupt
+ * sits on gpio-mxc, but pca9450 requests a plain threaded interrupt on it
+ * and has no regmap-irq chip of its own (no row on a chip of its own, unlike
+ * the RK806). The evidence is the X2's earlier crash-route jumps, run before
+ * this check existed: the 2026-11-06 runs and the 2026-11-11 case 222 dtpu
+ * run (docs/notes/gc-depth-sample.md, docs/notes/x2-glmark2-slow-scenes.md).
+ * The first jump with this list has still to be watched on the X2's console.
+ * (The two chip strings are those of the X2's /proc/interrupts; the Linux
+ * sources were not at hand to check them in.) An interrupt behind irqsteer
+ * whose own chip sleeps (a regmap-irq chip) shows that chip's name in its
+ * row, not "irqsteer", and is refused as any unlisted chip.
+ *
+ * The list is picked at run time from the device tree's compatible string
+ * (crash_irq_board_imx8mp): "fsl,imx8mp" adds the two chips. Any other
+ * board, and an unreadable compatible, keeps the T6 list alone.
  *
  * Freestanding, like kexec_zephyr.c. The includer defines the five
  * functions declared below; crash_irq_test.c gives them made-up /sys and
@@ -178,20 +200,75 @@ static const struct {
 	{ "ITS-PCI-MSIX-", 1 }, { "rockchip_gpio_irq", 0 },
 };
 
-static int crash_irq_chip_measured(const char *chip, long n)
+/* Added on an i.MX 8M Plus (the Armadillo-X2), see the header comment. */
+static const struct {
+	const char *name;
+	int prefix;
+} crash_irq_chips_imx8mp[] = {
+	{ "gpio-mxc", 0 }, { "irqsteer", 0 },
+};
+
+/* 1 when the device tree's compatible list has the item fsl,imx8mp. */
+static int crash_irq_board_imx8mp(void)
 {
-	for (unsigned long i = 0; i < sizeof(crash_irq_chips) / sizeof(crash_irq_chips[0]); i++) {
-		const char *w = crash_irq_chips[i].name;
+	static const char *const paths[] = {
+		"/proc/device-tree/compatible", "/sys/firmware/devicetree/base/compatible",
+	};
+	static char compat[512];
+
+	for (unsigned long i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+		long n = read_small(paths[i], compat, sizeof(compat));
+
+		if (n < 0) {
+			continue;
+		}
+		for (long off = 0; off < n;) {
+			long len = 0;
+
+			while (off + len < n && compat[off + len]) {
+				len++;
+			}
+			if (len == 10 && crash_starts(compat + off, len, "fsl,imx8mp")) {
+				return 1;
+			}
+			off += len + 1;
+		}
+		return 0;
+	}
+	return 0;
+}
+
+static int crash_irq_imx8mp;
+
+static int crash_irq_in(const char *chip, long n, const void *tab, unsigned long count)
+{
+	const struct {
+		const char *name;
+		int prefix;
+	} *t = tab;
+
+	for (unsigned long i = 0; i < count; i++) {
+		const char *w = t[i].name;
 		long k = 0;
 
 		while (w[k]) {
 			k++;
 		}
-		if (crash_starts(chip, n, w) && (crash_irq_chips[i].prefix ? n > k : n == k)) {
+		if (crash_starts(chip, n, w) && (t[i].prefix ? n > k : n == k)) {
 			return 1;
 		}
 	}
 	return 0;
+}
+
+static int crash_irq_chip_measured(const char *chip, long n)
+{
+	if (crash_irq_in(chip, n, crash_irq_chips, sizeof(crash_irq_chips) / sizeof(crash_irq_chips[0]))) {
+		return 1;
+	}
+	return crash_irq_imx8mp &&
+	       crash_irq_in(chip, n, crash_irq_chips_imx8mp,
+			    sizeof(crash_irq_chips_imx8mp) / sizeof(crash_irq_chips_imx8mp[0]));
 }
 
 static int crash_space(char c)
@@ -366,11 +443,16 @@ static int crash_irq_check(void)
 		put("crash: /proc/interrupts fills the whole buffer: its end was not read\n");
 		return 1;
 	}
+	crash_irq_imx8mp = crash_irq_board_imx8mp();
+	if (crash_irq_imx8mp) {
+		put("crash: i.MX 8M Plus (fsl,imx8mp): gpio-mxc and irqsteer rows are let through\n");
+	}
 	if (crash_irq_table_check(crash_irq_table, n) != 0) {
 		return 1;
 	}
 	put("crash: /proc/interrupts: every row with a handler is on a measured chip "
-	    "(GICv3, GICv3-23, ITS-PCI-MSI-*, ITS-PCI-MSIX-*, rockchip_gpio_irq)\n");
+	    "(GICv3, GICv3-23, ITS-PCI-MSI-*, ITS-PCI-MSIX-*, rockchip_gpio_irq"
+	    "; i.MX 8M Plus also gpio-mxc, irqsteer)\n");
 	return 0;
 }
 
