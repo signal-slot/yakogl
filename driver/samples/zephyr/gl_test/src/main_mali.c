@@ -11,9 +11,15 @@
  * compiler and its Mali backend, on the Zephyr OSAL src/osal/zephyr_mali.c
  * over our own kernel side (board::nanopc_t6_osal: Z1 to Z3, then CSG 0 /
  * CS 0, each kick one job on its ring). The suite renders into its own
- * surfaces and reads them back; neither image brings a display up (on the
- * Verdin iMX95 the X4 panel is CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY, off in
- * verdin_imx95.conf).
+ * surfaces and reads them back; neither image brings a display up unless
+ * asked: the Verdin iMX95's X12 LVDS panel is
+ * CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY (off in verdin_imx95.conf, on with
+ * -DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y). Then, after the suite (the same
+ * cases, the same lines), this file draws three colour bars into a 1280x800
+ * window of its own, board_show()s it and holds it for a camera
+ * (VI95_PANEL_HOLD_S). gl_test_run()'s `panel` argument is not that: it
+ * replaces the suite by the AM62P's demo scene at a compile-time address, so
+ * it stays 0 here. The NanoPC-T6 has no such step.
  *
  * What this file adds to the suite is the board's part only:
  *
@@ -39,6 +45,10 @@
 #include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+#endif
 
 #include "osal_internal.h"     /* osal_mali_diag_print */
 #include "zephyr_mali_board.h" /* osal_zephyr_mali_board_feed */
@@ -120,6 +130,90 @@ static int run(void)
 	return gl_test_run(gl_case, 0, 0, 0, 0, 0);
 }
 
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+/* the X12 panel's size (the board layer's SCREEN_W x SCREEN_H) and how long
+ * the picture stays for a camera, fed so the watchdog's alive window holds */
+#define VI95_PANEL_W      1280
+#define VI95_PANEL_H      800
+#define VI95_PANEL_HOLD_S 30
+
+static struct board_window s_panel_win;
+
+/* before the suite: the window memory is the board's */
+static void panel_window(void)
+{
+	int ret = board_window(VI95_PANEL_W, VI95_PANEL_H, &s_panel_win);
+
+	if (ret)
+		printk("gl_test: panel: board_window(%d, %d) = %d (no picture)\n", VI95_PANEL_W,
+		       VI95_PANEL_H, ret);
+}
+
+/* after the suite: three colour bars (scissored clears, no shader) in the
+ * window, board_show(), the hold. A failure here is printed and does not
+ * change the suite's verdict. */
+static void panel_show(void)
+{
+	static const EGLint single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_BUFFER, EGL_NONE };
+	static const EGLint cfg_attribs[] = {
+		EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+		EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+		EGL_NONE,
+	};
+	static const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+	static const float bar[3][3] = { {1, 0, 0}, {0, 1, 0}, {0, 0, 1} };
+	static struct gles_native_window nw;
+	EGLDisplay dpy;
+	EGLSurface surf;
+	EGLContext ctx;
+	EGLConfig cfg;
+	EGLint n = 0;
+	int ret;
+
+	if (s_panel_win.phys == 0)
+		return;
+	nw = (struct gles_native_window){
+		.phys = s_panel_win.phys, .width = s_panel_win.w, .height = s_panel_win.h,
+		.stride_bytes = s_panel_win.stride, .format = s_panel_win.format,
+	};
+	dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+	if (!eglInitialize(dpy, NULL, NULL) || !eglChooseConfig(dpy, cfg_attribs, &cfg, 1, &n) ||
+	    n != 1) {
+		printk("gl_test: panel: EGL config failed (0x%x)\n", eglGetError());
+		return;
+	}
+	surf = eglCreateWindowSurface(dpy, cfg, &nw, single_buffer);
+	ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
+	if (surf == EGL_NO_SURFACE || ctx == EGL_NO_CONTEXT ||
+	    !eglMakeCurrent(dpy, surf, surf, ctx)) {
+		printk("gl_test: panel: EGL surface/context failed (0x%x)\n", eglGetError());
+		return;
+	}
+	glClearColor(0.f, 0.f, 0.f, 1.f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glEnable(GL_SCISSOR_TEST);
+	for (int i = 0; i < 3; i++) {
+		glScissor(i * (VI95_PANEL_W / 3) + 40, 40, VI95_PANEL_W / 3 - 80, VI95_PANEL_H - 80);
+		glClearColor(bar[i][0], bar[i][1], bar[i][2], 1.f);
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
+	if (!eglSwapBuffers(dpy, surf)) {
+		printk("gl_test: panel: eglSwapBuffers failed (0x%x)\n", eglGetError());
+		return;
+	}
+	ret = board_show(&s_panel_win);
+	printk("gl_test: panel: board_show = %d (%dx%d colour bars)\n", ret, VI95_PANEL_W,
+	       VI95_PANEL_H);
+	if (ret)
+		return;
+	for (int t = 0; t < VI95_PANEL_HOLD_S; t += 5) {
+		osal_zephyr_mali_board_feed();
+		k_sleep(K_SECONDS(5));
+	}
+	osal_zephyr_mali_board_feed();
+}
+#endif /* CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY */
+
 int main(void)
 {
 	int rc;
@@ -135,11 +229,17 @@ int main(void)
 	       (unsigned int)CONFIG_YAKOGL_BOARD_ALIVE_S);
 #endif
 	osal_zephyr_mali_board_feed();
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+	panel_window();
+#endif
 	rc = run();
 	/* the OSAL's close record: kicks, carve-out pages, frees, restarts, the
 	 * tiler heap, and the sched refusal that stopped it, if one did */
 	osal_mali_diag_print();
 	printk("gl_test: %s (rc=%d)\n", rc ? "FAILED" : "OK", rc);
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+	panel_show();
+#endif
 #if defined(CONFIG_YAKOGL_NANOPC_T6)
 	t6_reset_to_linux("gl_test done");
 #else
