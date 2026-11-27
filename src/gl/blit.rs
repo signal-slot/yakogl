@@ -59,8 +59,10 @@
 //! copy -- stencil into or out of a cube face, an array layer or another
 //! level of a texture, a multisampled window, the window's or a
 //! renderbuffer's plane on a back end without the entries, or into a
-//! renderbuffer or window the back end holds no buffer for (`ds_write` of an empty
-//! rectangle answers other than 0: no frame has drawn into it yet) -- is
+//! renderbuffer or window the back end still holds no buffer for after the
+//! GL core cleared it (`ds_write` of an empty rectangle answers other than 0:
+//! no frame has drawn into it yet, and [`clear_undrawn_dst`] first clears
+//! such a plane to depth 1.0 and stencil 0 so the back end makes one) -- is
 //! refused with GL_INVALID_OPERATION, said once in the log per cause
 //! (docs/notes/blit-depth-window.md, docs/notes/blit-depth-layers.md).
 
@@ -68,6 +70,7 @@ use core::ffi::c_void;
 
 use super::consts::*;
 use super::context::{ds_object_id, heap_data, GlAttachment, GlContext, CAP_COLOR_ATTACHMENTS, CAP_MIP_LEVELS};
+use super::draw;
 use super::framebuffer::{
     self, attached_samples, attachment_storage, check_status, loc_pitch, mem_at, mem_at_mut, quantise_unorm,
     renderbuffer_bits, renderbuffer_surf_format, texture_bits, AttachmentBits, ColorKind, MemLoc,
@@ -1066,6 +1069,60 @@ fn dst_writable(job: &DepthCopy) -> bool {
     }
 }
 
+/// A destination plane that `dst_writable` refuses because no frame has drawn
+/// into it yet (dEQP-GLES3 fbo.msaa's `resolveFbo`: its depth/stencil
+/// renderbuffer is new). Its contents are undefined, so the GL core clears it
+/// over the whole plane to depth 1.0 and stencil 0 by an ordinary internal
+/// clear of the draw framebuffer (msaa-ds-design Option B). The clear goes out
+/// as a draw that carries the plane's `depth_id`/`stencil_id`, so the back end
+/// records a buffer for it and the probe can then answer 0. The GL core keeps
+/// no record of which planes were drawn, so the probe's answer 1 is the sign.
+/// No scissor, every depth and stencil bit, no colour; the application's
+/// scissor, masks and clear values are put back afterwards, and only the
+/// refused planes are cleared. False when the GPU's work was lost.
+fn clear_undrawn_dst(c: &mut GlContext, copies: &[Option<DepthCopy>; 2]) -> bool {
+    let unheld = |plane: u32| {
+        copies.iter().flatten().any(|j| j.plane == plane && !matches!(j.dst, PlaneDst::Texels(_)) && !dst_writable(j))
+    };
+    let (depth, stencil) = (unheld(backend::DS_PLANE_DEPTH), unheld(backend::DS_PLANE_STENCIL));
+    if !depth && !stencil {
+        return true;
+    }
+    let saved = (
+        c.scissor_test,
+        c.depth_mask,
+        c.stencil_writemask,
+        c.stencil_back_writemask,
+        c.color_writemask,
+        c.clear_depth,
+        c.clear_stencil,
+        c.rasterizer_discard,
+    );
+    (c.scissor_test, c.depth_mask, c.stencil_writemask, c.stencil_back_writemask) = (false, true, 0xff, 0xff);
+    (c.color_writemask, c.clear_depth, c.clear_stencil, c.rasterizer_discard) = ([0.0; 4], 1.0, 0, false);
+    /* recorded as glClear(DEPTH | STENCIL) would record it, then carried out
+     * by the flush gpu_idle_for_cpu starts with */
+    let pc = draw::pending_clear_for(c);
+    if depth {
+        (pc.depth, pc.depth_value) = (true, c.clear_depth);
+    }
+    if stencil {
+        (pc.stencil, pc.stencil_value) = (true, (c.clear_stencil & 0xff) as u8);
+    }
+    let idle = framebuffer::gpu_idle_for_cpu(c);
+    (
+        c.scissor_test,
+        c.depth_mask,
+        c.stencil_writemask,
+        c.stencil_back_writemask,
+        c.color_writemask,
+        c.clear_depth,
+        c.clear_stencil,
+        c.rasterizer_discard,
+    ) = saved;
+    idle
+}
+
 /// Copy the plane of `job` from its source (cut to `src_rect`) into its
 /// destination (cut to `dst_rect` and the scissor), NEAREST: the colour
 /// path's mapping, the value as it is. False when the source could not be
@@ -1414,8 +1471,12 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
     if !framebuffer::gpu_idle_for_cpu(c) {
         return;
     }
-    /* a destination plane the back end cannot write is refused before
-     * anything (the colour too) is copied */
+    /* a destination plane no frame has drawn into is cleared first; one the
+     * back end still cannot write is refused before anything (the colour
+     * too) is copied */
+    if !clear_undrawn_dst(c, &copies) {
+        return;
+    }
     if !copies.iter().flatten().all(dst_writable) {
         refuse_ds(c, REFUSED_DS_UNHELD);
         return;
