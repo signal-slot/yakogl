@@ -110,6 +110,11 @@ neg() { # neg <name> <line>: no finding, exit 0
 }
 neg boot-id "$BIDLINE"
 neg boot-id-prose "- **Boot id:** $UUID before and after (no reboot)."
+UBSER='serial''#=0123456789abcdef'
+pos uboot-id uboot-id "$UBSER" "0123456789abcdef"
+pos uboot-id-colon uboot-id "serial""#: 0123456789abcdef" "0123456789abcdef"
+neg uboot-id-redacted "serial""#=<serial>"
+neg uboot-id-empty "serial""#="
 pos serial-lsusb usb-serial "$SER1" "12CD34EF"
 pos serial-equals usb-serial "$SER2" "ZX81Q9"
 pos serial-colon usb-serial "$SER3" "zzserial1"

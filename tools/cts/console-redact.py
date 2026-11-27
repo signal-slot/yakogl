@@ -26,6 +26,12 @@ tools/board.sh), so it matches the address alternative. The rewrite rules, in or
   g) the login user name, given by --user NAME or $BOARD_USER (never read from a file), when it
      appears as a word -> <user>. Without a name the rule is off. Rules f) and g) are new; text
      with no user@host and no name gets byte for byte what a)..e) gave before.
+  h) U-Boot's board serial: 'serial#=VALUE' (printenv, env print) -> 'serial#=<serial>' (the value is
+     kept off by name, as tools/cts/mali-slice-redact.py does).
+  i) a UUID/GUID on U-Boot's partition output -> <uuid>: on any line naming a GUID, UUID or PARTUUID
+     (mmc part's 'Partition GUID:', 'Type GUID:', root=PARTUUID=..), and on every line of an
+     'mmc part' table, from its 'Partition Map for' or 'Part' header line to the next '=>' prompt.
+     A UUID anywhere else (and a boot id line) is left, so t6-redact-check.sh still refuses it.
 The UART rule also takes a /dev/serial/by-id/.. path (a USB serial bridge's stable name).
 The rules are idempotent: the <...>, <addr>, <uart> and <home> forms match none of them again.
 A binary file (a NUL byte) is skipped, as grep -I does. The rules keep everything else byte
@@ -53,6 +59,13 @@ VERSION = re.compile(
 # unit name such as ethernet@8000000 in U-Boot output is not a login); judged in userhost().
 USERHOST = re.compile(rb"(?<![\w.@-])[A-Za-z_][\w.-]*@(<addr>|[A-Za-z](?:[\w.-]*[A-Za-z0-9])?)(?P<prompt>:[~/])?")
 
+SERIAL = re.compile(rb"(?<![\w#])(serial#[ \t]*[:=][ \t]*)[^\s<][^\s]*", re.I)
+UUID = re.compile(rb"(?<![0-9A-Fa-f-])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f-])")
+UUID_WORD = re.compile(rb"guid|uuid", re.I)
+PART_HEAD = re.compile(rb"^\s*(Partition Map for|Part\s)", re.I)
+PROMPT = re.compile(rb"^\s*=>")
+BOOT_ID = re.compile(rb"boot[ _-]?id", re.I)
+
 VERSION_RULE = "version"
 ADDR_RULE = "addr"
 UART_RULE = "uart"
@@ -60,6 +73,27 @@ HOME_RULE = "home"
 MAC_RULE = "mac"
 USERHOST_RULE = "userhost"
 USER_RULE = "user"
+SERIAL_RULE = "serial"
+UUID_RULE = "uuid"
+
+
+def uuids(data, tally):
+    """Rule i): UUIDs on partition lines (see the header) -> <uuid>."""
+    out = []
+    n = 0
+    in_part = False
+    for line in data.splitlines(keepends=True):
+        if PROMPT.match(line):
+            in_part = False
+        elif PART_HEAD.match(line):
+            in_part = True
+        if (in_part or UUID_WORD.search(line)) and not BOOT_ID.search(line):
+            line, k = UUID.subn(b"<uuid>", line)
+            n += k
+        out.append(line)
+    if n:
+        tally[UUID_RULE] = n
+    return b"".join(out)
 
 
 def userhost(m):
@@ -90,6 +124,8 @@ def redact(data, tally=None, user=None):
     data = step(data, UART_RULE, UART, b"<uart>", tally)
     data = step(data, HOME_RULE, HOME, b"<home>", tally)
     data = step(data, MAC_RULE, MAC, b"<mac>", tally)
+    data = step(data, SERIAL_RULE, SERIAL, rb"\1<serial>", tally)
+    data = uuids(data, tally)
     data = step(data, USERHOST_RULE, USERHOST, userhost, tally)
     if user:
         rx = re.compile(rb"(?<![\w-])" + re.escape(user) + rb"(?![\w-])")

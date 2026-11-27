@@ -49,6 +49,9 @@
 #   usb-serial     the value of a label: iSerial, SerialNumber or Serial
 #                  Number, with a token of 4+ characters after it (no
 #                  value, or a shorter one, passes)
+#   uboot-id       U-Boot's board serial variable (its name, '#', then = or :)
+#                  with a value after it;
+#                  the placeholder <serial> passes (console-redact.py)
 #   userhost       a login name at a host (the shell prompt form, a mail
 #                  address, a systemd unit instance), except when the host
 #                  part is all hex: those are U-Boot device unit names
@@ -114,6 +117,7 @@ addk ipv6-full '(^|[^0-9a-z_.:])[0-9a-f]{1,4}(:[0-9a-f]{1,4}){7}([^0-9a-f_.:]|$)
 addk uuid '(^|[^0-9a-f-])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([^0-9a-f-]|$)' \
   '(^|[^[:alnum:]])boot[ _-]?id'
 addk usb-serial '(iserial|serialnumber|serial number)[[:space:]:=]+([0-9]+[[:space:]]+)?[0-9a-z._-]{4,}'
+addk uboot-id 'serial#[[:space:]]*[:=][[:space:]]*[^[:space:]<]'
 addk userhost '(^|[^0-9a-z._%+-])[0-9a-z._+-]+@[0-9a-z-]*[g-z][0-9a-z.-]*'
 
 hits=0
