@@ -3,7 +3,10 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Check the AM62P family table of docs/es3-cts-failures.md against the triage totals.
 
-  check-gles3-failures-doc.py DOC.md NOTPASS.tsv FAMILIES.txt
+  check-gles3-failures-doc.py [DOC.md NOTPASS.tsv FAMILIES.txt]
+
+With no arguments the three defaults below are used (paths from the repo root
+this script sits in).
 
 DOC.md   docs/es3-cts-failures.md
 NOTPASS.tsv  docs/es3/am62p-gles3-notpass.tsv
@@ -23,7 +26,8 @@ header "| Family | Count | Sites | Issue |" and one row per family:
 
 Family is the family id as in the TSV's 4th column (backticks optional).
 Count is a decimal number (a thousands comma is allowed). Sites and Issue are
-free text but must not be empty. A 'total' row (Family 'total') is optional;
+free text but must not be empty: Sites needs at least one file:line site
+(path.ext:NNN), Issue at least one #NNN. A 'total' row (Family 'total') is optional;
 when present its count must equal the TSV row count.
 
 Totals come from gles3-triage.py's own functions: a row's family is its 4th
@@ -88,12 +92,22 @@ def table_rows(sec):
     return rows if header else None
 
 
+SITE_RE = re.compile(r"[\w./+-]+\.\w+:\d+")
+ISSUE_RE = re.compile(r"#\d+")
+
+
 def main():
-    if len(sys.argv) != 4:
-        print("usage: check-gles3-failures-doc.py DOC.md NOTPASS.tsv FAMILIES.txt",
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if len(sys.argv) == 1:
+        doc = os.path.join(root, "docs/es3-cts-failures.md")
+        tsv = os.path.join(root, "docs/es3/am62p-gles3-notpass.tsv")
+        fam = os.path.join(root, "tools/cts/am62p-gles3-families.txt")
+    elif len(sys.argv) == 4:
+        doc, tsv, fam = sys.argv[1:]
+    else:
+        print("usage: check-gles3-failures-doc.py [DOC.md NOTPASS.tsv FAMILIES.txt]",
               file=sys.stderr)
         return 2
-    doc, tsv, fam = sys.argv[1:]
     try:
         tri = load_triage()
         sec = section(doc)
@@ -135,8 +149,10 @@ def main():
             errs.append(f"table row '{famid}' names a family with no rows in {tsv}")
         elif want[famid] != n:
             errs.append(f"family '{famid}': table says {n}, triage counts {want[famid]}")
-        if not sites.strip() or not issue.strip():
-            errs.append(f"family '{famid}': empty Sites or Issue")
+        if not SITE_RE.search(sites):
+            errs.append(f"family '{famid}': Sites '{sites}' has no file:line site")
+        if not ISSUE_RE.search(issue):
+            errs.append(f"family '{famid}': Issue '{issue}' has no #NNN")
     for famid in sorted(want):
         if famid not in seen:
             errs.append(f"family '{famid}' ({want[famid]} rows) is missing from the table")
