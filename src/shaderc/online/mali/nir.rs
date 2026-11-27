@@ -791,6 +791,10 @@ pub struct Nir<'s> {
     /// ([`invariant_values`]): the inexact rules of [`Nir::alu`] are not
     /// applied to it.
     exact_build: bool,
+    /// The IR values no output of the vertex shader reads, one flag per
+    /// value ([`vs_ir_dead`]; all false until the walk sets them): their
+    /// precision class decides nothing ([`vs_class_of`]).
+    ir_dead: &'s mut [bool],
     /// The attribute locations Mesa numbers, one bit each
     /// ([`Nir::attribute_record`]); set by [`build`].
     pub counted: u64,
@@ -1370,6 +1374,7 @@ impl<'s> Nir<'s> {
             late_fold: false,
             exact: scratch.alloc_filled(MAX_NODES, false).map_err(oom)?,
             exact_build: false,
+            ir_dead: scratch.alloc_filled(MAX_VALUES, false).map_err(oom)?,
             counted: 0,
             output_inputs: 0,
             lane_inputs: [0; 4 * MAX_VARYINGS],
@@ -3527,7 +3532,7 @@ fn vs_uniform16(
     let wd = vs_width16(w, s, n, width);
     let (mut uni, mut half, mut any) = (false, true, false);
     for k in 0..n {
-        let narrow = class_of(m, s[k].val)? == Prec::Medium;
+        let narrow = vs_class_of(vs, m, s[k].val)? == Prec::Medium;
         for i in 0..wd {
             let v = lane(w, s[k], i);
             match v {
@@ -3570,6 +3575,19 @@ pub(super) fn class_of(m: &Module<'_>, v: ValueId) -> Result<Prec, MaliError> {
     }
 }
 
+/// [`class_of`] for the vertex walk: a value no output reads
+/// ([`Nir::ir_dead`]) and of no known class is read as High. What is built
+/// for it is removed by [`dce`], so its width decides nothing, and Mesa
+/// removes it too (deqp_constrnd_atan_zero_lanes_vs: `acos(atan(v_color))`
+/// of a constant, stored to a local the shader overwrites). A live value of
+/// no known class is still refused.
+fn vs_class_of(vs: &Nir<'_>, m: &Module<'_>, v: ValueId) -> Result<Prec, MaliError> {
+    match m.prec_of(v) {
+        Prec::Unknown if vs.ir_dead.get(v.0 as usize).copied().unwrap_or(false) => Ok(Prec::High),
+        _ => class_of(m, v),
+    }
+}
+
 /// [`class_of`] of local `l`'s storage.
 pub(super) fn local_class_of(m: &Module<'_>, l: ir::LocalId) -> Result<Prec, MaliError> {
     match m.local_prec_of(l) {
@@ -3581,8 +3599,8 @@ pub(super) fn local_class_of(m: &Module<'_>, l: ir::LocalId) -> Result<Prec, Mal
 /// Source `s` is mediump: a mediump value, or a load of a mediump local
 /// (`in0 = a_in0.wy` of a `mediump vec2`, whose load the front end leaves
 /// unclassed).
-fn medium_src(m: &Module<'_>, s: ir::Src) -> Result<bool, MaliError> {
-    if class_of(m, s.val)? == Prec::Medium {
+fn medium_src(vs: &Nir<'_>, m: &Module<'_>, s: ir::Src) -> Result<bool, MaliError> {
+    if vs_class_of(vs, m, s.val)? == Prec::Medium {
         return Ok(true);
     }
     match m.def(s.val) {
@@ -3595,7 +3613,7 @@ fn medium_src(m: &Module<'_>, s: ir::Src) -> Result<bool, MaliError> {
 /// lanes or, through a mediump source, 32-bit attribute lanes: Mesa
 /// computes it at 16 bits ([`vs_fabs16`]).
 fn vs_abs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> Result<bool, MaliError> {
-    let narrow = medium_src(m, s[0])?;
+    let narrow = medium_src(vs, m, s[0])?;
     let wd = vs_width16(w, s, 1, width);
     Ok(wd > 0 && (0..wd).all(|i| vs_lane16(vs, lane(w, s[0], i), narrow).is_some()))
 }
@@ -3614,7 +3632,7 @@ fn vs_fabs16(
     out: &mut [Val; 4],
 ) -> Result<(), MaliError> {
     let u = Val::Undef;
-    let narrow = medium_src(m, s[0])?;
+    let narrow = medium_src(vs, m, s[0])?;
     let wd = vs_width16(w, s, 1, width);
     for (i, o) in out.iter_mut().enumerate().take(wd) {
         let x = match vs_lane16(vs, lane(w, s[0], i), narrow).ok_or(MaliError::Defect(Defect::IrIndex))? {
@@ -3668,7 +3686,7 @@ fn vs_ffract16(
     out: &mut [Val; 4],
 ) -> Result<(), MaliError> {
     let u = Val::Undef;
-    let narrow = medium_src(m, s[0])?;
+    let narrow = medium_src(vs, m, s[0])?;
     let wd = vs_width16(w, s, 1, width);
     let mut x = [u; 4];
     for (i, xi) in x.iter_mut().enumerate().take(wd) {
@@ -3867,7 +3885,7 @@ fn vs_cmp16_ok(
         return Ok(None);
     };
     /* a source of no known class is not narrowed (the fp32 walk) */
-    let narrow = medium_src(m, s[1 - k]).unwrap_or(false);
+    let narrow = medium_src(vs, m, s[1 - k]).unwrap_or(false);
     let (x, c) = vs_cmp16_lanes(w, s, k, wd);
     let c0 = c_first(&c[..wd]);
     if c[..wd].iter().any(|&v| v != c0 || half(v).is_err()) {
@@ -4060,7 +4078,7 @@ fn vs_alu16u(
     let width = vs_width16(w, s, n, width);
     let mut x = [[u; 4]; 3];
     for k in 0..n {
-        let narrow = class_of(m, s[k].val)? == Prec::Medium;
+        let narrow = vs_class_of(vs, m, s[k].val)? == Prec::Medium;
         for i in 0..width {
             x[k][i] = match lane(w, s[k], i) {
                 c @ Val::Const(_) => c,
@@ -4222,12 +4240,12 @@ fn ir_same(m: &Module<'_>, a: ValueId, b: ValueId, depth: u8) -> bool {
 /// Mesa's code ([`Kind::VsTex`]`::medium`): a mediump `fmul`, `fadd`,
 /// `ffma` or `fneg` reads it, or reads a look-up `nir_opt_cse` makes one
 /// with it ([`ir_same`]; gm2_texvert_4's `v_a` beside `v_b`).
-fn vs_tex_read16(m: &Module<'_>, id: ir::InstrId) -> Result<bool, MaliError> {
+fn vs_tex_read16(vs: &Nir<'_>, m: &Module<'_>, id: ir::InstrId) -> Result<bool, MaliError> {
     let me = ValueId(id.0);
     let tex = |v: ValueId| v == me || (matches!(m.def(v), Some(IrOp::Tex { .. })) && ir_same(m, v, me, 8));
     for (i, op) in m.instrs.iter().enumerate() {
         if let IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s) = op {
-            if class_of(m, ValueId(i as u32))? == Prec::Medium
+            if vs_class_of(vs, m, ValueId(i as u32))? == Prec::Medium
                 && s[..super::nir_fs::ir_arity(*a)].iter().any(|x| tex(x.val))
             {
                 return Ok(true);
@@ -4933,6 +4951,96 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
     Ok(&steps[..k])
 }
 
+/// The IR values no output of the vertex shader reads, `dead[v]` set for
+/// each ([`Nir::ir_dead`]): a liveness of `steps` taken backwards, as
+/// `nir_opt_dce` sees the program once the locals are SSA values. A
+/// value is live when a `StoreOutput`, an `if` condition or a live value
+/// reads it; a `StoreLocal` is live when a later `LoadLocal` of a live value
+/// reads one of the lanes it writes before another store writes them (an
+/// indexed store is always live and kills nothing); the two sides of a
+/// flattened `if` are taken apart and their liveness joined. With a loop
+/// among the steps nothing is marked dead.
+fn vs_ir_dead(m: &Module<'_>, steps: &[Step], scratch: &Arena<'_>, dead: &mut [bool]) -> Result<(), MaliError> {
+    const DEPTH: usize = 16;
+    if m.instrs.len() > dead.len()
+        || m.locals.len() > MAX_LOCALS
+        || steps.iter().any(|s| matches!(s, Step::LoopBegin(..) | Step::Head(_) | Step::LoopEnd(_)))
+    {
+        return Ok(());
+    }
+    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(|_| MaliError::OutOfScratch)?;
+    /* the lanes of each local a later live load reads */
+    let mut loc = [0u8; MAX_LOCALS];
+    /* per open `if`, innermost last: the lanes after it, and those at the
+     * start of its else side */
+    let mut ifs = [([0u8; MAX_LOCALS], [0u8; MAX_LOCALS]); DEPTH];
+    let mut depth = 0usize;
+    for step in steps.iter().rev() {
+        match *step {
+            Step::EndIf => {
+                if depth == DEPTH {
+                    return Ok(());
+                }
+                ifs[depth] = (loc, [0; MAX_LOCALS]);
+                depth += 1;
+            }
+            Step::Else => {
+                let Some(top) = depth.checked_sub(1) else { return Ok(()) };
+                ifs[top].1 = loc;
+                loc = ifs[top].0;
+            }
+            Step::If(cond) => {
+                let Some(top) = depth.checked_sub(1) else { return Ok(()) };
+                depth = top;
+                for (l, e) in loc.iter_mut().zip(ifs[top].1.iter()) {
+                    *l |= *e;
+                }
+                if let Some(x) = live.get_mut(cond.val.0 as usize) {
+                    *x = true;
+                }
+            }
+            Step::Instr(id) => {
+                let i = id.0 as usize;
+                let Some(op) = m.instrs.get(i) else { return Ok(()) };
+                let keep = match *op {
+                    IrOp::StoreOutput { .. } | IrOp::Discard => true,
+                    IrOp::StoreLocal { local, index, write_mask, .. } => {
+                        let l = local.0 as usize;
+                        let keep = index.is_some() || loc[l] & write_mask != 0;
+                        if index.is_none() {
+                            loc[l] &= !write_mask;
+                        }
+                        keep
+                    }
+                    IrOp::LoadLocal { local, .. } => {
+                        if live[i] {
+                            loc[local.0 as usize] = 0xF;
+                        }
+                        live[i]
+                    }
+                    _ => live[i],
+                };
+                if keep {
+                    live[i] = true;
+                    op.for_each_src(|s| {
+                        if let Some(x) = live.get_mut(s.val.0 as usize) {
+                            *x = true;
+                        }
+                    });
+                }
+            }
+            Step::Refuse(_) | Step::LoopBegin(..) | Step::Head(_) | Step::LoopEnd(_) => {}
+        }
+    }
+    if depth != 0 {
+        return Ok(());
+    }
+    for (d, l) in dead.iter_mut().zip(live.iter()) {
+        *d = !*l;
+    }
+    Ok(())
+}
+
 /// A flattened vertex `if` the walk is in ([`vs_steps`]): its condition,
 /// the state before it and its then side's, and the operations walked on
 /// each side (`alu[0]` then, `alu[1]` else; a nested `if` adds the side
@@ -5505,6 +5613,7 @@ fn walk<'s>(
     let mut nouter = 0;
     let mut kept_loop: Option<KeptLoop> = None;
     let steps = vs_steps(m, scratch)?;
+    vs_ir_dead(m, steps, scratch, vs.ir_dead)?;
     let exact_values = invariant_values(m, scratch)?;
     let mut k = 0;
     while k < steps.len() {
@@ -5833,7 +5942,7 @@ fn walk<'s>(
                  * attribute stands before). Each 16-bit lane is its own
                  * `f2f32` (`F16_TO_F32 r1, r0.h0`), in lane order at the
                  * store. */
-                let medium = medium_src(m, src)?;
+                let medium = medium_src(&vs, m, src)?;
                 /* or of fp16 uniforms alone (deqp_uniarray_*_const_vs's
                  * `vec4(res, 0.0, 1.0)` of a mediump array's sum: the
                  * constants stored in the flat `.v4` beside it, `IADD_IMM.i32
@@ -5869,27 +5978,27 @@ fn walk<'s>(
              * mediump local's narrowed lanes and constants: fp16, in lane
              * pairs ([`vs_alu16`]) */
             IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
-                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_pairs16(&vs, m, w, &s, width)? =>
+                if vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium && vs_pairs16(&vs, m, w, &s, width)? =>
             {
                 vs_alu16(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             /* one over fp16 uniforms and mediump attributes: fp16 too, the
              * uniform's words read whole ([`vs_alu16u`]) */
             IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s)
-                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_uniform16(&vs, m, w, a, &s, width)? =>
+                if vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium && vs_uniform16(&vs, m, w, a, &s, width)? =>
             {
                 vs_alu16u(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             /* `abs` of a mediump local's lanes (mediump attributes'): fp16,
              * one lane at a time ([`vs_fabs16`]) */
             IrOp::Alu(AluOp::Fabs, s)
-                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_abs16(&vs, m, w, &s, width)? =>
+                if vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium && vs_abs16(&vs, m, w, &s, width)? =>
             {
                 vs_fabs16(&mut vs, m, w, &s, width, &mut out)?;
             }
             /* `fract` of the same lanes: fp16 too ([`vs_ffract16`]) */
             IrOp::Alu(AluOp::Ffract, s)
-                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_abs16(&vs, m, w, &s, width)? =>
+                if vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium && vs_abs16(&vs, m, w, &s, width)? =>
             {
                 vs_ffract16(&mut vs, m, w, &s, width, &mut out)?;
             }
@@ -5897,7 +6006,7 @@ fn walk<'s>(
                 /* a mediump operation of a lowp or mediump sampler's texels
                  * other than the fp16 arms' is fp16 in Mesa too, a form
                  * this fp32 walk does not build (mali-vs-lookups.md §7) */
-                let medium = class_of(m, ValueId(id.0))? == Prec::Medium;
+                let medium = vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium;
                 if medium
                     && (0..super::nir_fs::ir_arity(a)).any(|k| {
                         (0..width.max(1)).any(|i| {
@@ -6530,8 +6639,8 @@ fn walk<'s>(
                  * (gm2_texvert_3's `texture2D(s, uv).xyz * 2.0 - 1.0`);
                  * after `nir_opt_cse` that holds for each copy of one
                  * look-up (gm2_texvert_4) */
-                let medium = class_of(m, ValueId(id.0))? == Prec::Medium;
-                let half = medium && vs_tex_read16(m, id)?;
+                let medium = vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium;
+                let half = medium && vs_tex_read16(&vs, m, id)?;
                 /* `nir_scalar_is_zero`: the bits 0 */
                 let (kind, src) = if level == Val::Const(F32_ZERO) {
                     (Kind::VsTex { explicit: false, cube, sampler, index: 0, medium }, [s, t, Val::Undef])
