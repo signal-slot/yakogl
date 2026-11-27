@@ -114,8 +114,21 @@ Notes on the steps:
    `<LABEL>/zephyr/zephyr.bin`) or by one under the label (line
    `zephyr/zephyr.bin`); a label without `zephyr.bin`, or a top-level file
    other than `<LABEL>.built`, `SHA256SUMS` and `COMMIT`, is named; both
-   layouts in one directory fail. `t6-deqp-images.sh` writes neither file
-   yet, so write them from the build before the check.
+   layouts in one directory fail. A real
+   `t6-deqp-images.sh <table> <img-dir> [LABEL...]` writes both at the top of
+   `<img-dir>` when its builder exits 0: `SHA256SUMS` (one line
+   `<LABEL>/zephyr/zephyr.bin` per label of that call whose `<LABEL>.built`
+   says rc=0 and whose image is not empty; a failed or empty row is named on
+   stderr and left out; the file is rewritten by each call, so a later
+   selective build lists only its own labels and preflight then names the
+   other images) and `COMMIT` (the full hash of the checkout's HEAD, the
+   commit built from; no git HEAD: a warning and no file). preflight.sh
+   reads exactly these two: `COMMIT` must be an ancestor of the local
+   `origin/main`, and each image's sha256 must match its `SHA256SUMS` line.
+   `t6-deqp-images.sh --dry-run <table> <img-dir> [LABEL...]` (`--dry-run`
+   must be the first argument) writes nothing, builds nothing and needs no
+   environment: it prints `<LABEL> <filter>` per selected row, exit 0 on
+   success, 2 on error.
 2. Run it with Armbian up and before any reboot. Only 0 lets the session
    go on; an RFC 2217 exit 42 (code 8) stops it.
 3. Stage before the first `--go`. The fingerprint file stays on this host
