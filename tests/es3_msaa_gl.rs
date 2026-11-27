@@ -69,6 +69,8 @@ struct Seen {
     draws: bool,
     /// `GlesDraw::samples`.
     samples: u8,
+    /// `GlesDraw::target_id`, `target_gen`.
+    id: (u32, u32),
 }
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
@@ -81,7 +83,7 @@ const RESOLVED: [u8; 4] = [0x40, 0x80, 0xc0, 0xff];
 
 unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     let d = &*d;
-    SEEN.lock().unwrap().push(Seen { draws: d.index_count != 0, samples: d.samples });
+    SEEN.lock().unwrap().push(Seen { draws: d.index_count != 0, samples: d.samples, id: (d.target_id, d.target_gen) });
     if d.samples > 1 {
         PENDING.lock().unwrap().push((d.target_gpu, d.target_w, d.target_h));
     }
@@ -98,6 +100,13 @@ unsafe extern "C" fn b_finish_resolve() -> i32 {
         px.fill(RESOLVED);
     }
     0
+}
+
+/// The ids `attachment_gone` was told, in order.
+static GONE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+unsafe extern "C" fn b_attachment_gone(id: u32) {
+    GONE.lock().unwrap().push(id);
 }
 
 /// What `depth_resolve` / `stencil_resolve` were asked for: (id, w, h).
@@ -189,7 +198,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     max_instance_divisor: 1,
     wait_kick: None,
     samples_texel_copies: false,
-    attachment_gone: None,
+    attachment_gone: Some(b_attachment_gone),
     depth_resolve: None,
     query_begin: None,
     query_end: None,
@@ -248,6 +257,7 @@ fn context_on(table: &'static YakoglBackend) -> MutexGuard<'static, ()> {
     PENDING.lock().unwrap().clear();
     DS_READS.lock().unwrap().clear();
     DS_WRITES.lock().unwrap().clear();
+    GONE.lock().unwrap().clear();
     // SAFETY: plain GL call.
     while unsafe { glGetError() } != GL_NO_ERROR {}
     g
@@ -560,14 +570,17 @@ fn one_sample_renderbuffer_with_a_texture_is_incomplete() {
 }
 
 /// An FBO draw is single-sample, whatever count the renderbuffer stored.
-/// (It carries no multisample identity yet: `GlesDraw` has no target_id.)
+/// It carries the renderbuffer's identity all the same (`target_id`), which
+/// a back end reads only at 4x.
 #[test]
 fn fbo_draw_is_one_sample_today() {
     let _g = context();
     for n in [0, 1] {
         let _fbo = framebuffer(n, &[GL_RGBA8]).unwrap();
         program(); /* the framebuffer's drop unbinds it */
-        assert_eq!(draw().samples, 1, "renderbuffer stored with {n}");
+        let d = draw();
+        assert_eq!(d.samples, 1, "renderbuffer stored with {n}");
+        assert!(d.id.0 != 0 && d.id.1 != 0, "{:?}", d.id);
     }
 }
 
@@ -672,13 +685,65 @@ fn incomplete_multisample_with_real_counts() {
 #[test]
 fn fbo_draw_is_four_samples() {
     let _g = context_ms4();
-    let _fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
     program();
-    assert_eq!(draw().samples, 4);
-    // TODO(gl-msaa-resolve): the draw also carries target_id (ds_object_id(rb.serial,
-    // false)) and target_gen (storage_gen) of the renderbuffer, 0 for the window;
-    // record them in Seen once GlesDraw has them and assert: non-zero id, the gen
-    // changes when the renderbuffer is respecified, the id does not.
+    let first = draw();
+    assert_eq!(first.samples, 4);
+    /* the draw names the renderbuffer (`ds_object_id(serial, false)`: neither
+     * the texture bit nor the surface bit) and its storage generation */
+    let (id, gen) = first.id;
+    assert!(id != 0 && id & 0xc000_0000 == 0 && gen != 0, "{:?}", first.id);
+    assert_eq!(draw().id, (id, gen), "the same storage, the same identity");
+    GONE.lock().unwrap().clear();
+    // SAFETY: the framebuffer's own renderbuffer, bound.
+    unsafe {
+        glBindRenderbuffer(GL_RENDERBUFFER, fbo.rbs[0]);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, 8, 8);
+    }
+    assert_eq!(*GONE.lock().unwrap(), [id], "respecified: its contents are gone");
+    let again = draw();
+    assert_eq!(again.id.0, id, "the same object");
+    assert_ne!(again.id.1, gen, "new storage, another generation");
+    /* the window's draw names no object */
+    // SAFETY: plain GL call.
+    unsafe { glBindFramebuffer(GL_FRAMEBUFFER, 0) };
+    assert_eq!(draw().id, (0, 0), "the window");
+}
+
+/// Note (b)6: a whole-attachment glInvalidateFramebuffer of a 4x
+/// renderbuffer tells the back end its contents are gone (once, under the
+/// draw's `target_id`); glInvalidateSubFramebuffer may keep them and does
+/// not; a single-sample renderbuffer keeps its contents (nothing said).
+#[test]
+fn a_whole_invalidate_of_a_4x_attachment_is_attachment_gone() {
+    let _g = context_ms4();
+    let fbo = framebuffer(4, &[GL_RGBA8, GL_RGBA8]).unwrap();
+    program();
+    let (id, _) = draw().id;
+    let att = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT0];
+    GONE.lock().unwrap().clear();
+    // SAFETY: two enums.
+    unsafe { glInvalidateSubFramebuffer(GL_FRAMEBUFFER, 2, att.as_ptr(), 0, 0, 8, 8) };
+    assert_eq!((err(), GONE.lock().unwrap().len()), (GL_NO_ERROR, 0), "a sub-rectangle keeps everything");
+    // SAFETY: as above.
+    unsafe { glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, att.as_ptr()) };
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(*GONE.lock().unwrap(), [id], "named twice, said once");
+    GONE.lock().unwrap().clear();
+    /* an invalid list is refused before anything is said */
+    // SAFETY: one enum.
+    unsafe { glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, [GL_COLOR].as_ptr()) };
+    assert_eq!((err(), GONE.lock().unwrap().len()), (GL_INVALID_ENUM, 0));
+    drop(fbo);
+    let _one = framebuffer(0, &[GL_RGBA8]).unwrap();
+    GONE.lock().unwrap().clear();
+    // SAFETY: one enum.
+    unsafe { glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, att.as_ptr()) };
+    assert_eq!(
+        (err(), GONE.lock().unwrap().len()),
+        (GL_NO_ERROR, 0),
+        "a single-sample renderbuffer keeps its contents"
+    );
 }
 
 /// Note (b)7/(b)9: a 4x read framebuffer resolves by glBlitFramebuffer into a

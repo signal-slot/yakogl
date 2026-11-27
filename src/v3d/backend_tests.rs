@@ -4063,6 +4063,87 @@ fn a_program_reading_a_texture_size_gets_the_bindings_size() {
     assert_eq!((t[1].unit, t[1].width, t[1].height), (3, 1, 1));
 }
 
+/* ---- 4x framebuffer objects (docs/notes/es3-msaa-renderbuffers.md (c2)) ---------- */
+
+/// A 4x draw of two RGBA8 renderbuffers (`target_ids` 11 and 12): one 4x
+/// job, each RT with its own 4 KiB-aligned sample buffer (RT 0 in the
+/// target's `ms_*`, RT 1 in `rt[0].ms_*`). The first job starts both RTs
+/// from the clear colour (nothing was kept), the next loads both, and once
+/// the GL core says RT 1's contents are gone (`attachment_gone(12)`) RT 1
+/// starts from the clear colour again while RT 0 still loads. New storage
+/// (another generation) is another job, whose samples are not loaded. Revert
+/// check: keyed by address (the window's `ms_buf`), the job is refused
+/// ("several colour attachments").
+#[test]
+fn a_4x_framebuffer_object_keeps_each_rts_samples_by_renderbuffer() {
+    let rig = Rig::new();
+    rig.init();
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    (d.samples, d.do_clear) = (4, false);
+    (d.target_id, d.target_gen) = (11, 1);
+    (d.target_ids, d.target_gens) = ([11, 12, 0, 0], [1, 1, 0, 0]);
+    let one_job = |d: &GlesDraw| {
+        assert_eq!(draw(d), 0, "{:?}", rig.gl.logs());
+        assert_eq!(v3d_flush(), 0);
+    };
+    one_job(&d);
+    one_job(&d);
+    v3d_attachment_gone(12);
+    one_job(&d);
+    d.target_gens = [2, 1, 0, 0];
+    d.target_gen = 2;
+    one_job(&d);
+    let jobs = rig.jobs();
+    assert_eq!(jobs.len(), 4);
+    let t = jobs[0].target;
+    assert!(t.msaa && t.rts == 2, "{t:?}");
+    let (a0, a1) = (t.ms_address, t.rt[0].ms_address);
+    assert!(a0 != 0 && a1 != 0 && a0 != a1, "a sample buffer per RT: {t:?}");
+    assert!(a0.is_multiple_of(4096) && a1.is_multiple_of(4096));
+    assert_eq!((t.ms_memory_format, t.rt[0].ms_memory_format), (V3D_TEX_TILING_UIF_NO_XOR, V3D_TEX_TILING_UIF_NO_XOR));
+    assert_eq!(jobs[1].target, t, "the same buffers for the next job");
+    assert_eq!(jobs[2].target.ms_address, a0, "RT 0 keeps its buffer");
+    assert_ne!(jobs[2].target.rt[0].ms_address, 0, "RT 1 gets a new one");
+    let loads: Vec<(bool, bool)> = jobs
+        .iter()
+        .map(|j| {
+            let c = j.clear.expect("ended");
+            (c.load_rt0, c.load_rt[0])
+        })
+        .collect();
+    assert_eq!(
+        loads,
+        [(false, false), (true, true), (true, false), (false, true)],
+        "new, kept, RT 1 gone, RT 0 respecified"
+    );
+}
+
+/// The 4x framebuffer object's typed RTs: an sRGB8_A8 RT keeps its samples
+/// at its own 4 bytes a sample (16F tile buffer, the TLB resolves it), a
+/// RGBA16F one at 8; an RT the TLB cannot resolve (a 32F or integer
+/// format, which the GL core never stores at 4x) is refused by name.
+#[test]
+fn a_4x_framebuffer_object_takes_the_formats_the_tlb_resolves() {
+    let rig = Rig::new();
+    rig.init();
+    let p = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &p, 2);
+    (d.samples, d.do_clear) = (4, false);
+    (d.target_id, d.target_gen) = (21, 1);
+    (d.target_ids, d.target_gens) = ([21, 22, 0, 0], [1, 1, 0, 0]);
+    (d.target_format, d.targets[0].format, d.targets[1].format) =
+        (GLES_SURF_SRGB8_A8, GLES_SURF_SRGB8_A8, GLES_SURF_RGBA16F);
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let t = rig.jobs()[0].target;
+    assert!(t.msaa && t.typed && t.ms_address != 0 && t.rt[0].ms_address != 0, "{t:?}");
+    assert_eq!(t.rt_format[..2], [V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, V3D_OUTPUT_IMAGE_FORMAT_RGBA16F]);
+    d.targets[1].format = GLES_SURF_RGBA32F;
+    assert_eq!(draw(&d), -ENOTSUP);
+    assert_eq!(rig.logs_with("4x multisampling of a colour format the TLB cannot resolve"), 1);
+}
+
 /// What the job builder cannot take is refused by name before anything is
 /// recorded: an attachment of a format with no TLB row (a surface number
 /// none names), and 4x of several attachments. Attachments of different
