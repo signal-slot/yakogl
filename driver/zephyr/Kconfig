@@ -87,6 +87,25 @@ config YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
 	  gl_test case 175 is the board gate. Off until gl_test and glmark2
 	  have run with it, knob off and on.
 
+config YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT
+	int "Probe: where the 3D_PR carries pds_pr_bgnd (0: none) (experimental)"
+	default 0
+	range 0 2
+	depends on YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
+	help
+	  A board probe, never a product setting. 0 (the default): the 3D_PR
+	  carries no PR background-object PDS words, every command word is
+	  what it was without this option. 1 (placement A, to try first) or
+	  2 (placement B): when the back end fills the kick's frag_pr block,
+	  its three pds_pr_bgnd words (CR_PDS_PR_BGRND0/1/3, lo/hi dwords)
+	  are written into the 3D_PR at dwords 64..69 (A) or 62..67 (B);
+	  never into the 3D command. Where the firmware reads them is not
+	  measured: RGXFWIF_CMD3D's register block is a DDK user-mode struct
+	  that no vendored header defines (gpu::pvr::render::pr_bgnd_dw).
+	  Without it a resumed render does not reload its stored tiles.
+	  gl_test case 217 decides
+	  (tools/cts/pr-configs/gl_test-217-bgndA-on.conf, -bgndB-on.conf).
+
 config YAKOGL_DRV_GPU_PVR_GROW_SCENE
 	bool "Say the scene's kicks and time at every freelist grow request (instrument)"
 	help

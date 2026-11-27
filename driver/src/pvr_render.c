@@ -458,6 +458,18 @@ bool pvr_render_fl_ready_pages = PVR_FL_READY_PAGES_DEFAULT;
 #endif
 bool pvr_render_partial_render = PVR_PARTIAL_RENDER_DEFAULT;
 
+/* A board probe under the partial-render knob: where the 3D_PR carries the
+ * kick's frag_pr.pds_pr_bgnd (0: nowhere, the default; 1: placement A,
+ * dwords 64..69; 2: placement B, dwords 62..67), only when frag_pr is
+ * filled, never in the 3D command (gpu::pvr::render::pr_bgnd_dw). Neither
+ * placement is measured; gl_test case 217 decides
+ * (CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT,
+ * tools/cts/pr-configs/gl_test-217-bgnd{A,B}-on.conf). */
+#ifndef PVR_PR_BGND_PLACEMENT_DEFAULT
+#define PVR_PR_BGND_PLACEMENT_DEFAULT 0
+#endif
+uint32_t pvr_render_pr_bgnd_placement = PVR_PR_BGND_PLACEMENT_DEFAULT;
+
 /* Four PBE states in the static end-of-tile PDS program (pvr_render.h).
  * Off: the three-pair program and info word every render ran before, byte
  * for byte (tests/pvr_render_rt4.rs). On: the four-pair ones, for every
@@ -665,6 +677,7 @@ static void rr_sync_cfg(void)
 	RR.cfg.hwrt_reinit = pvr_render_hwrt_reinit;
 	RR.cfg.fl_grow_on_demand = pvr_render_fl_grow_on_demand;
 	RR.cfg.partial_render = pvr_render_partial_render;
+	RR.cfg.pr_bgnd_placement = pvr_render_pr_bgnd_placement;
 #ifdef PVR_RENDER_VERBOSE
 	RR.cfg.verbose = 1;
 #else

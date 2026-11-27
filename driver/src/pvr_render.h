@@ -311,6 +311,10 @@ extern bool pvr_render_fl_ready_pages;
  * docs/notes/pvr-render-pool.md, "Design: the firmware's partial render").
  * Off until gl_test case 175 (refusehang) and glmark2 have run with it. */
 extern bool pvr_render_partial_render;
+/* CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT: a board probe under the
+ * partial-render knob, where the 3D_PR carries frag_pr.pds_pr_bgnd (0 none,
+ * the default; 1 placement A, dwords 64..69; 2 placement B, dwords 62..67). */
+extern uint32_t pvr_render_pr_bgnd_placement;
 /* Build the static end-of-tile PDS program for four PBE states
  * (PVR_RENDER_MAX_RT pairs) rather than PVR_RENDER_EOT_PDS_PAIRS (three).
  * The firmware runs that one program, at PVR_RENDER_EOT_PDS_CODE_OFF, for
