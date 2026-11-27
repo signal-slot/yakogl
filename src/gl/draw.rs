@@ -2867,6 +2867,22 @@ fn resolve_targets(c: &GlContext, d: &mut GlesDraw) {
             d.num_targets = i as u8 + 1;
         }
     }
+    resolve_target_identity(c, d, lead);
+}
+
+/// `GlesDraw::target_id` / `target_gen` and their per-target arrays: the GL
+/// object of each colour target the list holds (target `k` is attachment
+/// `k + lead`), 0 for a slot with no memory, the window and a texture
+/// ([`framebuffer::fb_target_identity`]). The back end keys a 4x
+/// renderbuffer's samples by them (docs/notes/es3-msaa-renderbuffers.md (b)5).
+fn resolve_target_identity(c: &GlContext, d: &mut GlesDraw, lead: usize) {
+    (d.target_ids, d.target_gens) = ([0; GLES_MAX_TARGETS], [0; GLES_MAX_TARGETS]);
+    for k in 0..GLES_MAX_TARGETS - lead {
+        if d.targets[k].gpu != 0 {
+            (d.target_ids[k], d.target_gens[k]) = framebuffer::fb_target_identity(c, (k + lead) as u8);
+        }
+    }
+    (d.target_id, d.target_gen) = (d.target_ids[0], d.target_gens[0]);
 }
 
 /// A clear's target mask (bit k = draw buffer k, [`clear_target_mask`]) as

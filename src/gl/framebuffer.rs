@@ -54,6 +54,7 @@ use crate::util::Global;
 /// `static bool warned` in C).
 struct Warned {
     blit: bool,
+    storage_multisample: bool,
 }
 
 static WARNED: Global<Warned> = Global::zeroed();
@@ -1442,6 +1443,33 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
         _ => GLES_SURF_RGBA8888,
     };
     Some((mem.gpu + st.offset as u64, st.w, st.h, format))
+}
+
+/// The GL object behind colour attachment `n` of the bound (draw)
+/// framebuffer, for `GlesDraw::target_id` / `target_gen`: a renderbuffer's
+/// `ds_object_id(serial, false)` and its `storage_gen`. (0, 0) for the
+/// window, a texture, an EGLImage renderbuffer (its storage is the image's)
+/// and no attachment: the back end's own surface rule applies
+/// (docs/notes/es3-msaa-renderbuffers.md (b)5).
+pub fn fb_target_identity(c: &GlContext, n: u8) -> (u32, u32) {
+    if c.bound_framebuffer == 0 {
+        return (0, 0);
+    }
+    let Some(fb) = c.framebuffer_ref(c.bound_framebuffer) else { return (0, 0) };
+    let a = match n {
+        0 => &fb.color,
+        n => match fb.color_n.get(n as usize - 1) {
+            Some(a) => a,
+            None => return (0, 0),
+        },
+    };
+    if a.type_ != GL_RENDERBUFFER {
+        return (0, 0);
+    }
+    match c.renderbuffer_ref(a.name) {
+        Some(rb) if !rb.external => (context::ds_object_id(rb.serial, false), rb.storage_gen),
+        _ => (0, 0),
+    }
 }
 
 /// The colour attachment the frame's own target is, decided once for the
@@ -3775,6 +3803,20 @@ pub unsafe extern "C" fn glRenderbufferStorageMultisample(
 ) {
     gl_trace!(glRenderbufferStorageMultisample);
     const FN: &str = "glRenderbufferStorageMultisample";
+    /* ES 2.0 has no such command: refused as glBlitFramebuffer is, before
+     * any argument is looked at, so an ES 2.0 context never hands out
+     * multisampled storage (the ES 2.0 report keeps no GL_RENDERBUFFER_SAMPLES
+     * to show it either) */
+    if crate::REPORT_ES2 {
+        // SAFETY: single-threaded by contract; no other reference is live.
+        let warned = unsafe { WARNED.get() };
+        if !warned.storage_multisample && log_available() {
+            warned.storage_multisample = true;
+            glog!("glRenderbufferStorageMultisample: not an ES 2.0 command (GL_INVALID_OPERATION)");
+        }
+        context::set_error_no_ctx(GL_INVALID_OPERATION, FN);
+        return;
+    }
     let Some(c) = context::current() else { return };
     /* ES 3.0 4.4.2, in dEQP's order (negative_api.buffer.
      * renderbuffer_storage_multisample): the target and the format are
@@ -3805,8 +3847,14 @@ pub unsafe extern "C" fn glRenderbufferStorageMultisample(
 }
 
 /// glInvalidateFramebuffer on the current context (glInvalidateSubFramebuffer
-/// lands here too).
-fn invalidate_framebuffer(c: &mut GlContext, target: GLenum, num_attachments: GLsizei, attachments: *const GLenum) {
+/// lands here too, with `whole` false).
+fn invalidate_framebuffer(
+    c: &mut GlContext,
+    target: GLenum,
+    num_attachments: GLsizei,
+    attachments: *const GLenum,
+    whole: bool,
+) {
     const FUNC: &str = "glInvalidateFramebuffer";
     if !is_fb_target(target) {
         c.set_error(GL_INVALID_ENUM, FUNC);
@@ -3841,6 +3889,51 @@ fn invalidate_framebuffer(c: &mut GlContext, target: GLenum, num_attachments: GL
             return;
         }
     }
+    if whole {
+        // SAFETY: as above; every enum was read and checked by the loop.
+        let named = (0..num_attachments as usize).map(|i| unsafe { attachments.add(i).read_unaligned() });
+        multisample_contents_gone(c, named);
+    }
+}
+
+/// A whole-attachment invalidate of a framebuffer object
+/// (glInvalidateFramebuffer, not the Sub form, which may keep everything):
+/// each named multisample renderbuffer's contents are undefined, so the back
+/// end is told they are gone ([`crate::backend::attachment_gone`]) and drops
+/// the samples it keeps for it (docs/notes/es3-msaa-renderbuffers.md (b)6).
+/// Single-sample attachments keep their contents as before (an invalidate is
+/// allowed to keep them, tests/es3_fbo_invalidate.rs). The default
+/// framebuffer's samples follow the back end's surface rule.
+fn multisample_contents_gone(c: &mut GlContext, named: impl Iterator<Item = GLenum>) {
+    if c.bound_framebuffer == 0 {
+        return;
+    }
+    let Some(fb) = c.framebuffer_ref(c.bound_framebuffer) else { return };
+    let mut gone = [0u32; CAP_COLOR_ATTACHMENTS + 2];
+    let mut n = 0;
+    for a in named {
+        let points: [Option<&GlAttachment>; 2] = match a {
+            GL_COLOR_ATTACHMENT0 => [Some(&fb.color), None],
+            a if a > GL_COLOR_ATTACHMENT0 && a < GL_COLOR_ATTACHMENT0 + CAP_COLOR_ATTACHMENTS as GLenum => {
+                [fb.color_n.get((a - GL_COLOR_ATTACHMENT0) as usize - 1), None]
+            }
+            GL_DEPTH_ATTACHMENT => [Some(&fb.depth), None],
+            GL_STENCIL_ATTACHMENT => [Some(&fb.stencil), None],
+            GL_DEPTH_STENCIL_ATTACHMENT => [Some(&fb.depth), Some(&fb.stencil)],
+            _ => [None, None],
+        };
+        for p in points.into_iter().flatten().filter(|p| p.type_ == GL_RENDERBUFFER) {
+            let Some(rb) = c.renderbuffer_ref(p.name).filter(|rb| rb.samples > 1) else { continue };
+            let id = context::ds_object_id(rb.serial, false);
+            if n < gone.len() && !gone[..n].contains(&id) {
+                gone[n] = id;
+                n += 1;
+            }
+        }
+    }
+    for &id in &gone[..n] {
+        crate::backend::attachment_gone(id);
+    }
 }
 
 /// Nothing to discard: depth/stencil live on chip per kick and colour is
@@ -3861,7 +3954,9 @@ pub unsafe extern "C" fn glInvalidateFramebuffer(target: GLenum, numAttachments:
     }
     gl_trace!(glInvalidateFramebuffer);
     let Some(c) = context::current() else { return };
-    invalidate_framebuffer(c, target, numAttachments, attachments);
+    // SAFETY: single-threaded by contract; no other reference is live.
+    let whole = !unsafe { *INVALIDATE_SUB.get() };
+    invalidate_framebuffer(c, target, numAttachments, attachments, whole);
 }
 
 #[no_mangle]
@@ -3892,10 +3987,20 @@ pub unsafe extern "C" fn glInvalidateSubFramebuffer(
         return;
     }
     /* The rectangle changes nothing beyond that: the invalidation is kept as
-     * a no-op (glInvalidateFramebuffer), and a rectangle partly or wholly
-     * outside the framebuffer is legal (ES 3.0 4.5.1). */
+     * a no-op (glInvalidateFramebuffer's checks, without its whole-attachment
+     * `attachment_gone`: a sub-rectangle may keep everything,
+     * [`INVALIDATE_SUB`]), and a rectangle partly or wholly outside the
+     * framebuffer is legal (ES 3.0 4.5.1). */
+    // SAFETY: single-threaded by contract; no other reference is live.
+    unsafe { *INVALIDATE_SUB.get() = true };
     glInvalidateFramebuffer(target, numAttachments, _attachments);
+    // SAFETY: as above.
+    unsafe { *INVALIDATE_SUB.get() = false };
 }
+
+/// glInvalidateSubFramebuffer is running: the glInvalidateFramebuffer it
+/// re-enters checks the same, but is no whole-attachment invalidate.
+static INVALIDATE_SUB: Global<bool> = Global::zeroed();
 
 /// One colour attachment: the only draw buffer is it (or none).
 #[no_mangle]
@@ -4167,7 +4272,7 @@ pub unsafe extern "C" fn glGetInternalformativ(
 pub(crate) fn reset_for_tests() {
     // SAFETY: tests holding a TestGl are serialised.
     unsafe {
-        *WARNED.get() = Warned { blit: false };
+        *WARNED.get() = Warned { blit: false, storage_multisample: false };
         *TARGET_USE.get() = [[0; MAX_TEXTURES]; MAX_CONTEXTS];
         *DEPTH_TARGET.get() = [[DepthTarget { level: 0, resolved: 0 }; MAX_TEXTURES]; MAX_CONTEXTS];
     };
@@ -6782,6 +6887,9 @@ mod tests {
         assert_eq!(gl.mem_events(), []);
     }
 
+    /* ES 3.0 only: an ES 2.0 report refuses the command whole
+     * (`storage_multisample_is_es3_only`) */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn storage_multisample_with_zero_or_one_sample_is_plain_storage() {
         let gl = TestGl::new(8, 8);
@@ -6797,6 +6905,9 @@ mod tests {
         assert!(gl.logs().iter().all(|l| !l.contains("single-sampled")));
     }
 
+    /* ES 3.0 only: an ES 2.0 report refuses the command whole
+     * (`storage_multisample_is_es3_only`) */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn storage_multisample_errors() {
         let gl = TestGl::new(8, 8);
@@ -7105,6 +7216,9 @@ mod tests {
     /// before the sample count, and a count past the format's GL_SAMPLES (1)
     /// is GL_INVALID_OPERATION, not single-sampled storage handed out as if
     /// it were multisampled (until 2026-09-24).
+    /* ES 3.0 only: an ES 2.0 report refuses the command whole
+     * (`storage_multisample_is_es3_only`) */
+    #[cfg(not(feature = "report-es2"))]
     #[test]
     fn renderbuffer_storage_multisample_refuses_more_samples_than_one() {
         let gl = TestGl::new(8, 8);
@@ -7190,6 +7304,36 @@ mod tests {
         let said = logs.iter().filter(|l| l.contains("glBlitFramebuffer: not an ES 2.0 command")).count();
         assert_eq!(said, crate::REPORT_ES2 as usize, "{logs:?}");
         assert!(gl.draws().is_empty());
+    }
+
+    /// glRenderbufferStorageMultisample is ES 3.0 too: in an ES 2.0 report
+    /// every call is GL_INVALID_OPERATION before its arguments are looked at
+    /// (a bad target included), nothing is stored, and the log says why once.
+    /// The ES 3.0 one stores (the tests above).
+    #[test]
+    fn storage_multisample_is_es3_only() {
+        let gl = TestGl::new(8, 8);
+        let rb = gen_rb();
+        // SAFETY: single-threaded (TestGl serialises); plain GL calls.
+        unsafe {
+            WARNED.get().storage_multisample = false;
+            gl.logs();
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_RGBA4, 4, 4);
+            let first = gl.error();
+            glRenderbufferStorageMultisample(GL_FRAMEBUFFER, 4, GL_RGBA4, 4, 4);
+            let second = gl.error();
+            if crate::REPORT_ES2 {
+                assert_eq!((first, second), (GL_INVALID_OPERATION, GL_INVALID_OPERATION));
+                assert_eq!(gl.ctx().objs().renderbuffers[rb as usize].width, 0, "nothing stored");
+            } else {
+                assert_eq!((first, second), (GL_NO_ERROR, GL_INVALID_ENUM));
+            }
+        }
+        let logs = gl.logs();
+        let said =
+            logs.iter().filter(|l| l.contains("glRenderbufferStorageMultisample: not an ES 2.0 command")).count();
+        assert_eq!(said, crate::REPORT_ES2 as usize, "{logs:?}");
     }
 
     #[test]

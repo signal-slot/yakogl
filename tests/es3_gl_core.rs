@@ -258,8 +258,10 @@ fn release(fb: GLuint, rbs: &[GLuint]) {
 /* ---- the ES 2.0 report ---------------------------------------------------- */
 
 /// None of the four changes reaches the ES 2.0 surface: GL_RGB10_A2 is no
-/// renderbuffer storage there, GL_RENDERBUFFER_SAMPLES is no pname, and a
-/// one-sample storage is plain storage that reads like any other.
+/// renderbuffer storage there, GL_RENDERBUFFER_SAMPLES is no pname,
+/// glRenderbufferStorageMultisample is no ES 2.0 command (GL_INVALID_OPERATION
+/// before its arguments, storing nothing), and plain storage reads like any
+/// other.
 #[test]
 #[cfg(feature = "report-es2")]
 fn es2_report_is_unchanged() {
@@ -271,6 +273,12 @@ fn es2_report_is_unchanged() {
     unsafe { glDeleteRenderbuffers(1, &rb) };
 
     let rb = renderbuffer(GL_RGBA8, 4, 4, Some(1));
+    assert_eq!(err(), GL_INVALID_OPERATION, "glRenderbufferStorageMultisample is not an ES 2.0 command");
+    assert_eq!(rb_param(GL_RENDERBUFFER_WIDTH), 0, "nothing stored");
+    // SAFETY: a name this test made.
+    unsafe { glDeleteRenderbuffers(1, &rb) };
+
+    let rb = renderbuffer(GL_RGBA8, 4, 4, None);
     assert_eq!(err(), GL_NO_ERROR);
     assert_eq!(rb_param(GL_RENDERBUFFER_SAMPLES), -1);
     assert_eq!(err(), GL_INVALID_ENUM, "no GL_RENDERBUFFER_SAMPLES in ES 2.0");

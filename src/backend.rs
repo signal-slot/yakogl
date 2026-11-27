@@ -1440,6 +1440,27 @@ pub struct GlesDraw {
     pub depth_texels: *const f32,
     /// Floats a row of [`GlesDraw::depth_texels`] (at least `ds_w`).
     pub depth_texels_pitch: u32,
+    /// The GL object of the frame's own colour target (`targets[0]`, the
+    /// `target_*` image): `ds_object_id(rb.serial, false)` for a
+    /// renderbuffer attachment, the [`GlesDraw::depth_id`] form. 0 for the
+    /// window, a texture, an EGLImage renderbuffer and no colour target: the
+    /// back end's own surface rule applies (docs/notes/es3-msaa-renderbuffers.md
+    /// (b)5). A back end keys what it keeps for the attachment, the samples
+    /// of a 4x renderbuffer above all, by `(target_id, target_gen)`, never by
+    /// the address: a freed `rb.mem` can come back at the same address and
+    /// size. [`attachment_gone`] names the same id when the contents go.
+    /// Sits in what was tail padding.
+    pub target_id: u32,
+    /// The storage generation of `target_id` (`GlRenderbuffer::storage_gen`,
+    /// moved by every glRenderbufferStorage*): another generation is new
+    /// storage whose old samples must not be loaded. 0 with `target_id` 0.
+    pub target_gen: u32,
+    /// `target_id` / `target_gen` of each `targets[k]` (`[0]` is
+    /// `target_id`/`target_gen`; 0 for a slot with no renderbuffer, a
+    /// GL_NONE draw buffer and past `num_targets`): for a back end that keeps
+    /// the samples of several 4x colour attachments of one draw (the V3D).
+    pub target_ids: [u32; GLES_MAX_TARGETS],
+    pub target_gens: [u32; GLES_MAX_TARGETS],
 }
 
 /// Attachment 0's row pitch in pixels: [`GlesDraw::target_pitch`], else the
@@ -1555,6 +1576,10 @@ impl GlesDraw {
         target_cpu: core::ptr::null_mut(),
         depth_texels: core::ptr::null(),
         depth_texels_pitch: 0,
+        target_id: 0,
+        target_gen: 0,
+        target_ids: [0; GLES_MAX_TARGETS],
+        target_gens: [0; GLES_MAX_TARGETS],
     };
 }
 
@@ -2237,6 +2262,12 @@ pub fn texture_released(base_gpu: u64, bytes: u64) {
 /// and when a surface is destroyed. A backend never learns this any other
 /// way, and keeps a buffer that holds contents until it does: ES 2.0 4.4.3
 /// keeps a renderbuffer's image across framebuffer switches.
+///
+/// The same id names a colour renderbuffer ([`GlesDraw::target_id`]): what
+/// the backend keeps for it, the samples of a 4x renderbuffer, goes too
+/// (docs/notes/es3-msaa-renderbuffers.md (b)6). For a multisample
+/// renderbuffer the GL core also calls it on a whole-attachment
+/// glInvalidateFramebuffer (not glInvalidateSubFramebuffer).
 pub fn attachment_gone(id: u32) {
     if let Some(f) = table().and_then(|t| t.attachment_gone) {
         // SAFETY: a static table's entry, called with a plain value.
