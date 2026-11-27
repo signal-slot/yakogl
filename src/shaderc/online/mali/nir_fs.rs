@@ -8016,16 +8016,34 @@ fn walk_nodes(
                 if (0..n).all(|i| (0..2).all(|k| matches!(lane(vals, s[k], i), Val::Const(_)))) {
                     return Err(MaliError::ConstantFold);
                 }
-                let (p, q) = (x(f, 0, n - 1), x(f, 1, n - 1));
-                let mut acc = f.op(AluOp::Fmul, p, q, at, Rule::None, None)?;
-                for i in (0..n - 1).rev() {
-                    let (p, q) = (x(f, 0, i), x(f, 1, i));
-                    if p == Val::Undef || q == Val::Undef {
-                        return Err(MaliError::ColourForm);
+                /* by a vector of 1.0s: `fmul(a, 1.0)` is `a` and `ffma(a,
+                 * 1.0, b)` `fadd(a, b)` (nir_opt_algebraic.py:311-314), the
+                 * chain a sum from the last lane (deqp_misc2_invariant_cse's
+                 * `dot(v_unrelated, vec4(1.0))`: `FADD.v2f16 r1, r1^.h00,
+                 * r1^.h11` of z and w, then `r0.h11, r1^.h00` of y and
+                 * `r0^.h00, r1^.h00` of x) */
+                if let Some(k) = (0..2).find(|&k| (0..n).all(|i| lane(vals, s[k], i) == Val::Const(F32_ONE))) {
+                    let mut acc = x(f, 1 - k, n - 1);
+                    for i in (0..n - 1).rev() {
+                        let p = x(f, 1 - k, i);
+                        if p == Val::Undef || acc == Val::Undef {
+                            return Err(MaliError::ColourForm);
+                        }
+                        acc = f.node(Alu::Fadd, [p, acc, Val::Undef], at)?;
                     }
-                    acc = f.node(Alu::Ffma, [p, q, acc], at)?;
+                    out = [acc; 4];
+                } else {
+                    let (p, q) = (x(f, 0, n - 1), x(f, 1, n - 1));
+                    let mut acc = f.op(AluOp::Fmul, p, q, at, Rule::None, None)?;
+                    for i in (0..n - 1).rev() {
+                        let (p, q) = (x(f, 0, i), x(f, 1, i));
+                        if p == Val::Undef || q == Val::Undef {
+                            return Err(MaliError::ColourForm);
+                        }
+                        acc = f.node(Alu::Ffma, [p, q, acc], at)?;
+                    }
+                    out = [acc; 4];
                 }
-                out = [acc; 4];
             }
             /* `inversesqrt` of a computed mediump lane, and `sqrt` as
              * `lower_fsqrt`'s `frcp(frsq(a))`: `FRSQ.f16`, then `FRCP.f16`,
@@ -11119,6 +11137,23 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                     let x = lane_tree(f, pr, b, pair, ubo)?;
                     P::Leaf(Leaf::Lane { x, half, first: true })
                 }
+                /* one half of the block beside a varying's or a computed
+                 * lane, as a word of the colour: the half read in place,
+                 * `MKVEC.v2i16 <lane>.h0, uN.wM.hX` in either order, and
+                 * ATEST reads the uniform's half there too
+                 * (deqp_unifmp_interaction_16's `MKVEC.v2i16 r0, u2.w0.h0,
+                 * r1^.h0` and `MKVEC.v2i16 r2, r0^.h0, u2.w0.h0`,
+                 * deqp_misc2_invariant_cse's `MKVEC.v2i16 r2, r0^.h0,
+                 * u2.w1.h1`); beside a constant, or as an operation's
+                 * operand, no reference draws it as this */
+                (Some(_), None, _, o) | (None, Some(_), o, _)
+                    if !matches!(o, Val::Const(_))
+                        && f.colour.is_some_and(|w| (a, b) == (w[0], w[1]) || (a, b) == (w[2], w[3])) =>
+                {
+                    let x = lane_tree(f, pr, a, pair, ubo)?;
+                    let y = lane_tree(f, pr, b, pair, ubo)?;
+                    P::Leaf(Leaf::Pack { x, y })
+                }
                 (Some(_), ..) | (_, Some(_), ..) => return Err(MaliError::FsUniform),
                 /* a constant, then a load's lane: the constant is the low
                  * half (deqp_colourpair_ck_lane_highpcolour), as a word of
@@ -13071,6 +13106,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             /* a texel's own half of the look-up's word (gm2_texswz_1's
              * `ATEST .. r0.h0`) */
             P::Leaf(Leaf::TexLane(..)) => operand(&pr, y, &lv, &val)?,
+            P::Leaf(Leaf::Uniform { swz: Swz::H11, .. }) => operand(&pr, y, &lv, &val)?,
             _ => operand(&pr, y, &lv, &val)?.swz(Swz::H00),
         },
         /* a swapped word's high lane is the look-up word's low half */
@@ -13120,6 +13156,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                  * `r0^.h1`) */
                 let half = |n: u8| match pr.nodes[n as usize] {
                     P::Leaf(Leaf::Half { swz: Swz::H11, .. }) => Swz::H11,
+                    P::Leaf(Leaf::Uniform { swz: Swz::H11, .. }) => Swz::H11,
                     P::Leaf(Leaf::TexLane(_, c)) if c % 2 == 1 => Swz::H11,
                     _ => Swz::H00,
                 };
