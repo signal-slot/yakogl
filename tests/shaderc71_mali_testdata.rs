@@ -37,11 +37,11 @@ use yakogl::shaderc::online::{lower, store};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// `X.vert` + `X.frag` pairs of tools/mali/testdata.
-const PAIRS: usize = 1818;
+const PAIRS: usize = 1830;
 /// Of them, the pairs the 4.2 back end compiles and links.
-const COMPILED_42: usize = 1814;
+const COMPILED_42: usize = 1826;
 /// Of them, the pairs the 7.1 back end compiles.
-const COMPILED_71: usize = 1815;
+const COMPILED_71: usize = 1828;
 /// Pairs 4.2 compiles and 7.1 refuses (the lines of the list).
 const ONLY_71_REFUSED: usize = 0;
 
