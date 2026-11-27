@@ -712,7 +712,7 @@ Board items:
 | B5 | `gl_test` on read-back to 50/50 (the image builds: `driver/samples/zephyr/gl_test` for `verdin_imx95/mimx9596/a55`, panel off, gate row `zephyr  verdin_imx95 gl_test image`) | M | B4 | row in `tools/cts/RESULTS.md` |
 | B6 | Display bring-up on the Mallow's X12 LVDS panel (`driver/docs/imx95-display.md` 4(b'), implemented and host-tested; the probe `imx95_lvds_ids` first). **Status (2026-11-25): built and host-tested, nothing of ours has run the display on the board** (`driver/docs/imx95-display.md`, Status; `tools/probes/verdin_imx95/imx95_lvds_ids`; the cold path and its allow list `driver/docs/imx95-display-allow.txt` against the board's Linux dump, c70d4813). The display is reached only through `board_show()` (`driver/zephyr/lib/board/verdin_imx95/board_verdin_imx95.c`), and `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY` depends on `YAKOGL_GPU_MALI` (`driver/zephyr/lib/board/verdin_imx95/Kconfig`), so a Mali image is needed; the gate's `examples/triangle` row checks `DISPLAY_X12_LVDS=y` (`tools/check.sh`, `zephyr_verdin_imx95_triangle_image`). **Remaining:** (1) run the probe `imx95_lvds_ids` on the board; (2) its own board session (after B8's dEQP run) with a display image: first the first clear, then the first triangle; (3) close the unknowns U2 and U19 of `driver/docs/imx95-display.md` section 7 (System Manager leaves the display and LPI2C clocks to AP-NS; the GPIO expander answers); (4) run `gl_test` with the panel on (B5 ran with it off). | L | P9, B2 | first clear, then the first triangle |
 | B7 | Sign-off: `default <image> N` from the eMMC, then the direct route (steps D1-D6 of `docs/notes/imx95-direct-boot.md`). **Status (2026-11-25): neither route is signed off.** `tools/board.sh` has an `imx95` board with `uboot-mmc` and the BBM record reader (`tools/imx95_bbm_record.sh`), never run on the board (the U-Boot-prompt `go` route of B2-B5 was typed by hand); for the direct route, `tools/imx95-mkboot.py` (selftest `tools/imx95_mkboot_selftest.py`, d2767897) and the second-stage loader with the counted way back (`driver/samples/zephyr/boot_stage2`, 7066b9bc) are built and host-tested; only D1 (the boot partitions read from Linux) has run. **Remaining:** (1) the `board.sh` work of #396/#397 merges; (2) `board.sh imx95` runs an image from the eMMC and reads the record back (U2's survival is open, the board's kernel has no SCMI raw interface); (3) the direct route D2-D6 on the board, the first run being section 11 of `docs/notes/imx95-direct-boot.md`, with the counted way back to boot0 proven first. | S | B5 | both routes recorded |
-| B8 | dEQP-GLES2 tree as on the T6 (the images build: the T6's `mali-gles2-tree.txt` rows by `tools/cts/imx95-deqp-images.sh`, stage 1 `deps-env.sh --build DEQP_WORK --board verdin_imx95`) | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
+| B8 | dEQP-GLES2 tree as on the T6 (the images build: the T6's `mali-gles2-tree.txt` rows by `tools/cts/imx95-deqp-images.sh`, stage 1 `deps-env.sh --build DEQP_WORK --board verdin_imx95`). **Status (2026-11-27): the whole tree has run.** All 76 rows ran from images built at `e63ab28e`, in six sessions (S4, S1a, S1b, S2, S3a, S3b, `tools/cts/log/*-imx95-gles2-S*-e63ab28e/`). Each row was started by hand from the module's U-Boot. The tally is 17,165 mustpass cases: 11,435 Pass, 5,233 Fail, 494 NotSupported, 3 QualityWarning, 0 Lost (the T6 at `8ff01055`: 10,950 / 5,706 / 506 / 3). No row hung; the longest took 56.1 s of its 600 s lifetime. The BBM record was not read back (U2 stays open). Against the T6, 773 cases differ, and each is a compiler effect of `8ff01055..e63ab28e`: 0 hang or Lost, 0 G310-only (`docs/es2-cts-failures.md` section N). **Remaining:** the tally row in `tools/cts/RESULTS.md` (plan #392); the refusals wait on the compiler work of issue #11251, as on the T6. | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
 
 Order logic: B1 comes first on the board because the fuses and the SM
 version (U1, U3) can turn the plan, and it needs nothing of ours. P6-P8
@@ -750,3 +750,30 @@ record in the BBM GPRs was not read back: the stock kernel has no SCMI raw
 interface, which leaves U2 open. Against the T6, nothing in S4 is worse on
 the G310 (`tools/cts/log/2026-11-25-imx95-gles2-S4-e63ab28e/`,
 `docs/es2-cts-failures.md` section N). S1-S3 (68 rows) remain.
+
+Board state of B8 (2026-11-27): the whole tree has run. Sessions S1a, S1b,
+S2, S3a and S3b (rows 1-68) followed S4 by the same route. The images were
+loaded with `ext4load` from the root file system or with `fatload` from the
+boot-files partition, with the md5 of every image checked at the prompt
+against the host's. The six slices hold 17,165 mustpass cases: 11,435 Pass,
+5,233 Fail, 494 NotSupported and 3 QualityWarning, with none Lost. The
+images also ran 203 names outside the mustpass (201 Pass), which are not in
+the tally. Every row ended by PSCI in 0.4 to 56.1 s (T6S2R06) of its 600 s
+lifetime. Pooled over the 76 rows, the iMX95 took 2.54 times the T6's row
+time (1,141 s against 450 s).
+
+Findings: (1) no G310-only result. Of the 773 per-case differences from
+the T6's `8ff01055` tree, 526 are cases that a named commit of
+`8ff01055..e63ab28e` moves, and 247 stop on another refusal. 494 of them
+went from Fail to Pass. The biggest single group is cause BW (`c9eb0307`,
+`397351b3`), 277 bool and bvec cases. (2) 20 `matrix.*crement.dynamic_*_vertex`
+cases that Pass on the T6 are refused here, by a compiler regression
+(`3a45f7a8`, `vs_stored_sum`), not by the G310. (3) The tile-budget,
+tiler and core-count paths left no mark: `fbo`, `texture`, `clipping`,
+`rasterization` and `multisample` have the T6's counts except for the 4
+`fbo` cases of `c4df367f`. `GL_RENDERER` reads `Arm Mali-G310v2 (YakoGL)`.
+(4) U2 is still open: the module's Linux 6.6 has no SCMI raw interface,
+so each row's verdict is its console (`yk-record`, the PSCI line, the
+next `LM Boot reason`). The per-cause table and the diff are in
+`docs/es2-cts-failures.md` section N; the G310 side is in
+`docs/notes/mali-g310-vs-g610.md`.
