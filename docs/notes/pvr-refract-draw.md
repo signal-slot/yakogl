@@ -2,7 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR host: where glmark2 refract's (and shadow's) glDrawArrays time goes
 
-**Status (2026-11-26): fix 1 landed in main `21099fcd`.** Its design, its TPU
+**Status (2026-11-27): fixes 1 and 2 are on main.** The measurement below
+(`41e95169`) was made before fix 1. Fix 1 landed in main `21099fcd`; fix 2
+(the row resolve) in `f67df7b4` and `006e44a3`, measured in "Measured after
+fix 2" below. Fix 1's design, its TPU
 state words and its board figures are `docs/notes/pvr-depth-sample.md`. The
 PowerVR back end answers `samples_rendered_depth` (`pvr_depth_sampled`,
 `src/pvr/backend.rs`): a rendered depth texture of one level, sampled by the
@@ -13,7 +16,9 @@ resolve on main. The resolve remains only for the fallback paths: a CPU read
 or write of the texels, a rendered level above 0 or a chain, a buffer holding
 no stored depth of the texture's size or only a whole clear, a buffer the
 frame being recorded still draws into, a multisampled buffer, and the host
-tests' mock tables. Everything below is the path at the measured commit
+tests' mock tables; fix 2 made those paths cheaper (1600 x 1200 depth resolve
+1.6 to 2.2 ms best before, 0.25 to 0.27 ms after) but glmark2 does not take
+them. Everything below is the path at the measured commit
 `41e95169`, kept as the historical record of what the resolve cost before fix
 1 landed.
 
@@ -178,9 +183,9 @@ remains untried, the same question the GC7000 has in
 ## Ranked fixes
 
 Estimates are of the draw call's host CPU time; the board's will be larger.
-**State (2026-11-26): fix 1 has landed (main `21099fcd`,
-`docs/notes/pvr-depth-sample.md`); fix 2 is in progress; fixes 3 and 4 are
-unchanged.**
+**State (2026-11-27): fix 1 has landed (main `21099fcd`,
+`docs/notes/pvr-depth-sample.md`); fix 2 has landed (main `f67df7b4` helper,
+`006e44a3` back end); fixes 3 and 4 are unchanged.**
 
 1. **Sample the rendered depth from the ZLS buffer, no resolve** — **landed
    (main `21099fcd`)**, design, TPU state words and board figures:
@@ -197,8 +202,9 @@ unchanged.**
    answer for the resolve paths that fix 1 leaves. A texture sampled this way
    stays stale in its texels (the GL core already resolves on the next CPU
    access).
-2. **Convert by rows on slices, no closure, no per-texel `Option`** — **in
-   progress** (no main commit to name yet). (`pvr_backend_depth_resolve`,
+2. **Convert by rows on slices, no closure, no per-texel `Option`** — **landed
+   (main `f67df7b4`: `ds_retention` row helpers; `006e44a3`: the back end's
+   depth and stencil resolve use them; measured below)**. (`pvr_backend_depth_resolve`,
    `ds_retention::write_depth_texels`.) Gain: the GC7000's identical rewrite
    halved a 1024 x 1024 resolve (1.10 to 0.56 ms best); expect 1.5 to 2 ms of
    the 3.3 ms here (about 45 to 60% of the draw call); after fix 1 landed, that
@@ -206,9 +212,10 @@ unchanged.**
    longer resolve on main. Files: `src/pvr/backend.rs`, `src/ds_retention.rs`,
    `tests/depth_resolve_pvr_rows.rs` (on main: bit-exact against the old loop,
    the pitch, padding, 1 x 1 and oversized-request cases). Risk: low,
-   bit-exact by construction of the test. Needs the unorm24 conversion left as
-   it is or the exhaustive check of `gc-unorm24-exhaustive` for any change to
-   it.
+   bit-exact by construction of the test. The unorm24 conversion is unchanged.
+   Measured: the 1600 x 1200 depth resolve 1.63 to 2.20 ms best before, 0.25
+   to 0.27 ms after (6 to 9 times); the stencil resolve 0.46 to 0.59 ms to
+   0.11 ms (see "Measured after fix 2").
 3. **A faster unorm24 conversion** (reciprocal multiply: `gc-unorm24-fix`, in
    review). Gain on the PowerVR host: none measured (see above), so it is not
    a PowerVR fix on its own; it only helps once fix 2 removes the closure.
@@ -223,20 +230,75 @@ Not proposed: the first-draw gap (1 to 4%, no code path to change), any step of
 the record (0.04 to 0.09 ms a frame), the flush and finish (host: 0; on the board
 they are the GPU's time, the lead's), anything about glGenerateMipmap (#916).
 
-## Host figures before and after the row resolve
+## Measured after fix 2
 
-Empty for now: the before/after measurement of fix 2 (the row resolve) fills
-it. It will hold glmark2 `shadow`, `refract` and `texture` in ms a frame and
-ms a draw, at two named `origin/main` commits — the last commit before the row
-resolve lands, and one carrying it — measured on one machine with the harness
-method of the Method section (`tools/hostharness/glmark2/run.sh`,
-`GM2_PROFILE=1 GM2_FRAMES=20`), with a note of which path each scene ran at
-each commit (after fix 1, `shadow` and `refract` sample the depth buffer on
-main, so a resolve figure there belongs to a fallback path; the baseline run
-names the paths). The `41e95169` measurements above stay as the historical
-record.
+Two `origin/main` commits, each built in its own git worktree, the same
+machine (x86-64 Linux, AMD Ryzen AI Max+ 395, 4 cores available, shared):
 
-## Suggested updates elsewhere (not made here; both since done on main, checked 2026-11-26)
+* BEFORE `4236a921`: the first parent of the row-resolve commit; it holds fix
+  1 (`21099fcd`) and not fix 2. `tests/depth_resolve_pvr_rows.rs` is there
+  (its timing test measures the old per-texel resolve).
+* AFTER `006e44a3` (`pvr: depth and stencil resolve convert by rows,
+  bit-identical`, on `f67df7b4`'s helpers), main's tip when measured.
+
+Harness: `tools/hostharness/glmark2/run.sh <glmark2 22c527cb> <out> powervr`,
+`GM2_PROFILE=1 GM2_FRAMES=20` (19 counted frames), one process per scene,
+entries `texture:texture-filter=nearest`, `shadow`, `refract`. Three runs per
+commit, alternating BEFORE, AFTER, BEFORE, AFTER, BEFORE, AFTER.
+Frame is the harness's
+`gl-frames` wall ms a frame (the scene's whole frame); `glDrawArrays` is its
+`gl-time` wall total over the counted frames, per frame and per draw (refract 2
+draws a frame, shadow 3, texture 1). Median, with min to max of the three
+runs in brackets.
+
+| scene | commit | frame ms | `glDrawArrays` ms a frame | `glDrawArrays` us a draw |
+|---|---|---|---|---|
+| texture | BEFORE `4236a921` | 0.0245 (0.0212 to 0.0247) | 0.0061 (0.0057 to 0.0079) | 6.1 (5.7 to 7.9) |
+| texture | AFTER `006e44a3` | 0.0215 (0.0207 to 0.0224) | 0.0058 (0.0057 to 0.0060) | 5.8 (5.7 to 6.0) |
+| shadow | BEFORE `4236a921` | 0.0511 (0.0501 to 0.0519) | 0.0169 (0.0164 to 0.0180) | 5.6 (5.5 to 6.0) |
+| shadow | AFTER `006e44a3` | 0.0485 (0.0421 to 0.0523) | 0.0160 (0.0128 to 0.0167) | 5.3 (4.3 to 5.6) |
+| refract | BEFORE `4236a921` | 0.0921 (0.0820 to 0.0959) | 0.0277 (0.0251 to 0.0290) | 13.8 (12.5 to 14.5) |
+| refract | AFTER `006e44a3` | 0.0914 (0.0798 to 0.0960) | 0.0269 (0.0236 to 0.0293) | 13.5 (11.8 to 14.7) |
+
+**Result: the glmark2 scenes did not move.** Every difference is inside the
+spread of the runs. Both commits are after fix 1: in each of the 12 runs of
+`shadow` and `refract` the library logs once `pvr_backend: a 1600x1200 depth
+texture is sampled from its depth buffer (X8U24, stride 1600): no CPU resolve`
+(there is no "sampled N, refused M" counter line in the log; every draw ran,
+`refused=0 gl_errors=0` in all 18 `scene-end` lines), so the scenes never
+call `pvr_backend_depth_resolve` and fix 2 is off their path. Compare the
+`41e95169` figures above, 3.1 to 3.4 ms a frame with the resolve and 0.05 to
+0.09 ms without it. The host does not model the GPU (nothing is rendered), so
+these are the CPU cost of the GL calls only.
+
+The resolve itself, where it still runs: `cargo test --release
+--no-default-features --features host-test,gpu-powervr,shaderc-online --test
+depth_resolve_pvr_rows -- --nocapture resolve_1600x1200_timing` (1600 x 1200,
+one rendered depth buffer, 8 resolves a run), three runs per worktree,
+alternating:
+
+| resolve (1600 x 1200) | BEFORE `4236a921` best / mean ms | AFTER `006e44a3` best / mean ms |
+|---|---|---|
+| depth, run 1 | 1.629 / 1.890 | 0.261 / 0.494 |
+| depth, run 2 | 1.692 / 2.016 | 0.270 / 0.518 |
+| depth, run 3 | 2.201 / 2.469 | 0.251 / 0.476 |
+| depth, median of the runs | 1.692 / 2.016 | 0.261 / 0.494 |
+| stencil, run 1 | 0.455 / 0.530 | 0.110 / 0.196 |
+| stencil, run 2 | 0.471 / 1.112 | 0.114 / 0.215 |
+| stencil, run 3 | 0.587 / 0.673 | 0.107 / 0.163 |
+| stencil, median of the runs | 0.471 / 0.673 | 0.110 / 0.196 |
+
+The depth resolve is 6.5 times faster on its best (median 1.69 to 0.26 ms), the
+stencil resolve 4.3 times (0.47 to 0.11 ms): more than the 45 to 60% the
+GC7000's rewrite suggested, because on this host the old loop's per-texel
+closure and checked index were most of the time (the 3.3 ms of the original
+note was a slower stretch). The 1x layout only; a 4x (2 by 2) buffer still
+converts through `step_by` and was not timed. Which paths still run it on main
+is in the status at the top; none of glmark2's.
+
+Raw logs of these runs are not committed (a local `out/` of the workspace).
+
+## Suggested updates elsewhere (applied; both on main, checked 2026-11-27)
 
 * `docs/README.md`: **done** — the index carries
   `notes/pvr-refract-draw.md` ("PowerVR host, glmark2 refract and shadow: 94
