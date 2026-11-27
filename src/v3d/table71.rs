@@ -59,8 +59,9 @@
 //!   ([`REF_CLEAR_PROGRAM`], the 4.2 table's string);
 //! * what `backend71` does not assemble (8-bit and 32-bit indices,
 //!   instanced, point size) and
-//!   everything `glue71`, `fill71` and their modules refuse (textures among
-//!   them);
+//!   everything `glue71`, `fill71` and their modules refuse;
+//! * what the texture path does not sample (texglue71's 3D and 2D array
+//!   textures, table71tex's own; docs/notes/v3d71-refusals.md section 10);
 //! * a depth/stencil the framebuffer keeps between jobs: the table keeps it
 //!   in the tile buffer only (`glue71::DsPlace` at address 0), so a draw
 //!   that reads what an earlier job left is zskeep71's refusal, the 4.2
@@ -96,12 +97,32 @@
 //! the product library is `no_std` without an allocator). The recording
 //! path is therefore `host-test` only too; in a product `gpu-v3d71` build
 //! every draw and clear is still refused by [`REF_NO_RECORDING`]. `backend71`
-//! is not in src/v3d/mod.rs either: it is included here with `#[path]`
-//! until that file names it.
+//! and `backend71tex` are not in src/v3d/mod.rs either: they are included
+//! here with `#[path]` until that file names them. When the recording path
+//! leaves `host-test`, the 7.1 image must build the texture path's C too
+//! (driver/src/v3d/v3d_tex71.c, v3d_tfu71.c and v3d_tiling_mesa.c; the 7.1
+//! list of zephyr/CMakeLists.txt has v3d_job71.c only), as the host rig
+//! does (tests/v3d71_table_rig/mod.rs).
 //!
-//! The hooks the design note leaves `None` in the first cut (texture,
-//! depth/stencil resolve and write, queries, mipmaps) are `None` here: the
-//! GL core then refuses by name what needs them, or does it on the CPU.
+//! # Textures and mip chains (P10; src/v3d/table71tex.rs)
+//!
+//! A draw whose program reads texture words samples each unit through a
+//! tiled copy of the GL core's storage (`table71tex::Textures`, at most
+//! `MAX_COPIES` live): texglue71 and texfill71 give the two records'
+//! values, fill71 gets the program's lists with the texture words masked
+//! (`backend71tex::masked`), and the flush assembles a textured job with
+//! `backend71tex::assemble_filled`, which places the records in the job's
+//! record arena ([`RECS_BYTES`]) and hands the bindings to v3d_job71. A
+//! unit read with no binding samples the black stand-in. An evicted copy is
+//! marked dead and freed only once the queue is empty and no job is in
+//! flight. `glGenerateMipmap` of a 2D RGBA8 texture is the TFU's
+//! (`v3d_tfu71_pack`, `osal_v3d71_tfu`), the chain kept in the copy until
+//! `return_mipmap_chain`. `samples_texel_copies` is true: a draw reads the
+//! copy made when it was recorded.
+//!
+//! The hooks the design note leaves `None` in the first cut (depth/stencil
+//! resolve and write, queries) are `None` here: the GL core then refuses by
+//! name what needs them, or does it on the CPU.
 
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -109,13 +130,21 @@ use crate::backend::*;
 
 #[cfg(feature = "host-test")]
 #[allow(unused_imports)]
-use super::{admit71, attr71, clearplan71, ffi71, fill71, ident71, record71, rt71, uniform71, zskeep71};
+use super::{
+    admit71, attr71, clearplan71, ffi71, fill71, ident71, record71, rt71, texfill71, texuni71, uniform71, zskeep71,
+};
 
 /// The job assembly (its siblings are this module's imports above).
 #[cfg(feature = "host-test")]
 #[allow(dead_code)]
 #[path = "backend71.rs"]
 mod backend71;
+
+/// The textured job assembly (P10): backend71's, with the sampler bindings.
+#[cfg(feature = "host-test")]
+#[allow(dead_code)]
+#[path = "backend71tex.rs"]
+mod backend71tex;
 
 /// The table's name (`GL_RENDERER`'s backend half), as section 1 of
 /// docs/notes/v3d71-table71.md names it.
@@ -160,6 +189,12 @@ pub const RCL_BYTES: usize = 4 * 1024;
 /// Arrays the GL core staged for one draw only, copied for the job's life
 /// (the 4.2 table's `DATA_BYTES`).
 pub const DATA_BYTES: usize = 1024 * 1024;
+/// A job's texture and sampler records (backend71tex's arena): 24 bytes
+/// each, the texture record 32-byte aligned and the sampler 8-byte aligned.
+pub const RECS_BYTES: usize = 64 * 1024;
+/// The record bytes one sampled unit can take at most: a texture record
+/// (32 with its alignment) and a sampler record (24, 8-aligned, up to 32).
+pub const RECS_BYTES_PER_BINDING: usize = 64;
 
 static INITED: AtomicBool = AtomicBool::new(false);
 /// The draws refused since init (the 4.2 table's `refused`).
@@ -182,11 +217,12 @@ mod rec {
     use core::sync::atomic::Ordering;
 
     use super::backend71::{self, Builder71, CBuilder71, List71, Table71};
+    use super::backend71tex::{self, Binding71, CTexBuilder71, DrawTex71, Lists71, TexBuilder71};
     use super::{
         BCL_BYTES_PER_DRAW, BCL_FIXED, DATA_BYTES, DEFAULT_DRAWS_PER_JOB, IND_BYTES_PER_DRAW, IND_FIXED, INITED,
-        QUAD_BYTES, RCL_BYTES, REFUSAL_PREFIX, REFUSED, REF_CLEAR_PROGRAM,
+        QUAD_BYTES, RCL_BYTES, RECS_BYTES, RECS_BYTES_PER_BINDING, REFUSAL_PREFIX, REFUSED, REF_CLEAR_PROGRAM,
     };
-    use crate::backend::GlesDraw;
+    use crate::backend::{GlesDraw, GlesTextureBind};
     use crate::osal::{
         self, OsalGpuMem, OSAL_MEM_DATA, OSAL_QUERY_V3D_DRAWS_PER_JOB, OSAL_QUERY_V3D_HUB_IDENT,
         OSAL_QUERY_V3D_JOB_OPEN, OSAL_QUERY_V3D_VPM_BYTES,
@@ -195,8 +231,9 @@ mod rec {
     use crate::util::{Global, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
     use crate::v3d::backend::{CLEAR_FS, CLEAR_VS};
     use crate::v3d::kick::{V3dKick, V3D_KICK_MAGIC};
+    use crate::v3d::table71tex::{CopyInfo, Textures};
     use crate::v3d::zskeep71::Known71;
-    use crate::v3d::{attr71, fill71, glue71, record71, state, uniform71};
+    use crate::v3d::{attr71, ffi71, fill71, glue71, record71, state, texfill71, texuni71, uniform71};
 
     /// The data heap's base. The 7.1 OSAL places every allocation in its one
     /// carve-out and ignores it (`heap_base` answers 0 for the same reason).
@@ -272,6 +309,25 @@ mod rec {
         vs_words: Vec<u32>,
         fs_words: Vec<u32>,
         indices: Option<glue71::IndexPlace>,
+        /// A draw that samples textures: its bindings and the program's
+        /// own lists (`prog`'s are masked for fill71, backend71tex's
+        /// `masked`).
+        tex: Option<Box<QTex>>,
+    }
+
+    /// The sampler bindings of a textured draw (P10).
+    struct QTex {
+        /// (unit, the records' values) per stage; the vertex stage's serve
+        /// the coordinate shader too.
+        fs: Vec<(u32, texfill71::Filled71)>,
+        vs: Vec<(u32, texfill71::Filled71)>,
+        /// The units the GlesDraw binds, read or not (glue71's TexInputs).
+        fs_units: Vec<ffi71::V3dJob71Tmu>,
+        vs_units: Vec<ffi71::V3dJob71Tmu>,
+        /// The program's FS, VS and CS lists, texture words included.
+        lists: [Vec<ffi71::V3dUniform>; 3],
+        /// The copies sampled (their GPU addresses).
+        copies: Vec<u32>,
     }
 
     /// The open frame.
@@ -305,6 +361,13 @@ mod rec {
         data_used: usize,
         tile_alloc: OsalGpuMem,
         tile_state: OsalGpuMem,
+        /// A job's texture and sampler records (backend71tex's arena).
+        recs: OsalGpuMem,
+        /// The tiled copies the TMU samples (P10).
+        tex: Textures,
+        /// Per submitted kick, the copies its draws sample (the last
+        /// [`HISTORY`] kicks), for a test.
+        sampled: Vec<(u32, Vec<u32>)>,
         clear_program: ClearProgram,
         open: Option<Open>,
         open_alias: u32,
@@ -332,6 +395,9 @@ mod rec {
             data_used: 0,
             tile_alloc: OsalGpuMem::ZERO,
             tile_state: OsalGpuMem::ZERO,
+            recs: OsalGpuMem::ZERO,
+            tex: Textures::NEW,
+            sampled: Vec::new(),
             clear_program: ClearProgram::NotBuilt,
             open: None,
             open_alias: 0,
@@ -422,7 +488,9 @@ mod rec {
             crate::shaderc::release_shader(&b.fs);
             osal::gpu_free(&mut b.code);
         }
-        for mem in [&mut g.bcl, &mut g.rcl, &mut g.ind, &mut g.data, &mut g.tile_alloc, &mut g.tile_state] {
+        g.tex.free_all();
+        for mem in [&mut g.bcl, &mut g.rcl, &mut g.ind, &mut g.data, &mut g.tile_alloc, &mut g.tile_state, &mut g.recs]
+        {
             osal::gpu_free(mem);
         }
     }
@@ -478,6 +546,7 @@ mod rec {
             (&mut g.rcl, RCL_BYTES),
             (&mut g.ind, ind_bytes as usize),
             (&mut g.data, DATA_BYTES),
+            (&mut g.recs, RECS_BYTES),
         ] {
             if !alloc(mem, bytes) {
                 short = Some(bytes);
@@ -706,8 +775,15 @@ mod rec {
     /// # Safety
     /// `d`'s pointers are live (the draw hook's contract).
     unsafe fn queued(g: &mut State, d: &GlesDraw) -> Result<Queued, Fail> {
-        let mut q =
-            Queued { d: *d, prog: None, attrs: Vec::new(), vs_words: Vec::new(), fs_words: Vec::new(), indices: None };
+        let mut q = Queued {
+            d: *d,
+            prog: None,
+            attrs: Vec::new(),
+            vs_words: Vec::new(),
+            fs_words: Vec::new(),
+            indices: None,
+            tex: None,
+        };
         if d.index_count == 0 {
             return Ok(q); /* a clear alone */
         }
@@ -715,7 +791,16 @@ mod rec {
         let Some(fs) = (unsafe { d.fs.as_ref() }) else {
             return Ok(q); /* glue71 names it: a draw with no linked program */
         };
-        let prog = program(d.fs_usc_gpu, fs)?;
+        let mut prog = program(d.fs_usc_gpu, fs)?;
+        let reads = |l: &[uniform71::Word]| l.iter().any(|w| tex_unit(w).is_some());
+        if d.num_textures != 0
+            || d.num_vs_textures != 0
+            || reads(&prog.fs_uniforms)
+            || reads(&prog.vs_uniforms)
+            || reads(&prog.cs_uniforms)
+        {
+            q.tex = Some(Box::new(textures(g, d, &mut prog)?));
+        }
         let v3d = &fs.v3d;
         let list = &d.attribs[..(d.num_attribs as usize).min(d.attribs.len())];
         /* stage what the program reads; an array it does not read is never
@@ -750,6 +835,133 @@ mod rec {
         q.vs_words = words(d.vs_uniform_cpu, d.vs_uniform_dwords);
         q.fs_words = words(d.fs_uniform_cpu, d.fs_uniform_dwords);
         Ok(q)
+    }
+
+    /* ---- textures (P10) ---------------------------------------------------------------- */
+
+    /// The sampler unit a texture word names (texuni71's rule), or `None`
+    /// for a word that is not one.
+    fn tex_unit(w: &uniform71::Word) -> Option<u32> {
+        match w.contents {
+            texuni71::TMU_CONFIG_P0 | texuni71::TMU_CONFIG_P1 => Some(w.data >> 24),
+            texuni71::TEXTURE_WIDTH
+            | texuni71::TEXTURE_HEIGHT
+            | texuni71::TEXTURE_DEPTH
+            | texuni71::TEXTURE_ARRAY_SIZE => Some(w.data),
+            _ => None,
+        }
+    }
+
+    /// Bind one stage's textures: each binding its program reads, through a
+    /// copy (`table71tex`); `pinned` gathers the copies this draw holds.
+    fn bind_stage(
+        g: &mut State,
+        binds: &[GlesTextureBind],
+        lists: [&[uniform71::Word]; 2],
+        pinned: &mut Vec<usize>,
+        copies: &mut Vec<u32>,
+    ) -> Result<Vec<(u32, texfill71::Filled71)>, Fail> {
+        let t = g.table.ok_or(Fail::Lost(-ENODEV))?;
+        let words = || lists.iter().flat_map(|l| l.iter());
+        /* the units the program reads, in order of first use; a binding
+         * nobody reads gets no record */
+        let mut units: Vec<u32> = Vec::new();
+        for u in words().filter_map(tex_unit) {
+            if !units.contains(&u) {
+                units.push(u);
+            }
+        }
+        let mut out = Vec::with_capacity(units.len());
+        for unit in units {
+            /* a unit the GL core passes no binding for samples as an
+             * incomplete texture: the black stand-in (GL ES 2.0 3.7.10) */
+            let none = GlesTextureBind { unit: unit as u8, incomplete: 1, ..GlesTextureBind::ZERO };
+            let b = binds.iter().find(|b| u32::from(b.unit) == unit).unwrap_or(&none);
+            let p1 = words().find(|w| w.contents == texuni71::TMU_CONFIG_P1 && w.data >> 24 == unit).map(|w| w.data);
+            let bound = g.tex.bind(b, pinned, p1, t.ident.ver, t.ident.iprev)?;
+            pinned.push(bound.copy);
+            copies.push(bound.gpu);
+            out.push((unit, bound.filled));
+        }
+        Ok(out)
+    }
+
+    /// A textured draw's bindings; `prog`'s lists are masked for fill71 and
+    /// kept whole in the result.
+    fn textures(g: &mut State, d: &GlesDraw, prog: &mut Prog) -> Result<QTex, Fail> {
+        let fs_binds = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+        let vs_binds = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+        let (mut pinned, mut copies) = (Vec::new(), Vec::new());
+        let fs = bind_stage(g, fs_binds, [&prog.fs_uniforms, &[]], &mut pinned, &mut copies)?;
+        let vs = bind_stage(g, vs_binds, [&prog.vs_uniforms, &prog.cs_uniforms], &mut pinned, &mut copies)?;
+        let own = |l: &[uniform71::Word]| -> Vec<ffi71::V3dUniform> {
+            l.iter().map(|w| ffi71::V3dUniform { contents: w.contents, data: w.data }).collect()
+        };
+        let lists = [own(&prog.fs_uniforms), own(&prog.vs_uniforms), own(&prog.cs_uniforms)];
+        prog.fs_uniforms = backend71tex::masked(&prog.fs_uniforms);
+        prog.vs_uniforms = backend71tex::masked(&prog.vs_uniforms);
+        prog.cs_uniforms = backend71tex::masked(&prog.cs_uniforms);
+        let units = |bs: &[GlesTextureBind]| -> Vec<ffi71::V3dJob71Tmu> {
+            bs.iter().map(|b| ffi71::V3dJob71Tmu { unit: u32::from(b.unit), ..Default::default() }).collect()
+        };
+        Ok(QTex { fs, vs, fs_units: units(fs_binds), vs_units: units(vs_binds), lists, copies })
+    }
+
+    /// The textured draw of each draw of `jobs` (`None` for a clear quad and
+    /// an untextured draw): fill71 gives one draw per [`fill71::Op::Draw`],
+    /// in order, and each queued GlesDraw with indices has one.
+    fn tex_of<'q>(all: &[&'q Queued], jobs: &[fill71::FilledJob]) -> Vec<Vec<Option<&'q QTex>>> {
+        let mut drawn = all.iter().filter(|q| q.d.index_count != 0 && q.prog.is_some());
+        jobs.iter()
+            .map(|j| {
+                j.draws
+                    .iter()
+                    .map(|d| if d.is_clear { None } else { drawn.next().and_then(|q| q.tex.as_deref()) })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The bindings of one textured draw as backend71tex takes them.
+    fn bindings(v: &[(u32, texfill71::Filled71)]) -> Vec<Binding71<'_>> {
+        v.iter().map(|(unit, filled)| Binding71 { unit: *unit, filled }).collect()
+    }
+
+    /// What the flush will plan for the textured draws of `jobs`, run dry:
+    /// a refusal of backend71tex (texuni71's words, a binding twice) is the
+    /// draw's. `Ok(false)`: a job's records do not fit the record arena.
+    fn check_textured(g: &State, all: &[&Queued], jobs: &[fill71::FilledJob]) -> Result<bool, fill71::Refusal> {
+        let Some(table) = g.table else { return Ok(true) };
+        let recs = u32::try_from(g.recs.gpu).unwrap_or(0);
+        for (job, tex) in jobs.iter().zip(tex_of(all, jobs)) {
+            let n: usize = tex.iter().flatten().map(|t| t.fs.len() + t.vs.len()).sum();
+            if n * RECS_BYTES_PER_BINDING > RECS_BYTES {
+                return Ok(false);
+            }
+            let mut arena = backend71tex::Arena71::new(recs, RECS_BYTES as u32)?;
+            let mut records = backend71tex::Records71::default();
+            for (fd, t) in job.draws.iter().zip(tex) {
+                let Some(t) = t else { continue };
+                let d = backend71::draw_of(fd)?;
+                let d = backend71::Draw71 {
+                    fs_uniforms: &t.lists[0],
+                    vs_uniforms: &t.lists[1],
+                    cs_uniforms: &t.lists[2],
+                    ..d
+                };
+                let (fs, vs) = (bindings(&t.fs), bindings(&t.vs));
+                let x = DrawTex71 { fs: &fs, vs: &vs, lists: None };
+                backend71tex::plan_draw(
+                    &table,
+                    &d,
+                    &x,
+                    u32::try_from(g.ind.gpu).unwrap_or(0),
+                    &mut arena,
+                    &mut records,
+                )?;
+            }
+        }
+        Ok(true)
     }
 
     /* ---- the queue to fill71's jobs --------------------------------------------------- */
@@ -801,7 +1013,20 @@ mod rec {
                 oq_addr: 0,
                 indices: q.indices,
             });
-            ops.extend(glue71::ops(&q.d, frame, input.as_ref())?);
+            match &q.tex {
+                /* fill71 gets the masked lists; the units named here are
+                 * what glue71 checks against the GlesDraw */
+                Some(t) => ops.extend(
+                    glue71::ops_textured(
+                        &q.d,
+                        frame,
+                        input.as_ref(),
+                        &glue71::TexInputs { fs: &t.fs_units, vs: &t.vs_units },
+                    )?
+                    .ops,
+                ),
+                None => ops.extend(glue71::ops(&q.d, frame, input.as_ref())?),
+            }
         }
         /* fill71 takes the clear quad's program for every flush. Until the
          * program is built this stand-in lets fill71 plan the flush: a job
@@ -1083,32 +1308,65 @@ mod rec {
         let Some(table) = g.table else {
             return -ENODEV;
         };
+        let all: Vec<&Queued> = queue.iter().collect();
+        let texs = tex_of(&all, &jobs);
         let mut rc = 0;
-        for job in &jobs {
+        for (n, job) in jobs.iter().enumerate() {
             /* one arena set: the job in flight reads the lists */
             let waited = wait_in_flight(g);
             if waited < 0 {
                 rc = waited;
             }
             let fb = frame.framebuffer(g.tile_alloc.gpu as u32);
-            // SAFETY: the three arenas are live, apart, and nothing else
-            // holds their mappings while the builder writes them.
-            let mut b = unsafe { CBuilder71::new(list(&g.bcl), list(&g.rcl), list(&g.ind), backend71::PAGE_SIZE) };
-            let a = match backend71::assemble_filled(&table, &fb, job, &mut b) {
+            let tex = &texs[n];
+            let sampled: Vec<u32> = tex.iter().flatten().flat_map(|t| t.copies.iter().copied()).collect();
+            let assembled = if tex.iter().all(Option::is_none) {
+                // SAFETY: the three arenas are live, apart, and nothing else
+                // holds their mappings while the builder writes them.
+                let mut b = unsafe { CBuilder71::new(list(&g.bcl), list(&g.rcl), list(&g.ind), backend71::PAGE_SIZE) };
+                backend71::assemble_filled(&table, &fb, job, &mut b)
+                    .map(|a| (a.built, [List71::Bcl, List71::Rcl, List71::Ind].map(|l| b.bytes(l).len()), 0))
+            } else {
+                /* a textured job: backend71tex places the records in the
+                 * record arena and hands the bindings to the builder */
+                let binds: Vec<(Vec<Binding71<'_>>, Vec<Binding71<'_>>)> = tex
+                    .iter()
+                    .map(|t| t.map_or((Vec::new(), Vec::new()), |t| (bindings(&t.fs), bindings(&t.vs))))
+                    .collect();
+                let draws: Vec<DrawTex71<'_>> = tex
+                    .iter()
+                    .zip(&binds)
+                    .map(|(t, (fs, vs))| match t {
+                        Some(t) => DrawTex71 {
+                            fs,
+                            vs,
+                            lists: Some(Lists71 { fs: &t.lists[0], vs: &t.lists[1], cs: &t.lists[2] }),
+                        },
+                        None => DrawTex71::default(),
+                    })
+                    .collect();
+                // SAFETY: the four arenas are live, apart, and nothing else
+                // holds their mappings while the builders write them.
+                let mut b = unsafe {
+                    CTexBuilder71::new(list(&g.bcl), list(&g.rcl), list(&g.ind), list(&g.recs), backend71::PAGE_SIZE)
+                };
+                backend71tex::assemble_filled(&table, &fb, job, &draws, &mut b).map(|a| {
+                    (a.built, [List71::Bcl, List71::Rcl, List71::Ind].map(|l| b.bytes(l).len()), b.arena_bytes().len())
+                })
+            };
+            let (built, used, recs_used) = match assembled {
                 Ok(a) => a,
                 Err(r) => {
                     glog!("yakogl/v3d71: flush: the job does not assemble ({}): not submitted", r);
                     return -EIO;
                 }
             };
-            let used = [List71::Bcl, List71::Rcl, List71::Ind].map(|l| b.bytes(l).len());
-            if a.built.tile_alloc_size as usize > g.tile_alloc.size
-                || a.built.tile_state_size as usize > g.tile_state.size
+            if built.tile_alloc_size as usize > g.tile_alloc.size || built.tile_state_size as usize > g.tile_state.size
             {
                 glog!(
                     "yakogl/v3d71: flush: the job bins into {} + {} bytes, the buffers hold {} + {}: not submitted",
-                    a.built.tile_alloc_size,
-                    a.built.tile_state_size,
+                    built.tile_alloc_size,
+                    built.tile_state_size,
                     g.tile_alloc.size,
                     g.tile_state.size
                 );
@@ -1120,6 +1378,7 @@ mod rec {
                 osal::cache_flush(g.rcl.cpu, used[1]);
                 osal::cache_flush(g.ind.cpu, used[2]);
                 osal::cache_flush(g.data.cpu, g.data_used);
+                osal::cache_flush(g.recs.cpu, recs_used);
             }
             let kick = V3dKick {
                 magic: V3D_KICK_MAGIC,
@@ -1128,9 +1387,9 @@ mod rec {
                 rcl_start: g.rcl.gpu as u32,
                 rcl_end: g.rcl.gpu as u32 + used[1] as u32,
                 tile_alloc: g.tile_alloc.gpu as u32,
-                tile_alloc_size: a.built.tile_alloc_size,
+                tile_alloc_size: built.tile_alloc_size,
                 tile_state: g.tile_state.gpu as u32,
-                tile_state_size: a.built.tile_state_size,
+                tile_state_size: built.tile_state_size,
                 pad: 0,
             };
             let Some(submit) = osal::ops().and_then(|o| o.submit) else {
@@ -1145,6 +1404,10 @@ mod rec {
             g.kicks += 1;
             g.in_flight = Some(InFlight { kick: g.kicks, fence, alias: core::mem::take(&mut g.open_alias) });
             record_history(g, &frame, ds_id, &job.after);
+            if g.sampled.len() >= HISTORY {
+                g.sampled.remove(0);
+            }
+            g.sampled.push((g.kicks, sampled));
         }
         rc
     }
@@ -1194,7 +1457,21 @@ mod rec {
             return Err(Fail::Lost(rc));
         }
         g.data_used = DUMMY_BYTES;
+        /* nothing queued, nothing in flight: no draw names a dead copy */
+        g.tex.free_dead();
         Ok(())
+    }
+
+    /// Whether `d` samples a texture whose rendering kick is still queued
+    /// or in flight (`kick_pending`'s rule).
+    fn renders_sampled(g: &State, d: &GlesDraw) -> bool {
+        let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+        let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+        fs.iter().chain(vs).any(|b| {
+            let k = b.target_kick;
+            k != 0
+                && (k > g.kicks || g.in_flight.is_some_and(|f| (k >= f.kick || k == f.alias) && !fence_done(f.fence)))
+        })
     }
 
     fn flush_for_draw(g: &mut State) -> Result<(), Fail> {
@@ -1214,7 +1491,11 @@ mod rec {
         if let Some(why) = state::unsupported(d) {
             return Err(Fail::Refused(why.to_string(), -ENOTSUP));
         }
-        if let Some(r) = glue71::refusal(d) {
+        /* glue71's checks but its "textures" one: the table samples them
+         * (P10), glue71::ops_textured runs the rest again with the units */
+        let mut probe = *d;
+        (probe.num_textures, probe.num_vs_textures) = (0, 0);
+        if let Some(r) = glue71::refusal(&probe) {
             return Err(r.into());
         }
         /* depth/stencil stays in the tile buffer in this cut */
@@ -1237,6 +1518,11 @@ mod rec {
         }
         let queue_len = |g: &State| g.open.as_ref().map_or(0, |o| o.queue.len());
         if queue_len(g) >= g.draws_per_job {
+            flush_for_draw(g)?;
+        }
+        /* a texture a job still renders into is copied from its storage
+         * once that job has run */
+        if renders_sampled(g, d) {
             flush_for_draw(g)?;
         }
         if queue_len(g) == 0 {
@@ -1284,8 +1570,18 @@ mod rec {
             let (bcl, ind) = list_bytes(&jobs);
             /* the flush writes each quad's vertices after the arrays */
             let data = g.data_used.next_multiple_of(16) + quads(&jobs) * QUAD_BYTES;
-            let fits =
-                bcl + BCL_FIXED as usize <= g.bcl.size && ind + IND_FIXED as usize <= g.ind.size && data <= DATA_BYTES;
+            let all: Vec<&Queued> = open.queue.iter().chain(Some(&q)).collect();
+            let recs_fit = match check_textured(g, &all, &jobs) {
+                Ok(f) => f,
+                Err(r) => {
+                    g.data_used = mark;
+                    return Err(r.into());
+                }
+            };
+            let fits = bcl + BCL_FIXED as usize <= g.bcl.size
+                && ind + IND_FIXED as usize <= g.ind.size
+                && data <= DATA_BYTES
+                && recs_fit;
             /* a job more than the queue alone: a whole clear after queued
              * draws opens a job. The queue goes first, so that the kick
              * after this call holds the draw. The same when the lists
@@ -1333,11 +1629,66 @@ mod rec {
         }
         let rc = flush_queue(g);
         let waited = wait_in_flight(g);
+        if waited == 0 && g.open.as_ref().is_none_or(|o| o.queue.is_empty()) {
+            g.tex.free_dead();
+        }
         if rc < 0 {
             rc
         } else {
             waited
         }
+    }
+
+    /* ---- textures: the hooks (P10) -------------------------------------------------------- */
+
+    /// glGenerateMipmap (`YakoglBackend::generate_mipmap`): the chain by the
+    /// TFU in a copy (1), or 0. The jobs that render into the texture are
+    /// submitted and waited for first.
+    ///
+    /// # Safety
+    /// `b` is null or a live binding.
+    pub unsafe fn generate_mipmap(b: *const GlesTextureBind, levels: u32) -> i32 {
+        let g = g();
+        // SAFETY: the caller's contract.
+        let (true, Some(b), Some(t)) = (g.inited, unsafe { b.as_ref() }, g.table) else {
+            return 0;
+        };
+        let rc = flush_queue(g);
+        if rc < 0 || wait_in_flight(g) < 0 {
+            return 0;
+        }
+        g.tex.free_dead();
+        g.tex.generate(b, levels, t.ident.ver, t.ident.iprev)
+    }
+
+    /// # Safety
+    /// `b` is null or a live binding.
+    pub unsafe fn return_mipmap_chain(b: *const GlesTextureBind) {
+        let g = g();
+        // SAFETY: the caller's contract.
+        if let (true, Some(b)) = (g.inited, unsafe { b.as_ref() }) {
+            g.tex.return_chain(b);
+        }
+    }
+
+    pub fn texture_released(base: u64, bytes: u64) {
+        let g = g();
+        if g.inited {
+            g.tex.released(base, bytes);
+        }
+    }
+
+    pub fn texture_copies() -> Vec<CopyInfo> {
+        g().tex.info()
+    }
+
+    pub fn tfu_counts() -> (u32, u32) {
+        let g = g();
+        (g.tex.tfu_jobs, g.tex.tfu_failed)
+    }
+
+    pub fn sampled_by(kick: u32) -> Option<Vec<u32>> {
+        g().sampled.iter().find(|s| s.0 == kick).map(|s| s.1.clone())
     }
 
     /// One job is outstanding at most, and it is the last submitted.
@@ -1506,6 +1857,68 @@ pub extern "C" fn v3d71_wait_kick(kick_id: u32) -> i32 {
     }
 }
 
+/// glGenerateMipmap through the 7.1 TFU (P10): 1 when the chain was made
+/// (`MipChain::Whole`), 0 when the GL core filters on the CPU; always 0 in
+/// a product build, which records nothing.
+///
+/// # Safety
+/// `b` is null or a live binding for the call.
+pub unsafe extern "C" fn v3d71_generate_mipmap(b: *const GlesTextureBind, levels: u32) -> i32 {
+    #[cfg(feature = "host-test")]
+    {
+        // SAFETY: the caller's contract, passed on.
+        unsafe { rec::generate_mipmap(b, levels) }
+    }
+    #[cfg(not(feature = "host-test"))]
+    {
+        let _ = (b, levels);
+        0
+    }
+}
+
+/// The chain the TFU made goes back into the GL core's storage.
+///
+/// # Safety
+/// `b` is null or a live binding for the call.
+pub unsafe extern "C" fn v3d71_return_mipmap_chain(b: *const GlesTextureBind, levels: u32) {
+    let _ = levels;
+    #[cfg(feature = "host-test")]
+    // SAFETY: the caller's contract, passed on.
+    unsafe {
+        rec::return_mipmap_chain(b)
+    };
+    #[cfg(not(feature = "host-test"))]
+    let _ = b;
+}
+
+/// Texel storage is released: the copies of it are dropped (once no job
+/// can sample them).
+pub extern "C" fn v3d71_texture_released(base_gpu: u64, bytes: u64) {
+    #[cfg(feature = "host-test")]
+    rec::texture_released(base_gpu, bytes);
+    #[cfg(not(feature = "host-test"))]
+    let _ = (base_gpu, bytes);
+}
+
+/// The tiled copies the table holds (a host test's view).
+#[cfg(feature = "host-test")]
+pub fn texture_copies() -> Vec<crate::v3d::table71tex::CopyInfo> {
+    rec::texture_copies()
+}
+
+/// The TFU jobs run and failed since init (a host test's view).
+#[cfg(feature = "host-test")]
+pub fn tfu_counts() -> (u32, u32) {
+    rec::tfu_counts()
+}
+
+/// The GPU addresses of the copies kick `kick` samples (a host test's
+/// view; the last 64 kicks).
+#[cfg(feature = "host-test")]
+pub fn sampled_by(kick: u32) -> Option<Vec<u32>> {
+    rec::sampled_by(kick)
+}
+
 /// The heaps' bases: 0. The 7.1 OSAL places every allocation in its one
 /// carve-out and ignores the base (`src/osal/zephyr_v3d71.c`, `z_gpu_alloc`);
 /// a base of 0 also keeps the owner tally from sorting blocks into heaps
@@ -1559,22 +1972,21 @@ pub static yakogl_backend_v3d71: YakoglBackend = YakoglBackend {
     kick_pending: Some(v3d71_kick_pending),
     heap_base: Some(v3d71_heap_base),
     counters: Some(v3d71_counters),
-    texture_released: None,
+    texture_released: Some(v3d71_texture_released),
     surface_swapped: None,
     texture_uploaded: None,
     /* backend71 refuses instancing (REF_INSTANCED): no divisor above 1 */
     max_instance_divisor: 1,
     wait_kick: Some(v3d71_wait_kick),
-    /* nothing is sampled yet: false makes the GL core wait as for a GPU
-     * reader, the safe answer */
-    samples_texel_copies: false,
+    /* a draw samples a copy made when it was recorded (table71tex) */
+    samples_texel_copies: true,
     attachment_gone: None,
     depth_resolve: None,
     query_begin: None,
     query_end: None,
     query_result: None,
-    generate_mipmap: None,
-    return_mipmap_chain: None,
+    generate_mipmap: Some(v3d71_generate_mipmap),
+    return_mipmap_chain: Some(v3d71_return_mipmap_chain),
     linear_row_align: 0,
     /* fill71 takes the uniform blocks as host words */
     uniforms_host_only: true,

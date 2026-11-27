@@ -1218,10 +1218,8 @@ fn a_refused_state_is_a_named_refusal() {
     d.target_format = 0xee;
     check(&d, EINVAL, "a colour target of a format the backend does not know");
 
-    /* glue71's: a texture binding */
-    let mut d = c.draw(None);
-    d.num_textures = 1;
-    check(&d, ENOTSUP, "glue71: V3D 7.1: a draw sampling textures (the 7.1 texture state is not glued yet)");
+    /* glue71's "a draw sampling textures" is not met any more: the table
+     * samples textures (P10, tests/v3d71_table_tex.rs) */
     /* draw71's, through glue71: multisampling */
     let mut d = c.draw(None);
     d.samples = 4;
