@@ -944,10 +944,12 @@ if [ "$rc" = 2 ]; then echo "ok   unknown route: rc 2"; else echo "FAIL unknown 
 # (triangle-{cold,adopt}-pass) behind U-Boot's header (t6_hello-uboot-pass,
 # with the image's WDT0 numbers: lifetime 300 s, alive 20 s). Every body line
 # is a printf of examples/triangle/src/main.c, the board layer
-# (t6_display_record.c, board_first_show) or the drivers crate, as the kexec
-# fixtures; a record from U-Boot's own state is still to be read on the board.
-check triangle-uboot-cold-pass 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$D/triangle-uboot-cold-pass.uart" T6_ROUTE=uboot
-check triangle-uboot-adopt-pass 0 'VERDICT triangle PASS' "$TRIA 0 0" triangle "$D/triangle-uboot-adopt-pass.uart" T6_ROUTE=uboot
+# (t6_display_record.c, board_first_show, and its read-backs after the hold,
+# the seven lines of triangle-uboot-hold90-pass on the record's own window)
+# or the drivers crate, as the kexec fixtures. The board's own record of the
+# cold chain on this route is the fixture triangle-uboot-hold90-pass above.
+check triangle-uboot-cold-pass 0 'VERDICT triangle PASS' "$((TRI + RB)) 0 0" triangle "$D/triangle-uboot-cold-pass.uart" T6_ROUTE=uboot
+check triangle-uboot-adopt-pass 0 'VERDICT triangle PASS' "$((TRIA + RB)) 0 0" triangle "$D/triangle-uboot-adopt-pass.uart" T6_ROUTE=uboot
 # the same record on the kexec route lacks the kexec boot lines: not a PASS
 runs=$((runs + 1))
 out=$(bash "$V" triangle "$D/triangle-uboot-cold-pass.uart" 2>&1) && rc=0 || rc=$?

@@ -307,11 +307,17 @@ the kexec ones):
   after the hold stays required, and is the proof of a connected display.
   Fixture: `t6_cold-uboot-hold90-pass.uart`; the same record read as kexec
   FAILs, an HPD of 2 or an HPD 0 after the hold FAILs on either.
-- `triangle`: the kexec Zephyr part behind U-Boot's header, cold path and
-  adopt path. Fixtures: `triangle-uboot-cold-pass.uart`,
-  `triangle-uboot-adopt-pass.uart` (the kexec forms are
-  `triangle-cold-pass.uart` and `triangle-adopt-pass.uart`). Read as kexec
-  they FAIL.
+- `triangle`: the `VIDEO` line of the cold chain may read HPD 0 or 1, as
+  `t6_cold`'s; on kexec it must be 1. The board layer's read-backs after the
+  hold are required there, with `HPD 1` among them: the proof of a connected
+  display on this route (on kexec they are judged when the record has them;
+  the records of images before them have none). The hold line is the
+  record's own, 60 s or longer. Fixtures: `triangle-uboot-hold90-pass.uart`
+  (the board record of a go run: the chain's HPD 0, HPD 1 after the 90 s
+  hold) and `triangle-uboot-cold-pass.uart`, `triangle-uboot-adopt-pass.uart`
+  (the kexec parts behind U-Boot's header, with the read-backs; the kexec
+  forms are `triangle-cold-pass.uart` and `triangle-adopt-pass.uart`). Read
+  as kexec they FAIL.
 
 A WDT0 return. An image that WDT0 resets instead of PSCI `SYSTEM_RESET`
 prints no reset line, so the record's end differs. The script treats a record
