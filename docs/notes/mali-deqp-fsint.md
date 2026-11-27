@@ -240,3 +240,39 @@ re-compared here. The 3 `operator.sequence.*_bool_vec2` cases are no longer firs
 - No other shape of the 188 is without a reference at the section 2
   mapping. Each of the eight `deqp_fsint_*` references is a form of the
   rows above; the measure gives no per-reference case count of its own.
+
+## 6. The lowering (plan #402 item `lower-fsint`)
+
+**HOST-ONLY.** Byte-compares and pins on the host. The forms the lowering
+takes, in `src/shaderc/online/mali/nir_fs.rs`:
+
+| Form | Where | Mesa's words | References made byte-equal |
+|---|---|---|---|
+| `iadd(x, -1)` of a run-time int (`--x`, `x--`), a lowp int at 32 bits too | `Fs::int_lane`'s `Iadd` arm: the `-1` constant reads as a `true` mask in `int()` | `IADD_IMM.i32 #0xFFFFFFFF` | `fsint_predec_effect_ivec4_lowp`, `fsint_postdec_result_ivec3_mediump` (its `i2f(f2i(x))` stays two conversions), `intval3_opfs_post_decrement_effect_ivec2_highp`, `intval3_opfs_pre_decrement_result_int_mediump` |
+| a lowp `step` of two varyings' lanes: the late rule `flt(f2fmp(a), f2fmp(b))` -> `flt(a, b)` makes the compare fp32, its `b2f16` a `MUX`, and a product by a constant keeps the `b2f` | the `B2f` arm of `int_lane` (the compare's width), `Fs::op`'s `fmul(b2f, b)` rule (not for a constant `b`), `lane_tree` (`Leaf::Word`, the loads' fp32 words), `kept_whole` (any fp32 compare of the lanes loads them `.v4`) | `FCMP_OR.f32.ge.m1`, `MUX.v2i16 0x0, 0x3C000000.h11, m.h00`, `U16_TO_U32`, `FMA.v2f16` | `fsint_step_float_lowp`, `fsint2_step_lowp_float` |
+| a 32-bit mask, then a 16-bit one, in `&&`: the 16-bit one widened (the `iand` takes its first source's width) | `Fs::mask_op`, `Fs::bool32`; `reduction_order` keeps the `i2i32` after its compare | `S16_TO_S32` then `LSHIFT_AND.i32` | `fsint_conv_vec2_ivec2_to_bvec4` |
+| `inot` of a 16-bit `ieq` / `ine` | the `Bnot` arm of `int_lane` | `ICMP_OR.v2u16.ne.m1` | `fsint2_fn_bvec2_ne` |
+| `iand(feq(a, 0.0), feq(b, 0.0))` with neither compare used once | `Fs::and16`; `feq_pairs_kept` at the walk's end refuses the used-once case, which nir_opt_algebraic.py:1213 makes `feq(fadd(fabs(a), fabs(b)), 0.0)` | `LSHIFT_AND.v2i16` | none (glmark2 ideas fs c565 and 1aca, which then stop at later refusals) |
+
+Still refused, with the refusal pinned:
+
+| Reference | Refusal | Why |
+|---|---|---|
+| `fsint_conv_bool_float_int_to_bvec3` | int/bool | Mesa pairs the fp16 compares of two scalar varyings the link packed into one load, lanes swapped (`FCMP_OR.v2f16.ne.m1 r0, r0^.h10`). `Fs::mask_op` refuses the mixed-width `&&` when the fp16 compares read two loads |
+| `fsint_sequence_bool_vec2_highp` | varying load | unchanged (its colour lane) |
+| `fsint2_step_lowp_vec2` | gl_FragColor lane | the colour's `vec2(0.0, b2f)` operand (`MKVEC.v2i16 0x0.h0, x.h0`). The fp32 compares lower, but Mesa loads v_in1 before v_in0 here and v_in0 first in the scalar `step_float_lowp`, with the same template. `nir_opt_move` predicts v_in1 first for both, so no rule that this back end draws tells the two apart |
+| `fsint2_rnd_trig93` | arithmetic (`asin`, `tan`) | past its int and bool values |
+| `fsint2_rnd_cond9` | control flow | unchanged |
+
+Other pins the lowering moves, each still refused: `intval3_opfs_step_float_vec2_mediump`
+and `opfs_step_vec3_highp` (now the gl_FragColor lane), `intval3_rsg_exp76_fs`
+and `intrnd_trunc_atan_fs` (arithmetic), `intrnd_bool_varying_lane_fs` (the
+link's varying offsets of `c`), `mixprec4_ge_vec4` (from IrIndex to the
+mixed-precision refusal). In glmark2, ideas fs c565 moves to the operand-form
+refusal and fs 1aca to the gl_FragColor lane (`tests/fixtures/mali_glmark2_verdicts.txt`,
+`tests/mali_ideas.rs`). Both are text changes of a refused verdict. No verdict
+moves forward or back, and `tools/mali/corpus-verdicts.txt` is unchanged.
+
+Before `atan` is lowered, `intrnd_trunc_atan_fs` needs `i2f(f2i(x))` as
+`FROUND.f32.rtz` (Mesa folds it there to `ftrunc`), whereas
+`fsint_postdec_result_ivec3_mediump` keeps the two conversions.
