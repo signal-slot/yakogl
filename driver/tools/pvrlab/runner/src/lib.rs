@@ -936,7 +936,7 @@ mod tests {
     #[test]
     fn the_imx8mp_default_sets_shape_counts_as_the_c_walker_did() {
         // 49 listed, case 16 skips itself, one other case (44) fails
-        // (tests/gltest_set_tally.c's first scene, which this replaces)
+        // (the retired C walker's first scene, which this replaces)
         let list: Vec<i32> = (0..49)
             .map(|i| {
                 if i == 23 {

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Regenerate the two gl_test shader headers: the GLSL sources gl_test.c feeds to
-glShaderSource, as C strings byte-identical to yakogl/tools/shaders/* (the offline
+glShaderSource, as C strings byte-identical to tools/shaders/* (the offline
 shader table matches by SHA-256 of the text, so a stray byte here is a miss there).
 
   gl_test_shaders.h        the default set. Thirteen of its sources are #version 450
