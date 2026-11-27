@@ -335,8 +335,16 @@ Consequence, from the data path rather than from a test:
   draw as RGBA8 attachments (`srgb_targets_as_rgba8`): U8 sources and no
   PBE gamma at the end of tile, the frame load reads the bytes back raw,
   and the background clear writes the clear colour's encoded bytes
-  (`gl::srgb::encode`) into every attachment. Refused by name: an sRGB
-  attachment beside one of another format; a program that does not encode
+  (`gl::srgb::encode`) into every attachment. An sRGB attachment beside
+  one of another format is drawn as RGBA8 with REG_WORD0 `gamma` on its own
+  PBE state (`srgb_beside_other_as_rgba8`): the program writes linear bytes
+  in draw buffer 0's class, the PBE encodes that render target alone (an
+  8-per-channel source, where Mesa's F16 halves would take two registers),
+  the clear colour is the linear one and its frame load decodes (TPU
+  gamma); with the sRGB attachment as draw buffer 0, a program of the sRGB
+  class is refused by name. Not measured on a board: an 8-bit linear
+  source before the encode loses dark codes. Refused by name with several
+  sRGB attachments alone: a program that does not encode
   (the one-target sRGB variant of a blend or a partial colour mask, which
   writes halves); a scissored or masked colour clear, whose quad writes
   pixel output 0 alone. A blend in linear space would read the pixel
