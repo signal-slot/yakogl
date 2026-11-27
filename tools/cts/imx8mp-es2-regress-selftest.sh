@@ -25,8 +25,9 @@ fails=0
 # name3 = entry 3's result=record:APP, over3 = entry 3's begun one below its counts, total3 = entry 3's begun above its
 # case total, short3 = entry 3's record of two words; stale3 = entry 3 not clean with a PROGRESS record, read as WORSE)
 gen() {
-    python3 -I - "$BASE" "$1" "$2" "$3" "${4:-ok}" <<'PY'
-import sys
+    BOARDN=${BOARDN:-imx8mp} python3 -I - "$BASE" "$1" "$2" "$3" "${4:-ok}" <<'PY'
+import sys, os
+BN = os.environ['BOARDN']
 base, out, a, b, mode = sys.argv[1:]
 lines = []
 for ln in open(base):
@@ -66,10 +67,10 @@ for ln in open(base):
         rec = "%08x,%08x" % (w0, w1)
     if i == 3 and mode == "stale3":
         rc, verdict, kname, rec = 4, "no_record", "PROGRESS", "594b0500,00000301,00004e20,00000002"
-    lines.append("board.sh imx8mp e%02d rc=%d verdict=%s boot=uboot-mmc row boot_verdict=cycled "
+    lines.append("board.sh %s e%02d rc=%d verdict=%s boot=uboot-mmc row boot_verdict=cycled "
                  "result=record:%s resets=%s record=%s back_after=60s uptime=20s"
-                 % (i, rc, verdict, kname, resets, rec))
-    lines.append("board.sh imx8mp e%02d-p0 rc=0 verdict=done record=594b0a00,00000000,00000000,00000000" % i)
+                 % (BN, i, rc, verdict, kname, resets, rec))
+    lines.append("board.sh %s e%02d-p0 rc=0 verdict=done record=594b0a00,00000000,00000000,00000000" % (BN, i))
 open(out, "w").write("# synthetic\n" + "\n".join(lines) + "\n")
 PY
 }
@@ -130,6 +131,17 @@ grep -v '^board.sh imx8mp e05 ' "$T/all.md" > "$T/one-missing.md"
 last c3-one-missing 1 'es2 regress: 28/29 entries, 0 worse, 1 missing' "$T/one-missing.md"
 gen "$T/g2.md" 0 28 better14
 last c3-better 0 'es2 regress: 29/29 entries, 0 worse, 0 missing' "$T/g2.md"
+
+# a synthetic Armadillo-X2 record (board.sh x2 lines, fake data): same verdicts, the board named in the header,
+# the last line unchanged; a worse X2 record is WORSE; a Verdin record names the Verdin
+BOARDN=x2 gen "$T/x2.md" 0 28
+last c3-x2 0 'es2 regress: 29/29 entries, 0 worse, 0 missing' "$T/x2.md"
+expect x2-names-board 0 '^es2 regress: board Armadillo-X2 (baseline' "$T/x2.md"
+BOARDN=x2 gen "$T/x2w.md" 0 28 worse14
+expect x2-worse 1 'e14 WORSE passed 98->97 bad 14->15' "$T/x2w.md"
+expect verdin-names-board 0 '^es2 regress: board Verdin i.MX8MP (baseline' "$T/all.md"
+BOARDN=x2 gen "$T/x2b.md" 15 28
+expect mixed-boards 0 'board Armadillo-X2, Verdin i.MX8MP' "$T/a.md" "$T/x2b.md"
 
 # one slice only: 14 entries missing
 expect missing 1 'es2 regress: 15/29 entries, 0 worse, 14 missing' "$T/a.md"
