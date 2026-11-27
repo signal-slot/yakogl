@@ -1410,30 +1410,32 @@ fn a_float_target_goes_through_the_extended_format_field() {
 }
 
 /// An sRGB colour target is the A8R8G8B8 PE format with the sRGB bit: RT0's
-/// in PE_LOGIC_OP with its write-enable, RT1+ in RT_CONFIG (docs/es3/srgb.md
-/// 6.1; Mesa's etnaviv_state.c:326-333); a draw to another format after it
-/// clears the bit with the write-enable alone, and one before any sRGB draw
-/// writes the register as it always did. The shader saturates the output
-/// (a unorm format).
+/// in PE_LOGIC_OP, RT1+ in RT_CONFIG (docs/es3/srgb.md 6.1; Mesa's
+/// etnaviv_state.c:326-333), and never PE_LOGIC_OP's SRGB_MASK, which would
+/// keep the old bit (gc-srgb-target: the `0xc000_0000` written until the
+/// fix encoded nothing). A draw to another format writes the bit clear,
+/// before and after an sRGB one alike. The shader saturates the output (a
+/// unorm format).
 #[test]
 fn an_srgb_target_sets_the_pe_srgb_bits() {
     let rig = Rig::new();
     let base = GC_PE_LOGIC_OP_BASE | pe_logic_op_op(GC_LOGIC_OP_COPY) | pe_logic_op_single_buffer(1);
     let plain = rig.submit(&rig.draw(3));
-    assert_eq!(plain.reg(GC_PE_LOGIC_OP), base, "no sRGB draw yet: nothing written to the bit");
+    assert_eq!(plain.reg(GC_PE_LOGIC_OP), base, "no sRGB target: the bit written clear");
     let sat = |s: &Stream| s.reg(GC_PS_CONTROL) & ps_control_saturate_rt(0);
 
     let mut d = rig.draw(3);
     d.target_format = GLES_SURF_SRGB8_A8;
     d.targets[0].format = GLES_SURF_SRGB8_A8;
     let on = rig.submit(&d);
-    assert_eq!(on.reg(GC_PE_LOGIC_OP), base | 0xc000_0000, "SRGB with its write-enable");
+    assert_eq!(on.reg(GC_PE_LOGIC_OP), base | GC_PE_LOGIC_OP_SRGB, "SRGB, written");
+    assert_eq!(on.reg(GC_PE_LOGIC_OP) & GC_PE_LOGIC_OP_SRGB_MASK, 0, "SRGB_MASK would keep the old bit");
     assert_eq!(on.reg(GC_PE_COLOR_FORMAT), plain.reg(GC_PE_COLOR_FORMAT), "RGBA8888's PE format");
     assert_ne!(sat(&on), 0, "the output is saturated");
     assert_eq!(sat(&on), sat(&plain));
 
     let off = rig.submit(&rig.draw(3));
-    assert_eq!(off.reg(GC_PE_LOGIC_OP), base | 0x4000_0000, "the write-enable alone clears it");
+    assert_eq!(off.reg(GC_PE_LOGIC_OP), base, "the bit written clear after an sRGB draw too");
 }
 
 /// RT1..3 of an sRGB draw carry `RT_CONFIG_SRGB` and the other targets of a
@@ -5814,3 +5816,6 @@ mod depth_clamp_tests;
 
 #[path = "backend_tests_wide_mrt.rs"]
 mod wide_mrt_tests;
+
+#[path = "backend_tests_colour_formats.rs"]
+mod colour_formats_tests;

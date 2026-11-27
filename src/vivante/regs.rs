@@ -557,10 +557,14 @@ pub const fn pe_logic_op_unk24(x: u32) -> u32 {
 }
 /// The PE encodes what it writes to RT0 as sRGB (and decodes the destination
 /// of a blend), for an sRGB colour target: `VIVS_PE_LOGIC_OP_SRGB`, Mesa
-/// 26.2.1 src/etnaviv/hw/state_3d.xml.h:1148. A write takes effect only with
-/// [`GC_PE_LOGIC_OP_SRGB_MASK`] beside it; the mask alone clears the bit.
+/// 26.2.1 src/etnaviv/hw/state_3d.xml.h:1149, written alone as Mesa writes
+/// it (etnaviv_state.c:326-327).
 pub const GC_PE_LOGIC_OP_SRGB: u32 = 0x8000_0000;
-/// The write-enable of [`GC_PE_LOGIC_OP_SRGB`] (`..._SRGB_MASK`, :1149).
+/// The mask of [`GC_PE_LOGIC_OP_SRGB`] (`..._SRGB_MASK`, :1148). Never set:
+/// with it the PE keeps its old sRGB bit, as with
+/// [`GC_PE_COLOR_FORMAT_FORMAT_EXT_MASK`]. This backend set it beside the
+/// bit until the i.MX8MP dEQP-GLES3 run at 9bc82915 (gc-srgb-target), so no
+/// sRGB target was ever encoded.
 pub const GC_PE_LOGIC_OP_SRGB_MASK: u32 = 0x4000_0000;
 /// always set; blob value
 pub const GC_PE_LOGIC_OP_BASE: u32 = 0x000e4000;

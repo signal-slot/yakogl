@@ -136,9 +136,6 @@ pub(crate) struct GcState {
     refused_nlogged: usize,
     /// The smaller-target refusal (review R-02) has been logged since init.
     refused_sizes_logged: bool,
-    /// A draw has set PE_LOGIC_OP's sRGB bit since init: a later draw to
-    /// another format clears it ([`pe_logic_op_srgb`]).
-    srgb_set: bool,
 
     /* the target of the last draw recorded; a change ends the kick only when
      * a 4x target is left (its resolve runs at the end of the stream) */
@@ -221,7 +218,6 @@ impl GcState {
         refused_logged: [0; 4],
         refused_nlogged: 0,
         refused_sizes_logged: false,
-        srgb_set: false,
         target_gpu: 0,
         target_w: 0,
         target_h: 0,
@@ -973,19 +969,19 @@ fn single_buffer(gl: &GlesDraw, wide: bool) -> u32 {
     }
 }
 
-/// PE_LOGIC_OP's sRGB bits for RT0: the bit with its write-enable for an sRGB
-/// target (docs/es3/srgb.md 6.1), and, once any draw has set it, the
-/// write-enable alone (clear) for a draw to another format, as Mesa's
-/// register carries both. Before any sRGB draw nothing is written to the
-/// bit, so a draw that never met an sRGB target writes the register as it
-/// always did.
+/// PE_LOGIC_OP's sRGB bit for RT0: set for an sRGB target, clear for every
+/// other, and its `_MASK` bit never: as for every masked field of a Vivante
+/// state word, a set `_MASK` bit keeps the field's old value, so the
+/// `0xc000_0000` this wrote before never set the bit and no sRGB target was
+/// encoded (gc-srgb-target, i.MX8MP dEQP-GLES3 at 9bc82915). Mesa writes
+/// `VIVS_PE_LOGIC_OP_SRGB` alone (etnaviv_state.c:326-327, the word emitted
+/// whole at etnaviv_emit.c:571), as it writes `PS_MSAA_CONFIG` with every
+/// mask set but the one of the field it means (etnaviv_blend.c:104); the same
+/// rule as [`GC_PE_COLOR_FORMAT_FORMAT_EXT_MASK`] (gl_test 44, #6). The bit
+/// is written on every draw, so a draw after an sRGB one clears it.
 fn pe_logic_op_srgb(srgb: bool) -> u32 {
-    let g = g();
     if srgb {
-        g.srgb_set = true;
-        GC_PE_LOGIC_OP_SRGB | GC_PE_LOGIC_OP_SRGB_MASK
-    } else if g.srgb_set {
-        GC_PE_LOGIC_OP_SRGB_MASK
+        GC_PE_LOGIC_OP_SRGB
     } else {
         0
     }
@@ -3095,6 +3091,26 @@ pub extern "C" fn gc_debug_rs_clear(on: bool) {
 /// larger than the target (the part past the target keeps its contents).
 /// glDepthMask is already in `do_clear_depth` (gl/draw.rs). When one plane
 /// stays the quad, the whole clear does.
+/// The red, green and blue bytes of the resolve engine's A8R8G8B8 fill word
+/// for a clear colour into a target of `format`: each channel's unorm byte,
+/// or, for an sRGB target, its sRGB encoding (ES 3.0.6 4.1.8, the clear
+/// value is linear; `gl::srgb::encode`). The fill writes the word as it is,
+/// past the pixel engine whose PE_LOGIC_OP sRGB bit encodes a draw, so
+/// unencoded it stored the linear value (gc-srgb-target: fbo.color.clear and
+/// shared_colorbuffer_clear of srgb8_alpha8). Mesa packs its RS clear value
+/// through the surface's sRGB format (etnaviv_clear_blit.c
+/// etna_clear_blit_pack_rgba, util_pack_color). Alpha is linear.
+fn rs_fill_rgb(format: u8, rgb: [f32; 3]) -> u32 {
+    let ch = |v: f32| {
+        if gles_surf_is_srgb(format) {
+            u32::from(crate::gl::srgb::encode(v))
+        } else {
+            unorm8(v)
+        }
+    };
+    (ch(rgb[0]) << 16) | (ch(rgb[1]) << 8) | ch(rgb[2])
+}
+
 fn rs_clear_of(gl: &GlesDraw, ds: (u32, u32, u32)) -> Option<rs_clear::Clear> {
     if gl.scissor || ms_via_scratch(gl) || wide_any(gl) {
         return None;
@@ -3115,9 +3131,8 @@ fn rs_clear_of(gl: &GlesDraw, ds: (u32, u32, u32)) -> Option<rs_clear::Clear> {
         if w == 0 || h == 0 || w % 16 != 0 || h % 4 != 0 || negative_stride(gl.flip_y) {
             return None;
         }
-        let ch = |v: f32| -> u32 { ((v.clamp(0.0, 1.0) * 255.0) + 0.5) as u32 };
         let [r, g_, b, a] = gl.clear_rgba;
-        let pixel = (alpha.unwrap_or_else(|| ch(a)) << 24) | (ch(r) << 16) | (ch(g_) << 8) | ch(b);
+        let pixel = (alpha.unwrap_or_else(|| unorm8(a)) << 24) | rs_fill_rgb(gl.target_format, [r, g_, b]);
         /* into a tiled shadow, the fill covers the shadow's whole (exact)
          * size: a constant fill is the same in every layout */
         let (addr, pitch) = match g().trt.takes(gl.target_gpu) {
