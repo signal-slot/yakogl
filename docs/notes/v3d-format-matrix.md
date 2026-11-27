@@ -331,7 +331,7 @@ same samples through `XYZW`.
     builder, "v3d: a colour write mask per render target, so a wide r/rg
     integer texture draws beside other targets"; the same change is
     `48f6017c` on this branch). `per_target_masks`
-    (`src/gl/draw.rs:2747`, called at `:5150` where `PER_TARGET_MASK`
+    (`src/gl/draw.rs:2782`, called at `:5150` where `PER_TARGET_MASK`
     `:2723` holds for `gpu-v3d` only) gives each written target
     glColorMask limited to its own channels and, where they differ, sets
     `GlesDraw::per_target_mask` and `target_color_mask`; `job_state`
@@ -424,7 +424,7 @@ same samples through `XYZW`.
   per-RT masks only limit it to each target's channels. What remains
   open is one BLEND_ENABLES (mask 0xf) and one BLEND_CFG (RT 0's state)
   for all RTs (`v3d_job.c:696-707`), and with them the one refusal left:
-  `per_target_masks` (`src/gl/draw.rs:2747`) answers GL_INVALID_OPERATION,
+  `per_target_masks` (`src/gl/draw.rs:2782`) answers GL_INVALID_OPERATION,
   naming the masks, for uneven masks under glEnable(GL_BLEND) with both
   integer and non-integer targets (pinned in
   `tests/es3_v3d_int_rg_mrt_mask.rs`).
