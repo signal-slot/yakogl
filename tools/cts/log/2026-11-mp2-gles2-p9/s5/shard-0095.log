@@ -1,0 +1,594 @@
+board-stm32mp2.sh <board-host>: shard-0095: build 66fcaa3a boot uboot-sd image sha256 73d235536a1402d8 footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0095 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=52s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0095/20261127-0616-shard-0095-73d23553/INDEX.txt
+# console excerpt: the A35 console of this run as the farm serial tool returned it, from the case results to the PSCI line (the boot text before and after is not copied); verdicts are read from it
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.38'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.38
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.4'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.40'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.40
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.42'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.42
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.48'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.49'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.49
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.5'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.5
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.8'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.9'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.comparison_ops.vertex.9
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.1'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.10'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.11'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.11
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.12'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.12
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.13'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.13
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.14'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.17'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.17
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.2'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.23'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.23
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.24'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.26'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.26
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.28'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.28
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.29'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.32'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.32
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.33'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.33
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.39'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.39
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.4'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.40'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.40
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.42'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.42
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.48'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.49'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.49
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.5'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.51'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.51
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.52'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.52
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.54'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.54
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.55'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.55
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.57'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.57
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.58'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.58
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.59'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.59
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.61'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.63'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.63
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.64'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.64
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.65'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.66'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.66
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.69'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.69
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.7'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.7
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.71'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.73'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.73
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.74'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.74
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.75'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.75
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.76'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.76
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.77'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.77
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.78'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.78
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.79'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.8'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.80'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.80
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.81'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.81
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.83'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.83
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.85'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.85
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.86'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.86
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.89'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.89
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.9'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.91'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.91
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.92'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.92
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.93'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.95'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.95
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.96'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.combined.96
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.97'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.98'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.combined.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.combined.99
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.fragment.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.fragment.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.fragment.1'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.fragment.1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.fragment.10'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.fragment.10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.fragment.11'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.conditionals.fragment.11
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.conditionals.fragment.12'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.conditionals.fragment.12
+  Fail (Image comparison failed)
+
+DONE!
+
+Test run totals:
+  Passed:        90/125 (72.0%)
+  Failed:        35/125 (28.0%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 90 passed, 35 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 10240 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 8787 ms

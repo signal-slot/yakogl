@@ -1,0 +1,594 @@
+board-stm32mp2.sh <board-host>: shard-0092: build 66fcaa3a boot uboot-sd image sha256 24aabdbc92813f3b footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0092 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0092/20261127-0609-shard-0092-24aabdbc/INDEX.txt
+# console excerpt: the A35 console of this run as the farm serial tool returned it, from the case results to the PSCI line (the boot text before and after is not copied); verdicts are read from it
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.13'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.13
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.14'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.14
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.15'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.15
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.2'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.22'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.22
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.23'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.23
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.24'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.26'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.26
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.28'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.28
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.29'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.29
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.32'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.4'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.40'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.40
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.42'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.42
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.43'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.43
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.48'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.48
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.49'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.49
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.5'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.5
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.51'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.51
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.52'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.52
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.55'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.55
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.57'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.57
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.58'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.58
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.59'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.59
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.61'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.63'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.63
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.64'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.64
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.65'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.65
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.66'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.66
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.7'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.7
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.70'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.70
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.71'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.73'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.73
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.74'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.74
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.75'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.75
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.76'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.76
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.77'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.77
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.78'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.78
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.79'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.8'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.80'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.80
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.81'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.81
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.83'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.83
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.84'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.84
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.85'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.85
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.86'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.86
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.89'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.89
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.9'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.9
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.92'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.92
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.93'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.93
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.95'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.95
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.96'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.96
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.97'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.98'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.99'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.99
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.1'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.10'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.10
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.11'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.11
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.12'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.12
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.13'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.13
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.14'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.14
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.2'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.22'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.22
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.23'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.23
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.24'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.26'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.26
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.28'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.28
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.29'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.29
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.32'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.35
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        76/125 (60.8%)
+  Failed:        49/125 (39.2%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 76 passed, 49 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 8576 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 9634 ms
