@@ -115,3 +115,53 @@ fn watchdog_lifetime_is_the_deqp_lifetime() {
     assert!(CMAKE.contains("RPI_WDOG_HOLD_S=$"));
     assert!(CMAKE.contains("CONFIG_V3D_DEQP_LIFETIME_S"));
 }
+
+const PRJ: &str = include_str!("../driver/samples/zephyr/deqp/prj.conf");
+const ZEPHYR_KCONFIG: &str = include_str!("../zephyr/Kconfig");
+
+fn num(s: &str) -> u64 {
+    match s.strip_prefix("0x") {
+        Some(h) => u64::from_str_radix(h, 16).unwrap(),
+        None => s.parse().unwrap(),
+    }
+}
+
+/// The window starts at the firmware's kernel= address, the statics the
+/// overlay's comment lists (carve-out, tiled copies, scratch, C heap) fit it,
+/// and the firmware's DTB at 0x2efec600 lies above its end.
+#[test]
+fn statics_fit_the_window_and_the_dtb_lies_above_it() {
+    let reg = sram_reg(OVERLAY);
+    let (base, size) = (num(&reg[1]), num(&reg[2]));
+    assert_eq!(base, 0x20_0000);
+    assert_eq!(size, 256 << 20);
+    assert!(base + size <= 1 << 32, "below 4 GiB (PTEs, mailbox buffer)");
+    assert_eq!(base + size, 0x1020_0000, "the end the overlay's comment names");
+    assert!(0x2efe_c600 > base + size, "the DTB is above the window");
+    assert!(OVERLAY.contains("0x2efec600") && OVERLAY.contains("0x10200000"));
+
+    let carve = num(setting("CONFIG_YAKOGL_V3D_CARVEOUT_BYTES").unwrap());
+    let tiled = num(setting("CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES").unwrap());
+    let scratch = num(setting("CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES").unwrap());
+    let heap = num(PRJ.lines().find_map(|l| l.strip_prefix("CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE=")).unwrap());
+    assert_eq!((carve, tiled, scratch, heap), (48 << 20, 16 << 20, 8 << 20, 64 << 20));
+    assert!(carve + tiled + scratch + heap < size, "the statics leave room for code and data");
+    // a conf with no scratch line would fall back to the 4 MiB default
+    assert!(ZEPHYR_KCONFIG.contains("config YAKOGL_SHADERC_SCRATCH_BYTES"));
+    // address space: the image and the carve-out's alias
+    assert!(num(setting("CONFIG_KERNEL_VM_SIZE").unwrap()) >= size + carve);
+    assert!(num(setting("CONFIG_MAX_XLAT_TABLES").unwrap()) >= 64 + carve / (2 << 20));
+}
+
+/// The console is the board defconfig's uart10 and there is no screen: the
+/// conf says so and sets no console, uart or screen symbol.
+#[test]
+fn console_is_uart10_and_there_is_no_screen() {
+    assert!(CONF.contains("uart10 as the console") && CONF.contains("no screen"));
+    assert_eq!(setting("CONFIG_PRINTK"), Some("y"));
+    for (k, _) in settings() {
+        for bad in ["UART", "CONSOLE", "BOARD_RPI5", "DISPLAY", "FRAMEBUFFER"] {
+            assert!(!k.contains(bad), "{k}");
+        }
+    }
+}
