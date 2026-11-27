@@ -2349,7 +2349,7 @@ fn a_4x_depth_frame_averages_its_d24s8_and_preloads_it() {
         assert_eq!(params.sample_count, 4);
         assert!(params.has_zs_crc_extension && params.z_write_enable);
         let ext = ZsTarget::unpack(&with(|m| m.read(fbd + 128, 64)).try_into().unwrap()).unwrap();
-        assert_eq!((ext.msaa, ext.row_stride), (Msaa::AVERAGE, 256));
+        assert_eq!((ext.msaa, ext.row_stride), (Msaa::SINGLE, 256));
         let mut again = d;
         (again.do_clear_depth, again.do_clear_stencil) = (false, false);
         // SAFETY: as in `fresh`.

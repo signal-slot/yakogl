@@ -394,7 +394,7 @@ fn check_zs(dump: &str, source: &str, target: Target, mode: ZsMode) {
         (m_params.z_clear, m_params.s_clear, m_params.z_write_enable)
     );
     /* the ZS/CRC extension, after the FBD's 128 bytes */
-    let ext = [Difference {
+    let mut ext = vec![Difference {
         block: "ZS/CRC extension".into(),
         at: 0x30,
         dump: ZS.to_le_bytes().to_vec(),
@@ -402,6 +402,16 @@ fn check_zs(dump: &str, source: &str, target: Target, mode: ZsMode) {
         cause: "S target base: Mesa 25.0.7 also writes the ZS base there with the S block format No Write \
                 (unused); Mesa 26.2.1 merges no S part for a D24S8 view (as frame_zs_tests.rs names it)",
     }];
+    if target.samples == 4 {
+        ext.push(Difference {
+            block: "ZS/CRC extension".into(),
+            at: 0x01,
+            dump: vec![0x01],
+            ours: vec![0x00],
+            cause: "ZS Target MSAA: Mesa 25.0.7 writes AVERAGE; Mesa 26.2.1's Z/S supports only SAMPLE_0 \
+                    (pan_fb.c:178-179), which is MALI_MSAA_SINGLE (frame_msaa_tests.rs names it)",
+        });
+    }
     check(
         "ZS/CRC extension",
         ours(fbd + 128, ZsCrcExtension::LENGTH),
@@ -412,7 +422,7 @@ fn check_zs(dump: &str, source: &str, target: Target, mode: ZsMode) {
     let (o_at, m_at) = (o_params.frame_shader_dcds, m_params.frame_shader_dcds);
     check("DCD 2", ours(o_at + 256, 128), mesa(m_at + 256, 128), &[]);
     let entry = |b: &[u8], i: usize| Resource::unpack(&b[16 * i..16 * i + 16].try_into().unwrap()).unwrap();
-    let mut named: Vec<Difference> = ext.into();
+    let mut named: Vec<Difference> = ext;
     let planes = usize::from(mode.z) + usize::from(mode.s);
     for (k, textures) in [(0usize, 1usize), (1, planes)] {
         let at = 128 * k as u64;
@@ -534,7 +544,7 @@ fn the_colour_preload_of_a_4x_target_is_the_board_s() {
 /// msaapre.c's `msrttz` mode: the same 4x view with its D24S8 attached on
 /// DEPTH, the second frame depth-tested against the first's depth without
 /// a clear. Mesa preloads the colour and the depth with the 1x programs
-/// (the depth-only one at preload_zs.c's address); the ZS target averages.
+/// (the depth-only one at preload_zs.c's address); the 25.0.7 dump's ZS target averages (ours is SINGLE, a named difference).
 #[test]
 fn the_depth_preload_of_a_4x_target_is_the_board_s() {
     let mode = ZsMode { z: true, s: false, binary: 0x7fff_ffff_e000, clear_depth: 0.0 };
