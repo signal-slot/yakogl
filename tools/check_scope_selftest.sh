@@ -615,5 +615,30 @@ out=$(plan tests/msaa_hw_gc_api.rs)
 expect "msaa: msaa_hw_gc_api reaches its row" '^plan  test    host-test,gpu-vivante \(tests/msaa_hw_gc_api.rs\)$' "$out"
 out=$(plan tests/pvr_msaa_rb.rs)
 expect "msaa: pvr_msaa_rb reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/pvr_msaa_rb.rs\)$' "$out"
+# the remaining multisample files, and the msaa-fbo arms (plan #339 deqp-rerun)
+out=$(plan tests/es3_mrt4_msaa_v3d.rs)
+expect "msaa: es3_mrt4_msaa_v3d reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_mrt4_msaa_v3d.rs\)$' "$out"
+out=$(plan tests/es3_rgb10a2_msaa_v3d.rs)
+expect "msaa: es3_rgb10a2_msaa_v3d reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_rgb10a2_msaa_v3d.rs\)$' "$out"
+out=$(plan tests/es3_mrt4_msaa_pvr.rs)
+expect "msaa: es3_mrt4_msaa_pvr reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/es3_mrt4_msaa_pvr.rs\)$' "$out"
+out=$(plan tests/es3_msaa_ds_resolve.rs)
+expect "msaa: es3_msaa_ds_resolve reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/es3_msaa_ds_resolve.rs\)$' "$out"
+expect "msaa: es3_msaa_ds_resolve reaches its msaa-fbo row" '^plan  test    host-test,gpu-powervr,shaderc-online,msaa-fbo \(tests/es3_msaa_ds_resolve.rs\)$' "$out"
+out=$(plan tests/es3_rgb10a2_packmsaa_fallback.rs)
+expect "msaa: es3_rgb10a2_packmsaa_fallback reaches its PowerVR row" '^plan  test    host-test,gpu-powervr,shaderc-online,test-knobs \(tests/es3_rgb10a2_packmsaa_fallback.rs\)$' "$out"
+expect "msaa: es3_rgb10a2_packmsaa_fallback reaches its GC7000 row" '^plan  test    host-test,gpu-vivante,shaderc-online,test-knobs \(tests/es3_rgb10a2_packmsaa_fallback.rs\)$' "$out"
+expect "msaa: es3_rgb10a2_packmsaa_fallback reaches its V3D report-es2 row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 \(tests/es3_rgb10a2_packmsaa_fallback.rs\)$' "$out"
+out=$(plan tests/pvr_msaa_ds_blit.rs)
+expect "msaa: pvr_msaa_ds_blit reaches its msaa-fbo row" '^plan  test    host-test,gpu-powervr,shaderc-online,msaa-fbo \(tests/pvr_msaa_ds_blit.rs\)$' "$out"
+out=$(plan src/mali/backend.rs)
+expect "msaa-fbo: a Mali change reaches es3_msaa_mali's msaa-fbo row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table,msaa-fbo \(tests/es3_msaa_mali.rs\)$' "$out"
+out=$(plan src/vivante/msaa_fbo.rs)
+expect "msaa-fbo: a GC7000 change reaches es3_msaa_gc's msaa-fbo row" '^plan  test    host-test,gpu-vivante,shaderc-online,msaa-fbo \(tests/es3_msaa_gc.rs\)$' "$out"
+expect "msaa-fbo: a GC7000 change reaches the knob library row" '^plan  test    host-test,gpu-vivante,shaderc-online,test-knobs,msaa-fbo \(--lib\)$' "$out"
+out=$(plan src/pvr/backend.rs)
+expect "msaa-fbo: a PowerVR change reaches es3_msaa_pvr's msaa-fbo row" '^plan  test    host-test,gpu-powervr,shaderc-online,msaa-fbo \(tests/es3_msaa_pvr.rs\)$' "$out"
+out=$(plan src/v3d/backend.rs)
+expect "msaa-fbo: a V3D change reaches es3_msaa_v3d's msaa-fbo row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,msaa-fbo \(tests/es3_msaa_v3d.rs\)$' "$out"
 echo "check_scope_selftest: $checks checks run (planned $checks), $fails failed"
 [ "$fails" -eq 0 ]

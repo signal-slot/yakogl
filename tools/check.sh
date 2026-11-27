@@ -2388,6 +2388,45 @@ step "test    host-test,gpu-vivante (tests/msaa_hw_gc_api.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante --test msaa_hw_gc_api
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_msaa_rb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_msaa_rb
+# The multisample files that had no row of their own (four-target 4x, RGB10_A2
+# 4x, the depth/stencil resolve and the packed-4x fallback), each with its
+# header's feature set, `msaa-fbo` off.
+step "test    $V3D_CONFIG (tests/es3_mrt4_msaa_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_mrt4_msaa_v3d
+step "test    $V3D_CONFIG (tests/es3_rgb10a2_msaa_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_rgb10a2_msaa_v3d
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_mrt4_msaa_pvr.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_mrt4_msaa_pvr
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_msaa_ds_resolve.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_msaa_ds_resolve
+step "test    host-test,gpu-powervr,shaderc-online,test-knobs (tests/es3_rgb10a2_packmsaa_fallback.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,test-knobs --test es3_rgb10a2_packmsaa_fallback
+step "test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/es3_rgb10a2_packmsaa_fallback.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --test es3_rgb10a2_packmsaa_fallback
+step "test    $V3D_CONFIG,report-es2 (tests/es3_rgb10a2_packmsaa_fallback.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG,report-es2" --test es3_rgb10a2_packmsaa_fallback
+# The back ends' multisample tests with `msaa-fbo` on (max_samples 4 on the
+# V3D, PowerVR, GC7000UL and Mali tables): the 4x FBO draw, store and resolve
+# arms of each file, and the GC7000UL library suite with the knobs, whose 4x
+# window pins drop out under the feature. Reached by each back end's scope.
+scope v3d pvr vivante mali
+step "test    $V3D_CONFIG,msaa-fbo (tests/es3_msaa_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG,msaa-fbo" --test es3_msaa_v3d
+step "test    host-test,gpu-powervr,shaderc-online,msaa-fbo (tests/es3_msaa_pvr.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test es3_msaa_pvr
+step "test    host-test,gpu-powervr,shaderc-online,msaa-fbo (tests/pvr_msaa_rb.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test pvr_msaa_rb
+step "test    host-test,gpu-powervr,shaderc-online,msaa-fbo (tests/pvr_msaa_ds_blit.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test pvr_msaa_ds_blit
+step "test    host-test,gpu-powervr,shaderc-online,msaa-fbo (tests/es3_msaa_ds_resolve.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test es3_msaa_ds_resolve
+step "test    host-test,gpu-vivante,shaderc-online,msaa-fbo (tests/es3_msaa_gc.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,msaa-fbo --test es3_msaa_gc
+step "test    host-test,gpu-mali,shaderc-online,no-shader-table,msaa-fbo (tests/es3_msaa_mali.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table,msaa-fbo --test es3_msaa_mali
+step "test    $KNOBS_CONFIG,msaa-fbo (--lib)" \
+  cargo_test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG,msaa-fbo" --lib
+scope v3d
 # The graphicsfuzz bubblesort_flag shaders through the PowerVR online chain and the USC byte model.
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_metamorph_bubblesort.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_metamorph_bubblesort
