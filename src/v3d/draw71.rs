@@ -332,6 +332,7 @@ pub enum Val {
 
 impl Val {
     /// The value as the CLIF dump prints it (`%u`, `%d`, `%f`).
+    #[cfg(feature = "host-test")]
     pub fn clif_text(&self) -> String {
         match *self {
             Val::U(v) => v.to_string(),
@@ -341,6 +342,7 @@ impl Val {
     }
 }
 
+#[cfg(feature = "host-test")]
 fn put(buf: &mut [u8], f: &Field, v: Val) {
     let bits: u64 = match v {
         Val::U(v) => v,
@@ -359,6 +361,7 @@ fn put(buf: &mut [u8], f: &Field, v: Val) {
     }
 }
 
+#[cfg(feature = "host-test")]
 fn pack_pairs<const N: usize>(spec: &PacketSpec, pairs: &[(&'static Field, Val)]) -> [u8; N] {
     assert_eq!(spec.length(), N);
     let mut out = [0u8; N];
@@ -374,13 +377,16 @@ fn pack_pairs<const N: usize>(spec: &PacketSpec, pairs: &[(&'static Field, Val)]
 pub trait Packet {
     const SPEC: &'static PacketSpec;
     /// Every field of the layout once, with its value.
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)>;
 }
 
+#[cfg(feature = "host-test")]
 fn b(v: bool) -> Val {
     Val::U(u64::from(v))
 }
 
+#[cfg(feature = "host-test")]
 fn u(v: u32) -> Val {
     Val::U(u64::from(v))
 }
@@ -654,6 +660,7 @@ pub struct CfgBits {
 
 impl Packet for CfgBits {
     const SPEC: &'static PacketSpec = &CFG_BITS_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -677,6 +684,7 @@ impl Packet for CfgBits {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl CfgBits {
     pub fn pack(&self) -> [u8; 4] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -691,11 +699,13 @@ pub struct BlendEnables {
 
 impl Packet for BlendEnables {
     const SPEC: &'static PacketSpec = &BLEND_ENABLES_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         vec![(Self::SPEC.field("Mask"), u(u32::from(self.mask)))]
     }
 }
 
+#[cfg(feature = "host-test")]
 impl BlendEnables {
     pub fn pack(&self) -> [u8; 2] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -717,6 +727,7 @@ pub struct BlendCfg {
 
 impl Packet for BlendCfg {
     const SPEC: &'static PacketSpec = &BLEND_CFG_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -731,6 +742,7 @@ impl Packet for BlendCfg {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl BlendCfg {
     pub fn pack(&self) -> [u8; 5] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -746,11 +758,13 @@ pub struct ColorWriteMasks {
 
 impl Packet for ColorWriteMasks {
     const SPEC: &'static PacketSpec = &COLOR_WRITE_MASKS_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         vec![(Self::SPEC.field("Mask"), u(self.mask))]
     }
 }
 
+#[cfg(feature = "host-test")]
 impl ColorWriteMasks {
     pub fn pack(&self) -> [u8; 5] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -774,6 +788,7 @@ pub struct StencilCfg {
 
 impl Packet for StencilCfg {
     const SPEC: &'static PacketSpec = &STENCIL_CFG_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -790,6 +805,7 @@ impl Packet for StencilCfg {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl StencilCfg {
     pub fn pack(&self) -> [u8; 6] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -808,6 +824,7 @@ pub struct ClipWindow {
 
 impl Packet for ClipWindow {
     const SPEC: &'static PacketSpec = &CLIP_WINDOW_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -819,6 +836,7 @@ impl Packet for ClipWindow {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl ClipWindow {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -838,6 +856,7 @@ pub struct ViewportOffset {
 
 impl Packet for ViewportOffset {
     const SPEC: &'static PacketSpec = &VIEWPORT_OFFSET_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -849,6 +868,7 @@ impl Packet for ViewportOffset {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl ViewportOffset {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -864,12 +884,14 @@ pub struct ClipperZMinMax {
 
 impl Packet for ClipperZMinMax {
     const SPEC: &'static PacketSpec = &CLIPPER_Z_MIN_MAX_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![(s.field("Maximum Zw"), Val::F(self.maximum_zw)), (s.field("Minimum Zw"), Val::F(self.minimum_zw))]
     }
 }
 
+#[cfg(feature = "host-test")]
 impl ClipperZMinMax {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -886,6 +908,7 @@ pub struct ClipperXy {
 
 impl Packet for ClipperXy {
     const SPEC: &'static PacketSpec = &CLIPPER_XY_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -895,6 +918,7 @@ impl Packet for ClipperXy {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl ClipperXy {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -910,6 +934,7 @@ pub struct ClipperZ {
 
 impl Packet for ClipperZ {
     const SPEC: &'static PacketSpec = &CLIPPER_Z_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -919,6 +944,7 @@ impl Packet for ClipperZ {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl ClipperZ {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -936,6 +962,7 @@ pub struct DepthOffset {
 
 impl Packet for DepthOffset {
     const SPEC: &'static PacketSpec = &DEPTH_OFFSET_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -946,6 +973,7 @@ impl Packet for DepthOffset {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl DepthOffset {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -961,11 +989,13 @@ pub struct PointSize {
 
 impl Packet for PointSize {
     const SPEC: &'static PacketSpec = &POINT_SIZE_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         vec![(Self::SPEC.field("Point Size"), Val::F(self.size))]
     }
 }
 
+#[cfg(feature = "host-test")]
 impl PointSize {
     pub fn pack(&self) -> [u8; 5] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -980,11 +1010,13 @@ pub struct LineWidth {
 
 impl Packet for LineWidth {
     const SPEC: &'static PacketSpec = &LINE_WIDTH_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         vec![(Self::SPEC.field("Line width"), Val::F(self.width))]
     }
 }
 
+#[cfg(feature = "host-test")]
 impl LineWidth {
     pub fn pack(&self) -> [u8; 5] {
         pack_pairs(Self::SPEC, &self.pairs())
@@ -1002,6 +1034,7 @@ pub struct BlendCcolor {
 
 impl Packet for BlendCcolor {
     const SPEC: &'static PacketSpec = &BLEND_CCOLOR_SPEC;
+    #[cfg(feature = "host-test")]
     fn pairs(&self) -> Vec<(&'static Field, Val)> {
         let s = Self::SPEC;
         vec![
@@ -1013,6 +1046,7 @@ impl Packet for BlendCcolor {
     }
 }
 
+#[cfg(feature = "host-test")]
 impl BlendCcolor {
     pub fn pack(&self) -> [u8; 9] {
         pack_pairs(Self::SPEC, &self.pairs())
