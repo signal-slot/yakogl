@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image S03a: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S03a.console.txt
+S03a.console.txt: MISSING: no summary line
+mustpass cases with a result: 204 (of 276 seen)
+group                                       pass   fail    n/s  other
+shaders                                      204      0      0      0
+TOTAL                                        204      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  S03a: no counters; 276 result lines seen

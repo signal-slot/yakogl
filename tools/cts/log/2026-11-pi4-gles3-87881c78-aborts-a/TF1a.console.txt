@@ -1,0 +1,1038 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 87881c78, 2026-11-27, image TF1a: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.05 [sdcard] recover4.elf not found
+  5.05 [sdcard] recovery.elf not found
+  5.85 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.91 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.92 0x00d03114 0x00000000 0x00001fff
+  5.96 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.32 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.266879:0: arasan: arasan_emmc_open
+MESS:00:00:05.268538:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.388763:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.401633:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.435916:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.437328:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.441713:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.603969:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.606769:0: brfs: File read: 71 bytes
+MESS:00:00:05.699592:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.704094:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.718190:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.217252:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.222808:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.231843:0: *** Restart logging
+MESS:00:00:06.233615:0: brfs: File read: 71 bytes
+MESS:00:00:06.312092:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.317124:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.331608:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.339499:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.343319:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.352077:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.357568:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.379522:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.395771:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.399057:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.439742:0: brfs: File read: 56249 bytes
+MESS:00:00:06.460582:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.525664:0: brfs: File read: 5971 bytes
+MESS:00:00:06.528482:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.571334:0: brfs: File read: 71 bytes
+MESS:00:00:06.575004:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.578406:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.584257:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.740832:0: brfs: File read: 145 bytes
+MESS:00:00:08.174137:0: brfs: File read: /mfs/sd/yakogl-TF1a.bin
+MESS:00:00:08.177038:0: Loaded 'yakogl-TF1a.bin' to 0x200000 size 0x1003f58
+MESS:00:00:08.183737:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.192510:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.199040:0: uart: Baud rate change done...
+MESS:00:00:08.201063:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 87881c78
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uint,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_float,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_int,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uint,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_float,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_int,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uint,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec2,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec3,dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec4,dEQP-GLES3.functional.transform_feedback.array.interleaved.points.*,dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3391000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x20107c ca 0x20107c ra 0x0 qba 0x201000 qea 0x20107c ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2
+v3d_deqp: case #0 P 591ms k2/10 c20156/20197 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x3
+v3d_deqp: case #1 P 59ms k2/10 c20160/20215 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x4
+v3d_deqp: case #2 P 61ms k2/11 c20166/20235 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3
+v3d_deqp: case #3 P 65ms k2/11 c20175/20251 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x2
+v3d_deqp: case #4 P 61ms k2/11 c20175/20251 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x4
+v3d_deqp: case #5 P 68ms k2/12 c20178/20274 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4
+v3d_deqp: case #6 P 73ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x2
+v3d_deqp: case #7 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x3
+v3d_deqp: case #8 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uint
+v3d_deqp: case #9 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec2
+v3d_deqp: case #10 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec3
+v3d_deqp: case #11 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec4
+v3d_deqp: case #12 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec2
+v3d_deqp: case #13 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec3
+v3d_deqp: case #14 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec4
+v3d_deqp: case #15 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_float
+v3d_deqp: case #16 P 56ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_int
+v3d_deqp: case #17 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec2
+v3d_deqp: case #18 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec3
+v3d_deqp: case #19 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec4
+v3d_deqp: case #20 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2
+v3d_deqp: case #21 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x3
+v3d_deqp: case #22 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x4
+v3d_deqp: case #23 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3
+v3d_deqp: case #24 P 64ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x2
+v3d_deqp: case #25 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x4
+v3d_deqp: case #26 P 67ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4
+v3d_deqp: case #27 P 72ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x2
+v3d_deqp: case #28 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x3
+v3d_deqp: case #29 P 69ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uint
+v3d_deqp: case #30 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec2
+v3d_deqp: case #31 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec3
+v3d_deqp: case #32 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec4
+v3d_deqp: case #33 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec2
+v3d_deqp: case #34 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec3
+v3d_deqp: case #35 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec4
+v3d_deqp: case #36 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_float
+v3d_deqp: case #37 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_int
+v3d_deqp: case #38 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec2
+v3d_deqp: case #39 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec3
+v3d_deqp: case #40 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec4
+v3d_deqp: case #41 P 64ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2
+v3d_deqp: case #42 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x3
+v3d_deqp: case #43 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x4
+v3d_deqp: case #44 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3
+v3d_deqp: case #45 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x2
+v3d_deqp: case #46 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x4
+v3d_deqp: case #47 P 68ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4
+v3d_deqp: case #48 P 74ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x2
+v3d_deqp: case #49 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x3
+v3d_deqp: case #50 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uint
+v3d_deqp: case #51 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec2
+v3d_deqp: case #52 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec3
+v3d_deqp: case #53 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec4
+v3d_deqp: case #54 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec2
+v3d_deqp: case #55 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec3
+v3d_deqp: case #56 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec4
+v3d_deqp: case #57 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_float
+v3d_deqp: case #58 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_int
+v3d_deqp: case #59 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec2
+v3d_deqp: case #60 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec3
+v3d_deqp: case #61 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec4
+v3d_deqp: case #62 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2
+v3d_deqp: case #63 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2x3
+v3d_deqp: case #64 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2x4
+v3d_deqp: case #65 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3
+v3d_deqp: case #66 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3x2
+v3d_deqp: case #67 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3x4
+v3d_deqp: case #68 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4
+v3d_deqp: case #69 P 72ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4x2
+v3d_deqp: case #70 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4x3
+v3d_deqp: case #71 P 69ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uint
+v3d_deqp: case #72 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec2
+v3d_deqp: case #73 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec3
+v3d_deqp: case #74 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec4
+v3d_deqp: case #75 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec2
+v3d_deqp: case #76 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec3
+v3d_deqp: case #77 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec4
+v3d_deqp: case #78 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_float
+v3d_deqp: case #79 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_int
+v3d_deqp: case #80 P 56ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec2
+v3d_deqp: case #81 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec3
+v3d_deqp: case #82 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec4
+v3d_deqp: case #83 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2
+v3d_deqp: case #84 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2x3
+v3d_deqp: case #85 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2x4
+v3d_deqp: case #86 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3
+v3d_deqp: case #87 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3x2
+v3d_deqp: case #88 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3x4
+v3d_deqp: case #89 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4
+v3d_deqp: case #90 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4x2
+v3d_deqp: case #91 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4x3
+v3d_deqp: case #92 P 69ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uint
+v3d_deqp: case #93 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec2
+v3d_deqp: case #94 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec3
+v3d_deqp: case #95 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec4
+v3d_deqp: case #96 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec2
+v3d_deqp: case #97 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec3
+v3d_deqp: case #98 P 60ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec4
+v3d_deqp: case #99 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_float
+v3d_deqp: case #100 P 57ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_int
+v3d_deqp: case #101 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec2
+v3d_deqp: case #102 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec3
+v3d_deqp: case #103 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec4
+v3d_deqp: case #104 P 64ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2
+v3d_deqp: case #105 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2x3
+v3d_deqp: case #106 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2x4
+v3d_deqp: case #107 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3
+v3d_deqp: case #108 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3x2
+v3d_deqp: case #109 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3x4
+v3d_deqp: case #110 P 67ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4
+v3d_deqp: case #111 P 72ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4x2
+v3d_deqp: case #112 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4x3
+v3d_deqp: case #113 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uint
+v3d_deqp: case #114 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec2
+v3d_deqp: case #115 P 59ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec3
+v3d_deqp: case #116 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec4
+v3d_deqp: case #117 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec2
+v3d_deqp: case #118 P 58ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec3
+v3d_deqp: case #119 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec4
+v3d_deqp: case #120 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.points.mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_float
+v3d_deqp: case #121 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_int
+v3d_deqp: case #122 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec2
+v3d_deqp: case #123 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec3
+v3d_deqp: case #124 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec4
+v3d_deqp: case #125 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2
+v3d_deqp: case #126 P 64ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2x3
+v3d_deqp: case #127 P 68ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2x4
+v3d_deqp: case #128 P 73ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3
+v3d_deqp: case #129 P 77ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3x2
+v3d_deqp: case #130 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3x4
+v3d_deqp: case #131 P 83ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4
+v3d_deqp: case #132 P 95ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4x2
+v3d_deqp: case #133 P 78ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4x3
+v3d_deqp: case #134 P 86ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uint
+v3d_deqp: case #135 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec2
+v3d_deqp: case #136 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec3
+v3d_deqp: case #137 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec4
+v3d_deqp: case #138 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec2
+v3d_deqp: case #139 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec3
+v3d_deqp: case #140 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec4
+v3d_deqp: case #141 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_float
+v3d_deqp: case #142 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_int
+v3d_deqp: case #143 P 61ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec2
+v3d_deqp: case #144 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec3
+v3d_deqp: case #145 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec4
+v3d_deqp: case #146 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2
+v3d_deqp: case #147 P 63ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2x3
+v3d_deqp: case #148 P 68ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2x4
+v3d_deqp: case #149 P 72ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3
+v3d_deqp: case #150 P 76ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3x2
+v3d_deqp: case #151 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3x4
+v3d_deqp: case #152 P 81ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4
+v3d_deqp: case #153 P 94ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4x2
+v3d_deqp: case #154 P 77ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4x3
+v3d_deqp: case #155 P 86ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uint
+v3d_deqp: case #156 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec2
+v3d_deqp: case #157 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec3
+v3d_deqp: case #158 P 69ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec4
+v3d_deqp: case #159 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec2
+v3d_deqp: case #160 P 65ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec3
+v3d_deqp: case #161 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec4
+v3d_deqp: case #162 P 74ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_float'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_float
+v3d_deqp: case #163 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_int'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_int
+v3d_deqp: case #164 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec2
+v3d_deqp: case #165 P 66ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec3
+v3d_deqp: case #166 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec4
+v3d_deqp: case #167 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2
+v3d_deqp: case #168 P 64ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2x3
+v3d_deqp: case #169 P 69ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2x4
+v3d_deqp: case #170 P 72ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3
+v3d_deqp: case #171 P 77ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3x2
+v3d_deqp: case #172 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3x4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3x4
+v3d_deqp: case #173 P 86ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4
+v3d_deqp: case #174 P 96ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4x2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4x2
+v3d_deqp: case #175 P 79ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4x3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4x3
+v3d_deqp: case #176 P 87ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uint
+v3d_deqp: case #177 P 62ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec2
+v3d_deqp: case #178 P 67ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec3
+v3d_deqp: case #179 P 71ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec4
+v3d_deqp: case #180 P 74ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec2
+v3d_deqp: case #181 P 67ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec3
+v3d_deqp: case #182 P 70ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec4
+v3d_deqp: case #183 P 76ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec4
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        184/184 (100.0%)
+  Failed:        0/184 (0.0%)
+  Not supported: 0/184 (0.0%)
+  Warnings:      0/184 (0.0%)
+  Waived:        0/184 (0.0%)
+deqp: done: 184 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 184 cases begun, 184 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2,dEQP-GLES3.functional.transfo...
+  184 cases in 12556 ms, record at 12 s after boot, reset at ~250 s
+  totals: P 184  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 184 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 184 cases begun, 184 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 13; slowest #0 591 ms
+  carve-out (KiB, of 48636): after #0 20156, last 20189, high-water 20314
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x20107c ca 0x20107c ra 0x0 qba 0x201000 qea 0x20107c ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 3680 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20145408 bytes used now, 20802304 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 14/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 1780 calls, 79543 map reads (44 a call, at most 1153 in one); free runs 6, longest 29096192 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 3680 jobs ended; emitted 98964, skipped 100674; groups compared 56304, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3391000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+v3d_deqp: build 87881c78 DONE, all passed: 184 cases, P 184 F 0 R 0 N 0 other 0
