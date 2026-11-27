@@ -1367,3 +1367,71 @@ fn two_4x_fbos_keep_their_own_samples() {
     assert_eq!(e, GL_NO_ERROR);
     check_halves(&read_pixels(dst.fb), |x, y| x + y > 7, |x, y| x + y == 7);
 }
+
+/// Deleting a 4x renderbuffer (and its framebuffer) frees its slot in the
+/// sample store (`mali_attachment_gone`, the id of `GlesDraw::target_id`): a
+/// new FBO of the same size, whose storage comes back at the same address,
+/// starts from its own image, not from the deleted one's samples, and the
+/// store has room for it beside another FBO's slot.
+#[cfg(feature = "msaa-fbo")]
+#[test]
+fn deleting_a_4x_renderbuffer_frees_its_slot() {
+    let _g = context();
+    let old = framebuffer(4, false).expect("4 samples are legal storage");
+    program();
+    clear_black();
+    let first = draw(&HALF);
+    assert_kept_and_resolved(&gpu::frames(), first.gpu);
+    // SAFETY: the framebuffer and renderbuffer this test made.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &old.fb);
+        glDeleteRenderbuffers(old.rbs.len() as GLsizei, old.rbs.as_ptr());
+        assert_eq!(glGetError(), GL_NO_ERROR);
+    }
+    let fbo = framebuffer(4, false).expect("4 samples are legal storage");
+    gpu::reset();
+    /* no clear: only the new storage may be preloaded */
+    let second = draw(&OTHER_HALF);
+    assert_eq!(second.gpu, first.gpu, "the premise: the same address and size");
+    let frames = gpu::frames();
+    assert_kept_and_resolved(&frames, second.gpu);
+    let p = frames[0].preload.expect("a frame with no clear starts from the image");
+    assert_eq!((p.samples, p.plane.pointer), (1, second.gpu), "not the deleted renderbuffer's samples");
+    let (e, dst) = resolve_blit(&fbo, false);
+    assert_eq!(e, GL_NO_ERROR);
+    check_halves(&read_pixels(dst.fb), |x, y| x + y > 7, |x, y| x + y == 7);
+}
+
+/// A renderbuffer made while the old one still lives never meets the old
+/// one's samples (another identity), and the old one keeps them: the slot is
+/// found by `(target_id, target_gen)`, not by what address it sits at.
+#[cfg(feature = "msaa-fbo")]
+#[test]
+fn a_new_renderbuffer_at_a_reused_address_does_not_reload_stale_samples() {
+    let _g = context();
+    let old = framebuffer(4, false).expect("4 samples are legal storage");
+    program();
+    clear_black();
+    let first = draw(&HALF);
+    let store_old = assert_kept_and_resolved(&gpu::frames(), first.gpu);
+    /* the old storage is released by its owner's respecification to another
+     * size, then a new renderbuffer is given the freed address */
+    // SAFETY: the renderbuffer this test made, bound as the colour attachment.
+    unsafe {
+        glBindRenderbuffer(GL_RENDERBUFFER, old.rbs[0]);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, 4, 4);
+        assert_eq!(glGetError(), GL_NO_ERROR);
+    }
+    let fbo = framebuffer(4, false).expect("4 samples are legal storage");
+    gpu::reset();
+    let second = draw(&OTHER_HALF);
+    let frames = gpu::frames();
+    assert_kept_and_resolved(&frames, second.gpu);
+    let p = frames[0].preload.expect("a frame with no clear starts from the image");
+    assert_eq!(p.samples, 1, "the new renderbuffer's image into every sample, not stale samples");
+    assert_ne!(p.plane.pointer, store_old);
+    let (e, dst) = resolve_blit(&fbo, false);
+    assert_eq!(e, GL_NO_ERROR);
+    check_halves(&read_pixels(dst.fb), |x, y| x + y > 7, |x, y| x + y == 7);
+}

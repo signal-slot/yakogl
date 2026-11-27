@@ -468,6 +468,11 @@ struct TargetKey {
     /// Colour targets 1.. of a draw of several, in order, `None` past the
     /// last ([`colour_targets`]): another set is another frame.
     more: [Option<SampleKey>; DRAW_TARGETS - 1],
+    /// `GlesDraw::target_id` / `target_gen`: the renderbuffer behind colour
+    /// target 0 and its storage generation (0: the window, a texture, an
+    /// EGLImage). The sample store's key ([`sample_id`]).
+    id: u32,
+    gen: u32,
 }
 
 /// Where one plane of the open frame's attachment starts.
@@ -580,6 +585,21 @@ struct SampleMem {
     mem: OsalGpuMem,
     /// The target whose samples it holds.
     key: SampleKey,
+    /// The store id it is kept under ([`sample_id`]).
+    id: u64,
+}
+
+/// The sample store's id and generation for a target: the renderbuffer's
+/// `(target_id, target_gen)` (`GlesDraw`), so a deleted or respecified
+/// renderbuffer never meets its old samples again whatever address its new
+/// storage gets. A target with no renderbuffer (the window) keeps the
+/// address, tagged in bit 63 so that it cannot meet a renderbuffer id.
+fn sample_id(key: &TargetKey) -> (u64, u32) {
+    if key.id != 0 {
+        (u64::from(key.id), key.gen)
+    } else {
+        (1 << 63 | key.gpu, 0)
+    }
 }
 
 /// A slot that leaves the store: its memory back to the OSAL.
@@ -646,16 +666,17 @@ fn sample_store(g: &mut MaliState, key: &TargetKey, t: &frame::Target) -> Option
     }
     let plane = msaa_hw::store_surface_stride(t.row_stride, t.height)?;
     let want = SampleKey::of(key);
-    if g.samples.get(t.gpu).is_some_and(|s| s.handle.key != want) {
-        g.samples.gone(t.gpu, free_sample_mem);
+    let (id, gen) = sample_id(key);
+    if g.samples.get(id).is_some_and(|s| s.handle.key != want) {
+        g.samples.gone(id, free_sample_mem);
     }
     /* four planes of the target's rows: its row stride (a multiple of 64,
      * so of the texel's bytes) as the packed width */
     let bpp = t.format.bytes();
     let size = msaa_hw::sample_size(t.row_stride / bpp, t.height, bpp);
     let slot = g.samples.get_or_alloc(
-        t.gpu,
-        0,
+        id,
+        gen,
         size,
         |bytes| {
             let mut mem = OsalGpuMem::ZERO;
@@ -664,7 +685,7 @@ fn sample_store(g: &mut MaliState, key: &TargetKey, t: &frame::Target) -> Option
                 glog_once!("mali: no sample store of {} bytes: a 4x frame averages into its target", bytes);
                 return None;
             }
-            Some(SampleMem { mem, key: want })
+            Some(SampleMem { mem, key: want, id })
         },
         free_sample_mem,
     )?;
@@ -3000,6 +3021,8 @@ impl TargetKey {
             ds_w: d.ds_w,
             ds_h: d.ds_h,
             more,
+            id: d.target_id,
+            gen: d.target_gen,
         }
     }
 
@@ -3220,7 +3243,7 @@ fn submit_open(g: &mut MaliState) -> i32 {
     g.slots[o.slot].in_flight = Some(InFlight { kick: g.kicks, fence, wait_failed: false });
     g.next = (o.slot + 1) % SLOTS;
     if o.kept.is_some() {
-        if let Some(s) = g.samples.get(o.target.gpu).filter(|s| s.handle.key == SampleKey::of(&o.key)) {
+        if let Some(s) = g.samples.get(sample_id(&o.key).0).filter(|s| s.handle.key == SampleKey::of(&o.key)) {
             s.mark_stored();
         }
     }
@@ -3711,6 +3734,13 @@ pub extern "C" fn mali_attachment_gone(id: u32) {
      * (a surface's memory EGL frees without `texture_released`). A 4x
      * renderbuffer's go with its storage ([`mali_texture_released`]) */
     drop_samples(g, true, surface);
+    /* a renderbuffer going (`ds_object_id(serial, false)`, the id of
+     * `GlesDraw::target_id`) frees its slot; an open frame that keeps its
+     * samples is ended first, so its draws run before the slot goes */
+    if g.open.is_some_and(|o| o.kept.is_some() && o.key.id == id) {
+        end_open_for(g, "its renderbuffer went");
+    }
+    g.samples.gone(u64::from(id), free_sample_mem);
     for p in g.planes.iter_mut().filter(|p| p.id == id) {
         *p = NO_PLANE;
     }
