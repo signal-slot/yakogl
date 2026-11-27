@@ -271,7 +271,8 @@ west build -p always -b rpi_5 -d build/rpi5_gl_test yakogl/driver/samples/zephyr
 #   west build -p always -b rpi_5 driver/samples/zephyr/gl_test -- -DYAKOGL_WERROR=ON
 ```
 
-Expected results of the six cases: 5 of 6 pass (5, 58, 66, 67, 102); case 59
+Expected results of the six cases (the first board run never reached them,
+see "On the board" below): 5 of 6 pass (5, 58, 66, 67, 102); case 59
 is refused by name, with the 4.2 string ("the draw reads stencil an earlier
 job wrote, and the target has no depth/stencil buffer to keep it in",
 `tests/v3d71_refuse.rs`). Case 67 is drawn with no refusal: the 7.1 job loads
@@ -297,7 +298,21 @@ The board's ssh host and console come from the environment only:
 `BOARD_HOST` and `BOARD_UART` (or `PI5_HOST` and `PI5_UART`). Never write a
 value into a file or a commit.
 
-On the board: pending: the first run (board71).
+On the board (2026-11-27, `d2dbaa7e`): the first run, one
+`tools/board.sh pi5 run` of the image built from `85afd0cf` (record
+`records/rpi5/20261127-1119-gltest71-85afd0cf`, gitignored, redacted): all
+six cases FAIL for **one** named cause, logged once before case 5 —
+`yakogl/v3d71: draw refused: V3D 7.1: the table records no draw or clear in
+this build (the 7.1 modules are host-test only)` (`table71::REF_NO_RECORDING`):
+the product build of the 7.1 table has no recording path (the 7.1 modules
+compile only under the crate's `host-test` feature, `src/v3d/mod.rs`), so
+no GPU job was submitted (`jobs 0 submitted`), every clear and draw raised
+GL error 0x502, and cases 59 and 67 never reached their own refusals. The
+run printed `v3d_gl_test: 0 of 6 cases passed (205 ms)` and ended
+`v3d_gl_test RECORD end, build 85afd0cf`; the watchdog brought Linux back
+374 s after the reboot. The run replays in `tools/board_selftest.sh` (its
+console excerpt is in `tools/testdata/`). The 5-of-6 expectation above
+awaits an image whose 7.1 back end is built for the product.
 
 ## NanoPC-T6 (Mali-G610)
 
