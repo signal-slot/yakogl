@@ -27,7 +27,7 @@ mod mali_ref;
 
 /// The references the fix made byte-equal, without the `deqp_irindex_`
 /// prefix: each has a byte-compare test below that is not ignored.
-const LOWERED: &[&str] = &["pair_hi_unread", "pair_lo_unread"];
+const LOWERED: &[&str] = &["b2f16_pair", "pair_hi_unread", "pair_lo_unread", "val16_abs_fold"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -48,17 +48,16 @@ const MIXED: &str =
 /// references met `Defect(IrIndex)` at `3497799a` (the note's section 2 names the
 /// site of each); `sqrt_op_value` is past it now ([`MIXED`]).
 const REFUSED: &[(&str, &str)] = &[
-    ("b2f16_pair", IR_INDEX),
     ("load_mat3", IR_INDEX),
     ("load_vec3_cmp", MIXED),
     ("mat3_uniform_conv", ALGEBRAIC),
     ("mat4_pair_unread", IR_INDEX),
     ("sqrt_op_value", MIXED),
-    ("val16_abs_fold", IR_INDEX),
 ];
 
+/// `vec2(bvec2(v))`: the two-lane `B2f.16` is one `MUX.v2i16` of the mask
+/// (`emit.rs`), folded into its compare (`FCMP_OR.v2f16.ne.f1`).
 #[test]
-#[ignore = "Defect(IrIndex): emit.rs:487, select_highp vectorises bvec2(v) -> vec2 into a two-lane B2f.16 that emit has no encoding for"]
 fn b2f16_pair() {
     mali_ref::assert_matches("deqp_irindex_b2f16_pair");
 }
@@ -106,8 +105,9 @@ fn sqrt_op_value() {
     mali_ref::assert_matches("deqp_irindex_sqrt_op_value");
 }
 
+/// `abs(a - b) <= eps * abs(b) + eps` of `a` 0.0: the one fp16 `abs(b)`
+/// stands at its first reader's place, the sum's (`nir_fs.rs` `walk`).
 #[test]
-#[ignore = "Defect(IrIndex): nir_fs.rs:10697 (src32), an fp16 fabs of a uniform has no value when read (since 0fd576ea; compiled at ab9cde96)"]
 fn val16_abs_fold() {
     mali_ref::assert_matches("deqp_irindex_val16_abs_fold");
 }

@@ -393,6 +393,10 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
          * else value, the then value, the condition */
         (Alu::B2f, 32, 1) => ins(p, Op::MuxI32, &[ZERO, ONE, s[0]])?,
         (Alu::B2f, 16, 1) => ins(p, Op::MuxV2i16, &[ZERO, ONE_F16, s[0].swz(Swz::H00)])?,
+        /* of two lanes (`vec2(bvec2(v))`): the mask whole, 1.0 in both
+         * halves; opt.rs folds it into its compare's `.f1` (deqp_irindex
+         * _b2f16_pair: `FCMP_OR.v2f16.ne.f1 r0, r0^, 0x0, 0x0`) */
+        (Alu::B2f, 16, 2) => ins(p, Op::MuxV2i16, &[ZERO, ONE_F16, s[0]])?,
         (Alu::Bcsel, 32, 1) => ins(p, Op::MuxI32, &[s[2], s[1], s[0]])?,
         /* f2i16 of a 32-bit source is the same instruction, its low half
          * the value (:3127-3135) */

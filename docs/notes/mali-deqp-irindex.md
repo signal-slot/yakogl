@@ -213,10 +213,19 @@ lane is converted alone, Mesa's `FADD.f32 r0.h0, r0^, 0x0.neg` after the
 (`swizzles.vector_swizzles.mediump_ivec2_gggg_fragment`) is byte-equal by
 the same change.
 
-Still `Defect(IrIndex)`: `b2f16_pair` (15; Mesa's words are one two-lane
-`FCMP_OR.v2f16.ne.f1`, the compare writing the float), `val16_abs_fold` (6),
-`load_mat3` (18) and `mat4_pair_unread` (10). `load_vec3_cmp`,
-`sqrt_op_value` and `mat3_uniform_conv` are named refusals, as before.
+**Landed since (the Mali compiler train 2): `b2f16_pair` (15) and
+`val16_abs_fold` (6) are byte-equal.** The two-lane `B2f.16` is one
+`MUX.v2i16` of the mask (`emit.rs`), which `opt.rs` folds into its compare
+(`FCMP_OR.v2f16.ne.f1`). A one-lane fp16 operation CSE'd with a later IR
+instruction's stands at its first reader's place, as the 32-bit ones did
+(`nir_fs.rs` `walk`): the `abs(b)` of `isOk` is made before the `FMA.v2f16`
+that reads it. `deqp_constprod_fma_foldcall_acos_vs` and
+`deqp_fmaloc_fma_const_asin` (the same `isOk` under a constant varying) are
+byte-equal by the same change.
+
+Still `Defect(IrIndex)`: `load_mat3` (18) and `mat4_pair_unread` (10).
+`load_vec3_cmp`, `sqrt_op_value` and `mat3_uniform_conv` are named
+refusals, as before.
 
 ### 2.2 Is it a regression of intval step 1 (`ab9cde96`)?
 
