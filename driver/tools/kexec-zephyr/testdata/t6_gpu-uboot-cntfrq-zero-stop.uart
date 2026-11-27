@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+U-Boot 2026.07-armbian (made up: a record of the CNTFRQ_EL0 0 stop, not board output)
+=> go 0x10000000
+## Starting application at 0x10000000 ...
+T6:A EL2 HCR_EL2 0x0000000080000020 -> 0x0000000080000000 SCTLR_EL2 0x0000000030c50830 VBAR_EL2 0x00000000efec1800 -> 0x0000000010001000 CNTFRQ_EL0 0
+T6:B console up (uart2 through the ns16550 driver)
+t6: CNTFRQ_EL0 0: no time base, the osal and firmware entries refuse it

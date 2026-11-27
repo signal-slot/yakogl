@@ -293,6 +293,9 @@ the kexec ones):
   `t6_gpu-uboot-clock-refused-stop9.uart` (FAIL). The kexec table predicts
   the supply on and no enable line, so a supply-off record read as kexec
   FAILs on the supply line.
+- Any probe: a `t6: CNTFRQ_EL0 0` line (the glue refused a zero counter
+  frequency at entry) is FAIL on either route, naming that refusal. Fixture:
+  `t6_gpu-uboot-cntfrq-zero-stop.uart`.
 - `t6_fw`, `t6_submit`: a pass prints none of `gpu_up`'s hand-over lines, so
   the supply on and off read alike. A run that stopped in Z1 (Z3 step 3)
   prints Z1's record, and then the supply, clock-set and enable lines are
