@@ -716,57 +716,501 @@ The shape measures above predate this tip (`e65567ea` and earlier); plan
 baseline lines are the `789ee9bb` first-refusal counts of the
 [baseline note](notes/mali-deqp-402-baseline.md); the board counts stay those of `8ff01055`.
 
-## N. Mali-G310 (Verdin iMX95): the tree on Zephyr, at `e63ab28e`
+## N. Mali-G310 (Verdin iMX95): the whole tree on Zephyr, at `e63ab28e`
 
-The `gpu-mali` back end on the Toradex Verdin iMX95 (i.MX 95, Mali-G310,
+The `gpu-mali` back end on the Toradex Verdin iMX95 (i.MX 95, Mali-G310v2,
 Valhall v10, one shader core) under Zephyr: the T6's 76 rows of
 `tools/cts/mali-gles2-tree.txt`, one image per row
 (`tools/cts/imx95-deqp-images.sh`), each started from the module's own
 U-Boot by hand and read on its console (B8 of
-`docs/notes/pre-study-imx95.md`, issue #7). The rows run in board sessions;
-each session is a slice, `tools/cts/log/<date>-imx95-gles2-<session>-<sha8>/`,
-in the T6 slices' form (`mali-deqp-tally.py --tally` reads it), with the
-whole console of every row in `console/`.
+`docs/notes/pre-study-imx95.md`, issue #7). The rows ran in six board
+sessions. Each session is a slice,
+`tools/cts/log/<date>-imx95-gles2-<session>-e63ab28e/`, in the T6 slices'
+form: `meta.txt`, `chunks.tsv`, `results.tsv`, `refusals.tsv` and, for
+names outside the mustpass, `extra.tsv`. Each slice also keeps the whole
+console of every row (`console/`) and the session's `rows.tsv`. The slices
+were made by `tools/cts/imx95-gles2-analyze.sh` (stage 2:
+`imx95-uart-slice.py`). All images were built from the one commit
+`e63ab28e`, and the baseline is the T6's whole tree at `8ff01055` (section M).
 
-| Session | Rows | Commit | Slice | Pass | Fail | NotSupported |
-|---|---|---|---|---:|---:|---:|
-| S4 (2,675 cases) | 69-76 | `e63ab28e` | `2026-11-25-imx95-gles2-S4-e63ab28e` | 2,107 | 537 | 31 |
-| S1-S3 (14,490 cases) | 1-68 | | not run yet | | | |
+| Session | Rows | Slice | Cases | Pass | Fail | NotSupported | QW | Row time (s) |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| S1a | 1-12 | `2026-11-24-imx95-gles2-S1a-e63ab28e` | 2,778 | 2,684 | 57 | 34 | 3 | 0.4-42.2 |
+| S1b | 13-24 | `2026-11-24-imx95-gles2-S1b-e63ab28e` | 2,363 | 1,225 | 1,138 | 0 | 0 | 3.0-32.7 |
+| S2 | 25-38 | `2026-11-24-imx95-gles2-S2-e63ab28e` | 4,872 | 3,684 | 1,188 | 0 | 0 | 16.6-56.1 |
+| S3a | 39-53 | `2026-11-24-imx95-gles2-S3a-e63ab28e` | 2,221 | 812 | 1,058 | 351 | 0 | 0.4-36.0 |
+| S3b | 54-68 | `2026-11-24-imx95-gles2-S3b-e63ab28e` | 2,256 | 923 | 1,255 | 78 | 0 | 2.9-21.9 |
+| S4 | 69-76 | `2026-11-25-imx95-gles2-S4-e63ab28e` | 2,675 | 2,107 | 537 | 31 | 0 | 7.3-18.8 |
+| **Total** | 76 | | **17,165** | **11,435** | **5,233** | **494** | **3** | 0.4-56.1 |
 
-S4, 2026-11-25: every row ran to its end with a result for each case it
-began, and reset the board itself by PSCI, in 7.3 to 18.8 s of its 600 s
-lifetime. There was no hang, no WDOG3 reset, no GPU restart, no tiler OOM and
-no refused draw. 567 of the 568 non-Pass cases carry the online compiler's
-own refusal (issue #11251). The one without is
-`shaders.texture_functions.vertex.texturecubelod`, which fails the image
-compare as on the T6 (M.1). The causes, largest first (the slice's README
-has the whole table):
+All 76 rows ran to their end. Each one reported a result for every case it
+began and reset the board itself (`verdin_imx95: board: run over: PSCI
+SYSTEM_RESET at N ms`; the next U-Boot says `LM Boot reason: sw`). No row
+hung, and no WDOG3 reset, GPU restart or tiler OOM happened. No case is Lost,
+so `mali-rerun-tree.py` has nothing to rerun. A row's time is the image's
+run time up to the reset, against a lifetime of 600 s (`fed until 600 s of
+uptime` on every console) plus WDOG3's 60 s. The longest row,
+T6S2R06, took 56.1 s, 9 % of the lifetime. The BBM record (U2) was not read
+back on any row (`bbm` = `not-read` in every `rows.tsv`): the module's
+Linux 6.6 lacks `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT`. Each row's console,
+with its `yk-record` line and the next `LM Boot reason`, is the evidence
+that the row passed rather than hung.
 
-| Cases | Status | Cause |
-|---:|---|---|
-| 151 | Fail | arithmetic other than +, -, * and a dot or matrix product (107 fragment, 44 vertex) |
-| 61 | Fail | back end defect: an invariant of the pipeline did not hold (IrIndex), fragment (10 through the link) |
-| 50 | Fail | an integer or boolean value, fragment (6 through the link) |
-| 35 | Fail | a constant product in a shape Mesa's algebraic rules move or fold (20 fragment, 15 vertex) |
-| 33 | Fail | fp16 arithmetic on gl_FragCoord other than x and y as a pair |
-| 27 | Fail | a vertex uniform other than a float, vec2, vec3, vec4 or mat4 (23), or not highp (4) |
-| 27 | Fail | a constant operation on a value that is not a finite normal float (16 fragment, 11 vertex) |
-| 22 | Fail | a mediump fragment uniform not read in its own fp16 lane pairs |
-| 19 | Fail | a loop in a vertex shader |
-| 17 | Fail | a gl_FragColor lane other than the varying's own lane or a constant |
-| 16 | Fail | a discard other than a highp `if (a < b) discard;` |
-| 16 | Fail | a fused multiply-add other than a matrix product's (vertex) |
-| 16 | Fail | control flow (9 fragment, 7 vertex) |
-| 15 | Fail | a fragment operand of a form or in a place no reference draws |
-| 32 | Fail | 7 smaller kinds (mixed fp32 and fp16 8, equal varying lanes 7, chained additions 5, texture coordinate 4, texture look-up form 4, fp16 varying load 2, texture result lanes 1), and the image compare (1) |
-| 31 | NotSupported | refusals of the same kinds |
+The images also ran 203 names that are not in `tools/cts/gles2-mustpass.txt`
+(`extra.tsv`: S1a 6, S1b 49, S3a 2, S4 146). 201 of them Pass and 2 Fail
+(`shaders.random.all_features.fragment.16` and `.56`). They are left out of
+the tally, as on the T6.
+`mali-deqp-tally.py --check-cover --main-ref HEAD tools/cts/gles2-mustpass.txt`
+over the six slices exits 0.
 
-Against the T6's S4 at `8ff01055` (section M), by name (`diff-t6.tsv` of the
-slice): 163 cases differ, all toward Pass on the G310 (162 Fail and 1
-NotSupported now Pass, 111 of them in `shaders.conversions`). None is worse.
-550 of the 568 cases that are non-Pass on both boards stop on the same
-refusal. The other 18 stop on a later or reworded refusal: 8 that the T6
-refused in the vertex shader reach the fragment shader and stop on the
-IrIndex defect. The two runs are 283 commits apart, and every difference is
-a compiler status. So far S4 shows no difference that only the G310 has
-(`docs/notes/mali-g310-vs-g610.md` section 5).
+### N.1 The tally
+
+Pasted from `python3 -I tools/cts/mali-deqp-tally.py --tally --markdown`
+over the six slices. The cause column is each case's own `refusals.tsv`
+text. 321 of the iMX95 refusal lines are cut short inside the
+`[<stage> stage, N bytes]` tail, so the slicer keeps a fragment of it
+(`[fragment stage, 387 b`), and the block splits those causes into rows of
+one case. N.2 groups them.
+
+<!-- mali-deqp-tally begin imx95 -->
+
+Slices: `2026-11-24-imx95-gles2-S1a-e63ab28e`, `2026-11-24-imx95-gles2-S1b-e63ab28e`, `2026-11-24-imx95-gles2-S2-e63ab28e`, `2026-11-24-imx95-gles2-S3a-e63ab28e`, `2026-11-24-imx95-gles2-S3b-e63ab28e`, `2026-11-25-imx95-gles2-S4-e63ab28e`
+(commits `e63ab28e`).
+
+| Status | Cases |
+| --- | ---: |
+| Pass | 11435 |
+| Fail | 5233 |
+| NotSupported | 494 |
+| QualityWarning | 3 |
+| **Total** | **17165** |
+
+| Status | Cause | Cases |
+| --- | --- | ---: |
+| Fail | refused, fragment shader: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | 813 |
+| Fail | refused, fragment shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 768 |
+| Fail | refused, vertex shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 629 |
+| Fail | refused, vertex shader: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused | 304 |
+| Fail | refused, vertex shader: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet | 298 |
+| Fail | refused, fragment shader: Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi | 282 |
+| Fail | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (IrIndex) | 215 |
+| Fail | refused, vertex shader: Valhall: a uniform array is not lowered yet | 193 |
+| Fail | refused, fragment shader: Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet | 186 |
+| Fail | refused, fragment shader: Valhall: an integer or boolean value is not lowered yet | 169 |
+| Fail | refused, vertex shader: Valhall: a loop in a vertex shader is not lowered yet | 159 |
+| Fail | refused, fragment shader: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet | 157 |
+| Fail | refused, vertex shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 126 |
+| Fail | refused, vertex shader: Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet | 106 |
+| NotSupported | refused, vertex shader: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet | 91 |
+| Fail | refused, fragment shader: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus | 88 |
+| NotSupported | refused, fragment shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 78 |
+| Fail | refused, vertex shader: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is | 73 |
+| NotSupported | refused, vertex shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 73 |
+| Fail | refused, vertex shader: Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product | 60 |
+| Fail | refused, fragment shader: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte | 54 |
+| Fail | refused, fragment shader: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage, | 43 |
+| Fail | refused, fragment shader: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet | 40 |
+| Fail | refused, fragment shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 35 |
+| NotSupported | - | 34 |
+| Fail | refused, fragment shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 32 |
+| Fail | - | 24 |
+| Fail | refused, vertex shader: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet | 23 |
+| Fail | refused, vertex shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 23 |
+| NotSupported | refused, fragment shader: Valhall: an integer or boolean value is not lowered yet | 22 |
+| NotSupported | refused, fragment shader: Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the c | 21 |
+| NotSupported | refused, fragment shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 21 |
+| Fail | refused, vertex shader: Valhall: a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly) is not lowered yet | 20 |
+| NotSupported | refused, vertex shader: Valhall: a loop in a vertex shader is not lowered yet | 20 |
+| Fail | refused, fragment shader: Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a | 16 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3 | 13 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4 | 13 |
+| Fail | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle) | 10 |
+| Fail | refused, vertex shader: Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not low | 10 |
+| NotSupported | refused, fragment shader: Valhall: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects) is not lowered yet) [fragment st | 10 |
+| NotSupported | refused, vertex shader: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is | 10 |
+| NotSupported | refused, vertex shader: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet | 9 |
+| Fail | refused, vertex shader: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet | 8 |
+| Fail | refused, vertex shader: the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet | 8 |
+| Fail | refused, fragment shader: Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet | 7 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 5 | 6 |
+| Fail | refused, vertex shader: Valhall back end defect: an invariant of the pipeline did not hold (Encode) | 6 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 262 | 5 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 277 | 5 |
+| NotSupported | refused, fragment shader: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | 5 |
+| NotSupported | refused, vertex shader: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in | 5 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 213 | 4 |
+| NotSupported | refused, fragment shader: Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a | 4 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 222 | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 235 | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 244 | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 264 | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 279 | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 314 | 3 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 371 b | 3 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 379 b | 3 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 381 b | 3 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 385 b | 3 |
+| QualityWarning | - | 3 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 10 | 2 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 11 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 108 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 113 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 162 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 166 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 169 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 175 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 216 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 219 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 242 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 245 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 251 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 271 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 293 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 296 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 297 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 299 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 308 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 311 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 312 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 355 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 360 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 376 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 454 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 597 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 613 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 706 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 790 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 874 | 2 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 912 | 2 |
+| Fail | refused, fragment shader: Valhall: a texture result's lanes other than its own pairs in order (a swizzle, a lane alone) is not lowered yet | 2 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 1 | 2 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 6 | 2 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 7 | 2 |
+| Fail | refused, fragment shader: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet | 2 |
+| Fail | refused, vertex shader: Valhall: a shader of more than 2048 IR values (or 1536 instructions before selection) is not lowered yet | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 318 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 330 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 356 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 375 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 378 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 380 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 383 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 386 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 391 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 422 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 448 b | 2 |
+| NotSupported | refused, fragment shader: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an | 2 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 24 | 1 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 25 | 1 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 28 | 1 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 29 | 1 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 31 | 1 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 32 | 1 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [fragment stage, 35 | 1 |
+| Fail | refused, fragment shader: Valhall: a constant fp16 does not hold (past its normal range, or a highp colour or point size constan | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 101 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 104 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 117 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 129 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 135 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 152 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 154 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 158 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 161 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 170 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 171 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 180 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 196 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 209 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 210 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 215 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 218 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 221 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 229 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 232 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 233 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 236 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 238 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 239 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 248 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 263 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 278 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 284 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 294 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 300 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 306 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 309 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 315 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 316 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 327 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 334 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 338 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 350 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 353 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 354 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 357 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 359 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 375 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 378 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 387 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 388 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 390 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 400 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 438 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 441 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 488 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 494 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 539 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 558 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 594 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 595 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 605 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 608 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 643 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 650 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 651 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 662 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 669 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 673 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 683 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 71 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 719 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 727 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 781 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 800 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 811 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 833 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 842 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 90 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 910 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 911 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 955 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 974 | 1 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 986 | 1 |
+| Fail | refused, fragment shader: Valhall: a highp sampler (Mesa keeps its look-up 32-bit) is not lowered yet | 1 |
+| Fail | refused, fragment shader: Valhall: a value whose precision class the front end does not know (a folded constant a full-width built-in reads, a constant shared at two widths) is not lowered ye | 1 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 9 | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1020 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1068 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1137 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1193 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1194 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1210 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1227 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1366 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1702 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 1893 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 2114 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 2693 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 3457 b | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 652 by | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 725 by | 1 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet) [vertex stage, 881 by | 1 |
+| Fail | refused, vertex shader: Valhall: a value whose precision class the front end does not know (a folded constant a full-width built-in reads, a constant shared at two widths) is not lowered yet | 1 |
+| NotSupported | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (IrIndex) | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1016 | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1337 | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1352 | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1361 | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1367 | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1755 | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 220 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 233 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 240 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 253 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 309 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 314 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 317 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 320 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 321 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 322 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 323 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 324 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 327 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 333 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 348 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 353 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 357 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 374 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 377 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 384 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 387 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 395 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 396 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 398 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 402 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 403 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 404 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 408 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 420 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 425 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 429 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 430 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 432 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 433 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 434 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 440 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 458 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 468 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 497 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 499 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 507 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 509 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 521 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 529 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 539 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 549 b | 1 |
+| NotSupported | refused, fragment shader: Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi | 1 |
+| NotSupported | refused, vertex shader: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet | 1 |
+
+<!-- mali-deqp-tally end imx95 -->
+
+### N.2 The non-Pass cases by cause
+
+The 5,730 non-Pass cases, grouped by each case's first refusal with the
+cut tails removed (stage counts in the last column). The T6 column is the
+same grouping of the T6's `8ff01055` slices; it holds 6,215 non-Pass. The
+refusal counts come from `refusals.tsv`. The iMX95's has 5,677 rows: 5,669
+non-Pass cases, plus 8 `loops.*.101_iterations_fragment` and
+`for_constant_iterations.infinite_with_conditional_break_fragment` cases
+that log a refusal and still Pass. The T6's has 5,838 rows, 5,829 of them
+non-Pass. Two kinds of refusal never reach `refusals.tsv`, on either
+board: 12 `shaders.random.*.fragment.*` cases of S3a and S3b, refused at
+`glLinkProgram` ("a Mali link whose stages place a varying at different
+offsets", the line holds no "refused"), and the 8 `uniform_api ...
+sampler2D_samplerCube_vertex` cases of T6S1R20/R21, whose draws the back
+end refuses (`yakogl-mali-refusal: -134 mali: a vertex shader that reads
+more than one texture is not built yet`; `yakogl: draws refused 4` in each
+row). Both kinds are Fail on both boards, so they are not in N.3.
+
+| iMX95 | T6 | Status | Cause (online compiler unless named) | Stage (iMX95) |
+|---:|---:|---|---|---|
+| 1,397 | 1,468 | Fail | arithmetic other than +, -, * and a dot or matrix product | fragment 768, vertex 629 |
+| 813 | 763 | Fail | a gl_FragColor lane other than the varying's own lane or a constant | fragment |
+| 392 | 385 | Fail | a constant product in a shape Mesa's algebraic rules move or fold | vertex 304, fragment 88 |
+| 298 | 371 | Fail | a uniform other than a float, vec2, vec3, vec4 or mat4 | vertex |
+| 282 | 271 | Fail | a mediump fragment shader uniform not read in its own fp16 lane pairs | fragment |
+| 231 | 221 | Fail | back end defect: IrIndex 215, LaneCycle 10, Encode 6 | fragment 225, vertex 6 |
+| 193 | 193 | Fail | a uniform array | vertex |
+| 186 | 182 | Fail | a texture coordinate other than a vec2 varying read whole or two constants | fragment |
+| 172 | 155 | Fail | a fragment shader operand of a form or in a place no reference draws | fragment |
+| 169 | 188 | Fail | an integer or boolean value | fragment |
+| 159 | 176 | Fail | a loop in a vertex shader | vertex |
+| 158 | 177 | Fail | a constant operation on or to a value that is not a finite normal float | vertex 126, fragment 32 |
+| 157 | 168 | Fail | a fragment shader that mixes highp and mediump or lowp float values | fragment |
+| 106 | 142 | Fail | a fused multiply-add other than a matrix product's | vertex |
+| 73 | 61 | Fail | a vertex shader uniform that is not highp, of a shape not lowered | vertex |
+| 60 | 60 | Fail | a vertex shader texture look-up other than 2D or cube at a level | vertex |
+| 58 | 73 | Fail | control flow (if, a loop, a return before the end) | fragment 35, vertex 23 |
+| 54 | 50 | Fail | a fragment varying load or conversion of a form no reference draws | fragment |
+| 43 | 42 | Fail | a texture look-up other than texture2D(sampler2D, coordinate) | fragment |
+| 40 | 40 | Fail | two varying lanes of equal value | fragment |
+| 39 | 43 | Fail | fp16 arithmetic on gl_FragCoord other than on x and y as a pair | fragment |
+| 27 | 34 | Fail | a -0.0 that a comparison reads through a variable | vertex 16, fragment 11 |
+| 23 | 31 | Fail | a varying lane computed from no attribute | vertex |
+| 21 | 1 | Fail | a constant fp16 does not hold (past its normal range ...) | vertex 20, fragment 1 |
+| 16 | 16 | Fail | a discard other than a highp `if (a < b) discard;` | fragment |
+| 42 | 46 | Fail | 10 smaller kinds (chained additions 10, attribute numbering 10, link attribute locations 8, colour of more than 255 operations 7, more than 2048 IR values 2, texture result lanes 2, unknown precision class 2, highp sampler 1, gl_Position lane unwritten 0 / T6 6, loop past unroll limits 0 / T6 1) | |
+| 24 | 349 | Fail | no refusal in `refusals.tsv`: the 12 link refusals and 8 refused draws above, 3 `texture.vertex.cube.*` and `texture_functions.vertex.texturecubelod` on the image compare | |
+| 91 | 92 | NotSupported | a uniform other than a float, vec2, vec3, vec4 or mat4 | vertex |
+| 86 | 87 | NotSupported | a loop Mesa keeps (a run-time bound) in a mediump fragment shader | fragment |
+| 78 | 78 | NotSupported | arithmetic other than +, -, * and a dot or matrix product | fragment |
+| 73 | 73 | NotSupported | a constant operation on or to a value that is not a finite normal float | vertex |
+| 132 | 142 | NotSupported | 12 smaller kinds of refusal (integer or boolean 22, control flow 21, loop past unroll limits 21, vertex loop 20, non-highp vertex uniform 10, break behind a run-time condition 10, equal varying lanes 9, run-time index 7, gl_FragColor lane 5, discard 4, the rest 3) | |
+| 34 | 34 | NotSupported | no refusal: the extension and format cases of C | |
+| 3 | 3 | QualityWarning | `rasterization` (C) | |
+| **5,730** | **6,215** | | | |
+
+The 768 fragment cases of the first row are the ColourForm refusals of the
+T6 tree, which the images still carry in full: `4455e85c`, which moves the
+operator cases off ColourForm, is later than `e63ab28e`. The tile-buffer and
+tiler families (`fbo` 709 Pass, `texture` 694 Pass and 113 Fail,
+`clipping` 602 Pass, `rasterization` 49 Pass and 3 QualityWarning,
+`multisample` 16 NotSupported) have the T6's counts case for case. The one
+exception is `fbo`'s 4 `recreate_colorbuffer` cases, which `c4df367f` fixed
+(N.3).
+
+### N.3 Against the T6's tree at `8ff01055`
+
+`tools/cts/imx95-t6-diff.py` over the six slices against
+`tools/cts/log/2026-11-24-t6-gles2-S{1,2,3,4}-8ff01055`: 76 rows compared,
+none left out. 17,165 cases are on both sides, 0 are Lost and 203 are
+extra. 773 cases differ by status or by first refusal:
+
+| T6 to iMX95 | Cases |
+|---|---:|
+| Fail to Pass | 494 |
+| Fail to Fail, another refusal | 245 |
+| Pass to Fail | 20 |
+| NotSupported to Pass | 11 |
+| NotSupported to NotSupported, another refusal | 2 |
+| NotSupported to Fail | 1 |
+
+`imx95-g310-cause.py --summary` classified every one, with
+`--commit-cases` set to `tools/cts/imx95-g310-cause-commits.tsv` (the 392
+cases of S1a-S4) plus the S3b cases below: 247 `compiler-refusal`, 526
+`compiler-commit`, 0 `hang`, 0 G310 causes (`tib-budget`, `tiler-levels`,
+`shader-present`, `renderer-name`) and 0 `unexplained`. Without the S3b
+lines, 246 are `unexplained`: 243 of S3b and one each of S2
+(`fragment_ops.interaction.basic_shader.32`), S3a
+(`random.all_features.fragment.57`) and S4
+(`qualification_order.parameters.valid.storage_precision_fragment`).
+
+The online compiler takes no GPU input (`docs/notes/mali-g310-vs-g610.md`
+section 5: no G310 path, 2381 of 2381 regions identical). A refusal on one
+board and a compiled shader on the other therefore come from the compiler's
+commits between the two runs (`8ff01055..e63ab28e`, 283 commits), not from
+the GPU. So do a changed refusal text and a G610 Pass now refused.
+
+| Commit | What it changes | Cases | Transition |
+|---|---|---:|---|
+| `c9eb0307`, `397351b3` | BW: a true bool uniform is pushed and stored as ~0 (T6: "Image comparison failed") | 277 | Fail to Pass (162 `swizzles.vector_swizzles.*bvec*`, 160 of them in S3b; 101 `conversions`; 14 `functions`) |
+| `b5ed279e` | the constant folds of the constrnd references (fma of constants, constexpr fceil/fsign) | 57 | Fail to Pass |
+| `35f40637` | arith step 3 and 4a: fs floor, ceil, sign, float != and two-lane min/max/clamp | 39 | Fail to Pass |
+| `c6ad0933` | an int uniform read as float, fp16 vertex array elements at a run-time index | 38 | Fail 35 and NotSupported 3 to Pass |
+| `3a45f7a8` | posvary P2-P5 (fract lanes, convergent-lane fill); also a regression (below) | 31 | Fail 10 and NotSupported 1 to Pass; Pass 20 to Fail |
+| `4aca8f5c` | ir_live: no code for a dead IR value (mixcol step 5) | 23 | Fail 17 and NotSupported 6 to Pass |
+| `159f1d14` | a constant gl_Position whose w is zero | 16 | Fail to Pass (`negative_api`, `shader_api`) |
+| `4aadf854` | vertex counted loops nest and unroll; a 101-pass loop kept as a do-while | 16 | Fail 14 and NotSupported 1 to Pass; NotSupported 1 to Fail |
+| `d3876279` | D1: b2i32 of a 16-bit mask widens the lane's own half | 10 | Fail to Pass (`conversions.*bvec*_to_ivec*`) |
+| `54d5f0a6` | an attribute read only in a never-taken side takes no location | 7 | Fail to Pass (`attribute_location...max_inactive_*`) |
+| `9fa5bbe0` | LK: a struct's float member is fp32 words in a mediump fragment block | 6 | Fail to Pass (`linkage.uniform_struct`, `_fragment_only`, `_partial`, `_partial_vec4_float`, `_use_case_rip`, `_use_case_rip_sans_highp`) |
+| `c4df367f` | the colour preload reads alpha 1 for a format without alpha (Mali back end, not the compiler) | 4 | Fail to Pass (`fbo.render.recreate_colorbuffer.*`) |
+| `17a30a20` | fs FragCoord coordinate (df64), vs early returns | 2 | Fail to Pass |
+| (several) | the first refusal moves to a later or reworded one (class `compiler-refusal`) | 247 | Fail to Fail 245, NotSupported to NotSupported 2 |
+| **Total** | | **773** | |
+
+The pinned cases of the plan agree. `d3876279` gives
+`conversions.vector_to_vector.bvec2_to_ivec2_fragment` and
+`bvec4_to_ivec4_fragment` Pass. `9fa5bbe0` gives the six
+`linkage.uniform_struct*` cases above Pass, and the six
+`uniform_struct{,_fragment_only}_vec4{,_float,_vec3}` cases now stop on
+the mediump fragment uniform refusal (`compiler-refusal`; issue #11306).
+`a824ec97` gives `random.trigonometric.vertex.87`, which now stops on the
+precision-class refusal ("a value whose precision class the front end does
+not know").
+
+The 20 Pass to Fail cases are a compiler regression, not a G310 effect:
+`matrix.{pre,post}_{in,de}crement.dynamic_{lowp,mediump}_mat{2,3,4}_vertex`
+are refused by the fp16 constant rule ("a constant fp16 does not hold"). A
+host compile passes at `4aadf854` and is refused from `3a45f7a8` on
+(`vs_stored_sum`; the finding of `imx95-g310-cause-commits.tsv`).
+
+How the S3b commits were named. The 160 `vector_swizzles` cases are cause
+BW (row 16 of M.1), and the T6's rerun at `c8fbf34e`
+(`2026-11-26-t6-gles2-R406-c8fbf34e`) passes all of them. So does it pass
+38 of the other 86 S3b-and-rest cases. The remaining 48 (and the 3 single
+ones above) were not in that rerun's rows. For all 86, the commit is the
+one that the T6's 8ff01055 refusal text names in
+`imx95-g310-cause-commits.tsv` for other cases with the same text. That
+inference comes from the text alone; these 86 were neither bisected nor
+compiled on the host. The class stays a compiler class either way: each
+case was refused by the compiler on the T6 and compiles on the G310.
+
+The G310 shows no difference of its own. No case is Lost, no row hung, and
+no difference falls in a family that the tile budget (G310v2: colour 8192,
+Z 4096), the eight tiler levels, the one shader core or the renderer name
+could reach. The renderer name reads `Arm Mali-G310v2 (YakoGL)` on the
+console, and `info.renderer` passes, as do the other five `info.*` cases.
+The time scale over all 76 rows is in `docs/notes/mali-g310-vs-g610.md`.
