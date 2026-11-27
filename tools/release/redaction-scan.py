@@ -20,7 +20,7 @@ Classes (severity H or M is a finding, L is information):
                     as whole addresses (not section numbers such as 13.10.3.1.2,
                     nor a dEQP release such as vulkan-cts-1.4.6.2-555-g<hex>)
   ipv6-local     H  IPv6 link-local (fe80::/10) and ULA (fc00::/7)
-  som-serial     M  verdin-(am62p|imx8mp)-<8 hex> host names
+  som-serial     M  verdin-(am62p|imx8mp|imx95)-<8 hex> host names
   bridge-port    H  serial-bridge ports 3593x (x one digit)
   tailnet-dns    H  <name>.ts.net
   token          H  ghp_, github_pat_, gho_, AKIA, xox?-, AIza, sk- token shapes,
@@ -165,7 +165,7 @@ PUBLIC_CLASSES = [
      r"(?<![0-9A-Fa-f:])(?:fe[89ab][0-9a-f]|f[cd][0-9a-f]{2}):[0-9a-f:]*[0-9a-f]",
      re.I, ipv6_local),
     ("som-serial", "SoM serial in a host name", "M",
-     r"verdin-(?:am62p|imx8mp)-[0-9a-fA-F]{8}(?![0-9A-Za-z])", 0, None),
+     r"verdin-(?:am62p|imx8mp|imx95)-[0-9a-fA-F]{8}(?![0-9A-Za-z])", 0, None),
     ("bridge-port", "Serial-bridge port", "H",
      r"(?<!\d)3593\d(?!\d)", 0, None),
     ("tailnet-dns", "Tailnet DNS name", "H",
@@ -544,7 +544,8 @@ def self_test():
             "link-local " + j(["fe80", "::1"]) + " and ULA " + j(["fd12", ":3456:789a::1"]),
             "home " + j(["/ho", "me/someone/x"]) + " and " + j(["/Us", "ers/other"]),
             "placeholder /home/<user> is fine",
-            "board " + j(["verdin-am62p-", "1a2b3c4d"]) + " and verdin-imx8mp-00000000",
+            "board " + j(["verdin-am62p-", "1a2b3c4d"]) + " and verdin-imx8mp-00000000"
+            + " and " + j(["verdin-imx95-", "5e6f7a8b"]),
             "bridge port " + j(["3593", "4"]),
             "dns " + j(["box.tail", "0000.ts", ".net"]),
             "token " + j(["gh", "p_"]) + "A" * 36,
@@ -662,7 +663,7 @@ def self_test():
             "private-ipv4": ["src/a.txt:3  1***[8]", "src/a.txt:4  1***[10]",
                              "src/deqp.txt:7  1***[8]"],
             "ipv6-local": ["src/a.txt:5  f***[7]", "src/a.txt:5  f***[17]"],
-            "som-serial": ["src/a.txt:8  v***[21]"],
+            "som-serial": ["src/a.txt:8  v***[21]", "src/a.txt:8  v***[21]"],
             "bridge-port": [names["runner"] + ".log:1  3***[5]",
                             "src/a.txt:9  3***[5]"],
             "tailnet-dns": ["src/a.txt:10  b***[19]"],
