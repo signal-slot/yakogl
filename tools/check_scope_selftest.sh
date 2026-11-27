@@ -161,6 +161,8 @@ want tools/board.sh tools
 want tools/board-stm32mp2.sh tools
 want tools/board_stm32mp2_selftest.sh tools
 want tools/board-stm32mp2-standalone.sh tools
+want tools/board-stm32mp2-uboot.sh tools
+want tools/board_stm32mp2_uboot_selftest.sh tools
 want tools/board_stm32mp2_standalone_selftest.sh tools
 want tools/uboot_env.py tools
 want tools/mp2_uboot_console.py tools

@@ -266,7 +266,7 @@ path_scopes() {
   # scope): the `tests` scope, the test rows of the targets it reaches
   # (tools/check_tests_reach.py)
   tests/*) echo tests ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board_rfc2217_selftest.sh | tools/uart_rfc2217_selftest.sh | tools/uart_rfc2217.py | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-uboot.sh | tools/board_stm32mp2_uboot_selftest.sh | tools/board_rfc2217_selftest.sh | tools/uart_rfc2217_selftest.sh | tools/uart_rfc2217.py | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -4471,6 +4471,12 @@ scope tools
 step "tools   uboot-mp2 oneshot.sh dry-run matrix and replays" driver/tools/uboot-mp2/oneshot_selftest.sh
 scope tools
 step "tools   mp2_uboot_console.py: typed one-shot and phase scan" python3 -I tools/mp2_uboot_console.py --self-test
+# the DK U-Boot run's record and note checks: each runs its own synthetic
+# cases (57 checks; 19 cases). Not named *selftest.*, so no automatic row.
+scope tools
+step "tools   mp2_uboot_record_check.py --self-test (a DK U-Boot run record's evidence)" python3 -I tools/mp2_uboot_record_check.py --self-test
+scope tools
+step "tools   mp2_uboot_note_check.py --self-test (the note's Board run section)" python3 -I tools/mp2_uboot_note_check.py --self-test
 scope tools
 step "tools   uboot_env.py on the DK's environment layout" python3 -I tools/uboot_env_mp2_selftest.py
 # The DK one-shot scripts in real U-Boot v2023.10 on QEMU (driver/tools/
