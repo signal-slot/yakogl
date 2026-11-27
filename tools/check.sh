@@ -1873,6 +1873,22 @@ tests_row pvr_draw_targets_knob
 step "test    $KNOBS_POWERVR_CONFIG (tests/pvr_draw_targets_knob.rs, every declared test)" \
   knobs_file_tests pvr_draw_targets_knob "$KNOBS_POWERVR_CONFIG"
 
+# The STM32MP257F's GPU (`vivante-st`, Cargo.toml): the same back end built
+# with ST's GCNANOULTRA31_VIP2 row as `vivante::profile::ACTIVE`. No row
+# above has the feature, so they test the i.MX8MP's build; these lint it,
+# run the library's tests with it (the GL core's line-width range and the
+# back end's clamped wide-line width among them) and the two profile files
+# (ACTIVE is the ST row, the range is 1..1).
+VIVANTE_ST_CONFIG="host-test,vivante-st,shaderc-online"
+scope vivante
+step "clippy  $VIVANTE_ST_CONFIG" cargo clippy --no-default-features --features "$VIVANTE_ST_CONFIG" --all-targets
+step "test    $VIVANTE_ST_CONFIG (--lib)" \
+  cargo_test --no-fail-fast --no-default-features --features "$VIVANTE_ST_CONFIG" --lib
+step "test    $VIVANTE_ST_CONFIG (tests/vivante_profile.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$VIVANTE_ST_CONFIG" --test vivante_profile
+step "test    $VIVANTE_ST_CONFIG (tests/vivante_st_profile.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$VIVANTE_ST_CONFIG" --test vivante_st_profile
+
 # gl_FragDepth on the GC7000UL (plan #340, docs/notes/gl-fragdepth.md): the
 # depth written, clamped, to r0.z with `viv.ps_depth_out_reg` 0 and
 # `writes_depth` 1, the `gl_FragCoord` copy that keeps the pixel's depth a

@@ -195,7 +195,8 @@ pub(crate) const COLOR_BUFFER_FLOAT_EXTENSION: bool =
 /// GL_OES_texture_npot and the depth-texture pair.
 const ES2_ONLY_NAMES: usize = 3;
 /// `GL_ALIASED_LINE_WIDTH_RANGE`: the Vivante part's profile
-/// (`vivante::profile::ACTIVE`), [1.0, 16.0] elsewhere.
+/// (`vivante::profile::ACTIVE`: [1.0, 16.0] on the i.MX8MP, [1.0, 1.0] with
+/// `vivante-st`), [1.0, 16.0] elsewhere.
 #[cfg(feature = "gpu-vivante")]
 pub(crate) const ALIASED_LINE_WIDTH_RANGE: [f32; 2] = crate::vivante::backend::LINE_WIDTH_RANGE;
 #[cfg(not(feature = "gpu-vivante"))]
@@ -2635,7 +2636,10 @@ mod tests {
             511.0
         };
         assert_eq!(ps[..2], [1.0, want]);
-        assert_eq!(geti(GL_ALIASED_LINE_WIDTH_RANGE)[..2], [1, 16]);
+        /* the STM32MP257F's row (`vivante-st`) draws width 1 only (Q11) */
+        let lines = if cfg!(feature = "vivante-st") { [1, 1] } else { [1, 16] };
+        assert_eq!(geti(GL_ALIASED_LINE_WIDTH_RANGE)[..2], lines);
+        assert_eq!(lw[..2], [lines[0] as f32, lines[1] as f32]);
         assert_eq!(gl.error(), GL_NO_ERROR);
     }
 

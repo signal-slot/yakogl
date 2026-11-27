@@ -1227,6 +1227,24 @@ fn the_draw_command_carries_the_primitive_and_the_counts() {
     assert_eq!(rig.submit(&d).draws(), [(false, GC_PRIM_TRIANGLE_STRIP, 4, 9, 0)]);
 }
 
+/// A line list at width 8: the i.MX8MP's build programs half the GL width in
+/// PA_LINE_WIDTH and PA_WIDE_LINE_WIDTH0/1, as before the profile carried
+/// the range; the STM32MP257F's (`vivante-st`, range [1.0, 1.0], Q11)
+/// programs half of the width clamped to its range, 0.5.
+#[test]
+fn a_wide_line_programs_half_the_active_parts_clamped_width() {
+    let rig = Rig::new();
+    let mut d = rig.draw(2);
+    d.prim = GLES_PRIM_LINES;
+    d.line_width = 8.0;
+    let s = rig.submit(&d);
+    let want = if cfg!(feature = "vivante-st") { 0.5f32 } else { 4.0 };
+    for reg in [GC_PA_LINE_WIDTH, GC_PA_WIDE_LINE_WIDTH0, GC_PA_WIDE_LINE_WIDTH1] {
+        assert_eq!(f32::from_bits(s.reg(reg)), want, "reg {reg:#x}");
+    }
+    assert_ne!(s.reg(GC_PA_CONFIG) & GC_PA_CONFIG_WIDE_LINE, 0);
+}
+
 #[test]
 fn an_indexed_draw_names_its_index_buffer_and_width() {
     let rig = Rig::new();

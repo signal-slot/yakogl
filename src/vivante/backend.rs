@@ -1206,8 +1206,21 @@ pub const fn line_width_range_of(p: &super::profile::ChipProfile) -> [f32; 2] {
 
 /// The built part's `GL_ALIASED_LINE_WIDTH_RANGE` ([`super::profile::ACTIVE`]):
 /// [1.0, 16.0] on the i.MX8MP's GC7000UL, as the GL core reported before the
-/// profile carried it.
+/// profile carried it; [1.0, 1.0] on the STM32MP257F (`vivante-st`).
 pub const LINE_WIDTH_RANGE: [f32; 2] = line_width_range_of(super::profile::ACTIVE);
+
+/// The line width a draw programs (`PA_LINE_WIDTH`, `PA_WIDE_LINE_WIDTH0/1`
+/// take half of it). With `vivante-st` it is clamped to the built part's
+/// [`LINE_WIDTH_RANGE`] ([1.0, 1.0] on the STM32MP257F, Q11): what the GL
+/// core reports is what the hardware is asked to draw. Without it the GL
+/// width is programmed as it was, so the i.MX8MP's streams do not change.
+pub fn programmed_line_width(width: f32) -> f32 {
+    if cfg!(feature = "vivante-st") {
+        width.clamp(LINE_WIDTH_RANGE[0], LINE_WIDTH_RANGE[1])
+    } else {
+        width
+    }
+}
 
 /// Bytes of the surface a draw with no colour target names: Mesa's etnaviv
 /// dummy render target, 64x64 RGBA8 (etnaviv_screen.c:1144-1151, Mesa 26.2.1).
@@ -1881,7 +1894,7 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
     c.state_fixp(GC_PA_VIEWPORT_OFFSET_Y, f2fixp(cy));
     c.state(GC_PA_VIEWPORT_OFFSET_Z, near.to_bits());
 
-    c.state(GC_PA_LINE_WIDTH, (gl.line_width * 0.5).to_bits());
+    c.state(GC_PA_LINE_WIDTH, (programmed_line_width(gl.line_width) * 0.5).to_bits());
     c.state(GC_PA_POINT_SIZE, 0.5f32.to_bits());
     /* PROVOKING_VERTEX_LAST because GL's provoking vertex is the last one, and
      * a flat-shaded varying takes its value from that vertex. Mesa sets it
@@ -1949,8 +1962,9 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
         }
     }
     c.state(GC_PA_CONFIG, pa_config);
-    c.state(GC_PA_WIDE_LINE_WIDTH0, (gl.line_width * 0.5).to_bits());
-    c.state(GC_PA_WIDE_LINE_WIDTH1, (gl.line_width * 0.5).to_bits());
+    let half_width = programmed_line_width(gl.line_width) * 0.5;
+    c.state(GC_PA_WIDE_LINE_WIDTH0, half_width.to_bits());
+    c.state(GC_PA_WIDE_LINE_WIDTH1, half_width.to_bits());
 
     let clip = if d.is_clear { clear_clip_rect(gl) } else { clip_rect(gl) };
     let clip = clip_scaled(gl, clip);
