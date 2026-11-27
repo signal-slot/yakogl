@@ -741,7 +741,7 @@ fn a_64x32x3_array_of_7_levels_reads_each_lod_from_its_own_level_and_layer() {
     assert!(seen.len() >= 20, "21 (level, layer) pairs read {} distinct pixels", seen.len());
 }
 
-/// The same array on the default stacked path (`pvr_native_array` off): one
+/// The same array on the stacked path (`pvr_native_array` off, `pvr_set_native_array(0)`): one
 /// tall 2D image of 3 x 32 = 96 rows whose level `l` has `96 >> l` rows
 /// (floor, at least 1), sampled at `pvr_arrUV`'s coordinate
 /// `(clamp(v) + layer) / 3` (usc_exec::array_uv). Row `floor(coord * rows)`
