@@ -191,14 +191,29 @@ of it) and none run on a board yet:
    below. Tests `tests/es3_v3d_fbo_int_rg.rs`,
    `es3_narrow_int_rt_v3d.rs`, `es3_readback_v3d.rs`, `es3_int_rt.rs`.
 2. `ab0222cf` "clears of r and rg integer textures keep the wide store's
-   absent channels at 0, 0, 1": `int_clear_channels` (`src/gl/draw.rs`) gives
-   the channels a colour clear keeps; `apply_clear_plan` takes it as the new
+   absent channels at 0, 0, 1": the GL core gives the channels a colour
+   clear keeps; `apply_clear_plan` (`src/gl/draw.rs`) takes them as its
    `channels` argument and writes 0 (G, B) and 1 (A) as raw integer bits
    where the mask leaves a channel out. `emit_pending_clear` (clear-only
    kick, TLB or quad) and the clear fused into a draw in `build_common` both
-   call it. `NARROW_INT_CLEAR` (`gpu-v3d`) gates it. A `glClear` whose targets
-   disagree on the channels is refused by name (`GL_INVALID_OPERATION`).
-   Test `tests/es3_v3d_int_rg_clear.rs`.
+   call it. `NARROW_INT_CLEAR` (`gpu-v3d`) gates it. `ab0222cf` named that
+   answer `int_clear_channels` and refused by name (`GL_INVALID_OPERATION`)
+   a `glClear` whose targets disagree on the channels; neither holds at the
+   tip. `57bf5a2a` "a multi-target glClear with a wide R/RG integer target
+   on the V3D is split per channel group" replaced it with
+   `clear_channel_groups`: the cleared targets are grouped by the channels
+   that keep the application's values, and a clear of several groups goes
+   out as one pass per group (an R8I texture beside an RGBA8 renderbuffer
+   is two passes, depth and stencil with the first, the clear of a pass
+   the TLB's or the quad's as `plan_clear` asks), no error.
+   `settle_split_clear` splits a clear that would fuse into a draw before
+   it, and only a clear that reaches `build_common` unsplit is still
+   refused by name (`REFUSED_UNEVEN_CLEAR`). Tests
+   `tests/es3_v3d_int_rg_clear.rs`
+   (`r_or_rg_texture_layer_or_level_beside_a_float_target_under_glclear_is_split_per_channel_group`,
+   `r8i_texture_beside_an_rgba8i_texture_with_depth_is_split_and_clears_depth_once`,
+   `a_split_glclear_before_a_draw_goes_out_before_it_and_the_draw_fuses_none`)
+   and `tests/es3_v3d_int_rg_clear_layers.rs` (cube faces, 3D slices).
 3. `48f6017c` "a colour write mask per render target": `GlesDraw` gets
    `per_target_mask` and `target_color_mask[4]` (in `num_targets`' padding,
    `abi_layout` regenerated); `per_target_masks` (`draw.rs`, `gpu-v3d` only)

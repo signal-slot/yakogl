@@ -340,18 +340,27 @@ same samples through `XYZW`.
     and one BLEND_CFG serve every RT (G3).
   - *Clears keep the absent channels at 0, 0, 1.* Since `ab0222cf`
     (plan #383 item `v3d-int-clear-narrow`) the GL core narrows a colour
-    clear of such a texture before the back end sees it:
-    `int_clear_channels` (`src/gl/draw.rs:2977`, gated by
-    `NARROW_INT_CLEAR` `:2958`, `gpu-v3d` only) gives the channels the
-    clear keeps, and the TLB clear words and the clear quad alike write
-    0 (G, B) and 1 (A) into the store's other channels
-    (`docs/notes/v3d-int-clear.md`). A glClear whose targets disagree
-    (such a texture beside an RGBA8 renderbuffer) is refused by name
-    (GL_INVALID_OPERATION, "clear refused: draw buffer ..", `:2998`);
-    a glClearBuffer of the texture's draw buffer alone is narrowed.
-    Pinned by `tests/es3_v3d_int_rg_clear.rs` (attachment 0, a 2D-array
-    layer, level 1) and `tests/es3_v3d_int_rg_clear_layers.rs` (cube
-    faces, 3D slices).
+    clear of such a texture before the back end sees it
+    (`apply_clear_plan` `src/gl/draw.rs:3060`), and the TLB clear words and
+    the clear quad alike write 0 (G, B) and 1 (A) into the store's other
+    channels (`docs/notes/v3d-int-clear.md`). The channels answer is
+    `clear_channel_groups` (`:3026`, gated by `NARROW_INT_CLEAR` `:2993`,
+    `gpu-v3d` only), which `57bf5a2a` "a multi-target glClear with a wide
+    R/RG integer target on the V3D is split per channel group" made from
+    `ab0222cf`'s `int_clear_channels`: the cleared targets are grouped by
+    the channels that keep the application's values (sets 0x1, 0x3, 0xf),
+    so a glClear whose targets disagree (such a texture beside an RGBA8
+    renderbuffer) is no longer refused by name. `emit_pending_clear`
+    (`:3196`) submits one pass per group, each with its own
+    `clear_target_mask` and narrowed value and depth and stencil with the
+    first; `settle_split_clear` (`:3299`) splits a clear that would fuse
+    into a draw before it; only a clear that reaches `build_common`
+    unsplit is refused by name (`REFUSED_UNEVEN_CLEAR` `:3000`,
+    GL_INVALID_OPERATION). A glClearBuffer of the texture's draw buffer
+    alone is one group, as before. Pinned by
+    `tests/es3_v3d_int_rg_clear.rs` (attachment 0, a 2D-array layer,
+    level 1, and the split beside an RGBA8 target at attachment 1) and
+    `tests/es3_v3d_int_rg_clear_layers.rs` (cube faces, 3D slices).
   Tests (host only): `tests/es3_v3d_fbo_int_rg.rs` (header: `cargo test
   --no-default-features --features
   host-test,gpu-v3d,shaderc-online,no-shader-table --test

@@ -40,9 +40,17 @@ not section 3's one quad per attachment:
   per RT (`V3dJobState::rt_colormask_own` / `rt_colormask`,
   `src/v3d/ffi.rs:391-394`), which a draw uses where the targets' channels
   differ (`tests/es3_v3d_int_rg_mrt_mask.rs`). This clear quad still takes
-  the one application mask. The
-  depth and stencil halves ride on the same quad. The unscissored, unmasked
-  clear is the TLB's as before.
+  the one application mask. A `glClear` whose targets need different
+  channels (a wide R/RG integer texture beside an RGBA8 renderbuffer) is
+  not given a per-RT mask here: since `57bf5a2a` the GL core splits it per
+  channel group (`clear_channel_groups`, `src/gl/draw.rs`), one clear
+  (quad or TLB) per group with its own target mask and the 0, 0, 1 fill
+  instead of the by-name refusal `ab0222cf` had, pinned by
+  `tests/es3_v3d_int_rg_clear.rs`
+  (`r_or_rg_texture_layer_or_level_beside_a_float_target_under_glclear_is_split_per_channel_group`).
+  The depth and stencil halves ride on the same quad (of a split clear, on
+  the first pass's, cleared once). The unscissored, unmasked clear is the
+  TLB's as before.
 - Why one quad and not k: tests/es3_mrt_ds_clear_v3d.rs and
   tests/es3_fragops_scissor_v3d.rs pin "one job, one quad", and k quads cost
   k draws' fixed cost (section 3, "Cost") for the same pixels.
