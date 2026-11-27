@@ -689,6 +689,10 @@ rgcase "--scenes: a non-numeric figure" \
     pass-README.md scenes-nonnumeric-RESULTS.md none 1 'i.MX8MP glmark2 row has a non-numeric shadow figure .n/a.'
 rgcase "--scenes: a record directory is missing" \
     pass-README.md scenes-norecord-RESULTS.md none 1 'i.MX8MP glmark2 row cites no record directory'
+rgcase "--scenes: the i.MX8MP row measured on the Armadillo-X2 cites records/x2" \
+    pass-README.md scenes-x2-pass-RESULTS.md none 0 '^ok:'
+rgcase "--scenes: records/x2 without the X2 note fails" \
+    pass-README.md scenes-x2-nonote-RESULTS.md none 1 'i.MX8MP glmark2 row cites no record directory'
 RG_EXTRA=
 
 echo "== 28. glmark2-ms.py (testdata/glmark2-ms)"
