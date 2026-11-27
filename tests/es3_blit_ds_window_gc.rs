@@ -7,8 +7,9 @@
 //! on a stand-in back end in tests/es3_blit_ds_window.rs; the renderbuffer
 //! blits over this table in tests/es3_blit_ds_gc.rs (the rig here is its rig).
 //!
-//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) but
-//! `ds_write: None` and `stencil_resolve: None` (src/vivante/backend.rs).
+//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) and
+//! `stencil_resolve` (`gc_stencil_resolve`) but `ds_write: None`
+//! (src/vivante/backend.rs).
 //! What src/gl/blit.rs does with the window at this base, per blit:
 //!
 //! - stencil, either way: REFUSED_STENCIL (a stencil copy needs both
@@ -627,9 +628,11 @@ fn a_colour_only_blit_to_the_window_works() {
 
 /// The table entries the refusals rest on; the line the lift changes.
 #[test]
-fn the_table_lacks_ds_write_and_stencil_resolve_today() {
+fn the_table_lacks_ds_write_today() {
     assert!(yakogl_backend_vivante.ds_write.is_none(), "ds_write (src/vivante/backend.rs)");
-    assert!(yakogl_backend_vivante.stencil_resolve.is_none(), "stencil_resolve (src/vivante/backend.rs)");
+    /* stencil_resolve is set since gc-ds-read (ds_cache.rs resolve_plane): the
+     * refusals rest on ds_write alone */
+    assert!(yakogl_backend_vivante.stencil_resolve.is_some(), "stencil_resolve (src/vivante/backend.rs)");
     assert!(yakogl_backend_vivante.depth_resolve.is_some(), "depth_resolve stays");
 }
 

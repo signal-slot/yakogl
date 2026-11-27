@@ -4235,6 +4235,32 @@ pub unsafe extern "C" fn gc_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u32
     unsafe { super::ds_cache::resolve_depth(id, dst, w, h, pitch, GC_DEPTH_GUARD_BYTES, super::kick::wait_kick) }
 }
 
+/// Write the stencil plane of GL object `id` into `w` x `h` bytes at `dst`,
+/// `pitch` a row (`YakoglBackend::stencil_resolve`; ds_cache.rs
+/// `resolve_plane`): bits 7..0 of each D24S8 word, sample 0 of a 4x FBO's.
+///
+/// # Safety
+/// `dst` holds `h` rows of `pitch` bytes, `w <= pitch`.
+pub unsafe extern "C" fn gc_stencil_resolve(id: u32, dst: *mut u8, w: u32, h: u32, pitch: u32) -> i32 {
+    if !g().inited {
+        return 1;
+    }
+    /* as gc_depth_resolve */
+    dedup::invalidate();
+    // SAFETY: the caller's contract.
+    unsafe {
+        super::ds_cache::resolve_plane(
+            id,
+            super::ds_cache::PlaneOut::Stencil(dst),
+            w,
+            h,
+            pitch,
+            GC_DEPTH_GUARD_BYTES,
+            super::kick::wait_kick,
+        )
+    }
+}
+
 /// The open frame's `extra` block holds at least `need` bytes: a draw's copies
 /// that the arena cannot take (see `draw_one`). The frame's fence has
 /// completed (frame_open waited for it), so an older block is no longer read
@@ -4653,7 +4679,7 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
      * upload and range flush per draw were for nothing (2026-11-05) */
     uniforms_host_only: true,
     ds_write: None,
-    stencil_resolve: None,
+    stencil_resolve: Some(gc_stencil_resolve),
     /* 4x framebuffer objects: one scratch per live 4x colour target, kept
      * across jobs and resolved by the RS into the renderbuffer's storage at
      * every job end (msaa_fbo.rs, docs/notes/es3-msaa-renderbuffers.md (a),

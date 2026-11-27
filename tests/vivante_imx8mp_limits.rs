@@ -423,7 +423,8 @@ fn the_vivante_table_and_flags_are_pinned() {
     assert!(b.generate_mipmap.is_some() && b.return_mipmap_chain.is_some());
     assert!(b.texture_released.is_some());
     assert!(b.surface_swapped.is_none() && b.texture_uploaded.is_none());
-    assert!(b.ds_write.is_none() && b.stencil_resolve.is_none());
+    /* stencil_resolve since gc-ds-read (ds_cache.rs resolve_plane); no ds_write */
+    assert!(b.ds_write.is_none() && b.stencil_resolve.is_some());
     /* the flags beside the table: NON_POWER_OF_TWO and DRAWS_WITHOUT_COLOUR
      * are const-asserted below the test */
     // :340-357: every integer surface but the 128-bit pair is a PE format
