@@ -63,7 +63,7 @@ const MATCHED: &[&str] = &["highp_mat4_add_float", "struct_basic"];
 const REFUSED: &[(&str, &str)] = &[
     ("arr_bvec4", COLOUR_LANE),
     ("arr_ivec4", COLOUR_LANE),
-    ("arr_mat4", FS_UNIFORM),
+    ("arr_mat4", COLOUR_LANE),
     ("struct_int_ivec4", COLOUR_LANE),
     ("mat4_add_float", FS_UNIFORM),
     ("mat2_mul_mat2", FS_UNIFORM),
@@ -127,7 +127,7 @@ fn arr_ivec4() {
 /// `FMAX.v2f16` of the `.abs` halves and one `FCMP_OR.v2f16.lt` with 0.05
 /// (`0x2a66`, u14.w0).
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (a mat4 array, select.rs:628)"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (a mat4 array; its rows are laid, unifmp U1)"]
 fn arr_mat4() {
     mali_ref::assert_matches("deqp_fsunif_arr_mat4");
 }

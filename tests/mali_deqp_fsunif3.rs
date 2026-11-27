@@ -50,10 +50,6 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The refusal, without the `Valhall: ` prefix and the ` is not lowered yet`
-/// suffix.
-const FS_UNIFORM: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
-
 /// The references the compiler makes byte-equal: none yet.
 const MATCHED: &[&str] = &[];
 
@@ -61,15 +57,20 @@ const MATCHED: &[&str] = &[];
 /// arrays stand since plan #377 spike-uniform-rest3 laid their rows.
 const COLOUR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 
+/// Where the matrix-array shapes stand once their rows are laid (plan #387
+/// item mali-train-3a, unifmp U1, select.rs `UboLayout::fs16`): the compare
+/// chain of every element is more than the pair graph holds.
+const TOO_LARGE: &str = "a fragment colour of more than 255 vectorised operations and operands";
+
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("random_4", FS_UNIFORM),
-    ("random_9", FS_UNIFORM),
+    ("random_4", COLOUR_LANE),
+    ("random_9", COLOUR_LANE),
     ("random_31", COLOUR_LANE),
     ("random_34", COLOUR_LANE),
     ("random_62", COLOUR_LANE),
-    ("random_80", FS_UNIFORM),
-    ("random_81", FS_UNIFORM),
+    ("random_80", COLOUR_LANE),
+    ("random_81", TOO_LARGE),
     ("random_93", COLOUR_LANE),
 ];
 
@@ -108,7 +109,7 @@ fn refusals_pinned() {
 /// `uniform_api.random.4`: a `bvec4[4]` and a `mat3[2]` read one element
 /// each, a `mat4`, a `bvec2` and a struct's `bvec4`.
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (bvec4 and mat3 arrays)"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (bvec4 and mat3 arrays; its rows are laid, unifmp U1)"]
 fn random_4() {
     assert_matches_members("deqp_fsunif3_random_4");
 }
@@ -117,7 +118,7 @@ fn random_4() {
 /// structs (`int`, `mat2`, `vec2`), a `sampler2D`; every uniform word is 0
 /// (`--zero-uniforms`).
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (a mat3 array and a struct array in nested structs)"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (a mat3 array and a struct array in nested structs; its rows are laid, unifmp U1)"]
 fn random_9() {
     mali_ref::assert_matches("deqp_fsunif3_random_9");
 }
@@ -150,7 +151,7 @@ fn random_62() {
 /// `uniform_api.random.80`: `mat3[5]`, `mat3[3]` and `mat2[4]` (one element
 /// read each), a `mat3` and a `vec2`.
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (mat3 and mat2 arrays)"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (mat3 and mat2 arrays; its rows are laid, unifmp U1)"]
 fn random_80() {
     mali_ref::assert_matches("deqp_fsunif3_random_80");
 }
@@ -158,7 +159,7 @@ fn random_80() {
 /// `uniform_api.random.81`: nested structs with a `mat4[2]`, a struct with
 /// an `ivec3[4]`, a `mat4[1]`, a `mat4` and an `ivec2`.
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (mat4 and ivec3 arrays in structs)"]
+#[ignore = "refused: a fragment colour of more than 255 vectorised operations and operands (mat4 and ivec3 arrays in structs; its rows are laid, unifmp U1)"]
 fn random_81() {
     assert_matches_members("deqp_fsunif3_random_81");
 }
