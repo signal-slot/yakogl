@@ -477,12 +477,26 @@ pub enum Kind {
     /// sampler is lowp or mediump, so a mediump operation reads the texels
     /// at 16 bits; a node of 16 bits ([`NirNode::bits`]) is the fp16
     /// look-up (`TEX_SINGLE.16`), its lanes two a register in lane order.
+    /// `layers`: a cube read as the 2D array of its six faces (the
+    /// `cube_noseam` variant, docs/notes/mali-cube-noseam.md): `src[0]` and
+    /// `src[1]` the face's S and T without the face bits, `src[2]` lane 0 of
+    /// the [`Kind::VsTexLayer`] node that holds the layer and level words.
     VsTex {
         explicit: bool,
         cube: bool,
+        layers: bool,
         sampler: u8,
         index: u8,
         medium: bool,
+    },
+    /// The layer and level staging words of a `layers` look-up
+    /// ([`Kind::VsTex`]), which stages four (S, T, the layer, the level:
+    /// `VA_TEX_SR_ARRAY` before `VA_TEX_SR_LOD`, pan_nir_lower_tex.c:
+    /// 787-799) where a node has three sources: `src[0]` the layer as an
+    /// fp32 value, `src[1]` the level's 8.8 word when `explicit`. It makes
+    /// no code; its lanes are its sources.
+    VsTexLayer {
+        explicit: bool,
     },
     /// `load_pixel_coord` (nir_fs.rs): the pixel position the hardware
     /// preloads in r59 ([`super::ra::POSITION_XY`]), a 16-bit vec2, x in
@@ -826,6 +840,9 @@ const F32_HALF: u32 = 0x3f00_0000;
 /// `BITFIELD_MASK(29)`: the S coordinate's bits of the cube descriptor,
 /// the face index above them (`build_cube_desc`).
 pub(super) const CUBE_S_MASK: u32 = 0x1fff_ffff;
+/// The face word's shift (`CUBEFACE2_V9`: the face index in bits 29-31,
+/// above [`CUBE_S_MASK`]).
+const CUBE_FACE_SHIFT: u32 = 29;
 /// 1.0 in fp16: `nir_lower_point_size`'s minimum (bifrost_nir.c passes
 /// 1.0 and no maximum).
 const F16_ONE: u32 = 0x3c00;
@@ -1529,6 +1546,7 @@ impl<'s> Nir<'s> {
                 | Kind::TexDesc { .. }
                 | Kind::UniformIdx { .. }
                 | Kind::VsTex { .. }
+                | Kind::VsTexLayer { .. }
                 | Kind::FragCoordZw
                 | Kind::Phi => return None,
                 /* a `demote_if` (:227-232, `discard_ok` false in both calls
@@ -2006,6 +2024,16 @@ impl<'s> Nir<'s> {
         })
     }
 
+    /// The descriptor indices of the live cube look-ups read as six-layer
+    /// 2D arrays ([`Kind::VsTex`] with `layers`, the `cube_noseam`
+    /// variant), in program order ([`super::MaliShader::cube_layers`]).
+    pub fn cube_layers(&self) -> impl Iterator<Item = u8> + '_ {
+        self.order[..self.len].iter().filter_map(|&id| match self.nodes[id as usize].kind {
+            Kind::VsTex { cube: true, layers: true, index, .. } => Some(index),
+            _ => None,
+        })
+    }
+
     /// The attribute record of location `loc`, which is its `LD_ATTR`
     /// index: how many of the locations Mesa numbers ([`Nir::counted`])
     /// are below `loc` (docs/notes/mali-builtin-inputs.md, "Attribute
@@ -2172,6 +2200,26 @@ impl<'s> Nir<'s> {
     /// S's bit 29. `va_lower_tex` makes it in either stage (it does not look
     /// at the stage): the two staging words S and T.
     pub(super) fn cube_desc(&mut self, x: Val, y: Val, z: Val) -> Result<(Val, Val), MaliError> {
+        let (s, t, face) = self.cube_coord2_face(x, y, z)?;
+        Ok((self.alu(Alu::BitfieldSelect, Val::Const(CUBE_S_MASK), s, face)?, t))
+    }
+
+    /// The `cube_noseam` form of [`Nir::cube_desc`]
+    /// (docs/notes/mali-cube-noseam.md): the same face, S and T, and in
+    /// place of the face bits above S the layer of the face in the cube's
+    /// six-layer 2D array view, `u2f32(face >> 29)` (`CUBEFACE2_V9`'s face
+    /// in bits 29-31; the layer of an array `TEX_SINGLE` is fp32, as
+    /// `va_lower_tex` stages a `sampler2DArray` coordinate's third lane,
+    /// pan_nir_lower_tex.c:835-849). The three words S, T and the layer.
+    pub(super) fn cube_layer(&mut self, x: Val, y: Val, z: Val) -> Result<(Val, Val, Val), MaliError> {
+        let (s, t, face) = self.cube_coord2_face(x, y, z)?;
+        let index = self.alu(Alu::Ushr, face, Val::Const(CUBE_FACE_SHIFT), Val::Undef)?;
+        Ok((s, t, self.alu(Alu::U2f, index, Val::Undef, Val::Undef)?))
+    }
+
+    /// `build_cube_coord2_face` (pan_nir_lower_tex.c:68-100): the face's S
+    /// and T in [0, 1] and the face word (the index in bits 29-31).
+    fn cube_coord2_face(&mut self, x: Val, y: Val, z: Val) -> Result<(Val, Val, Val), MaliError> {
         let max = self.alu(Alu::Cubeface1, x, y, z)?;
         let face = self.alu(Alu::Cubeface2, x, y, z)?;
         let s = self.alu(Alu::CubeSsel, z, x, face)?;
@@ -2182,7 +2230,7 @@ impl<'s> Nir<'s> {
         let s = self.alu(Alu::Fclamp(clamp::ZERO_ONE), s, Val::Undef, Val::Undef)?;
         let t = self.alu(Alu::Ffma, t, k, Val::Const(F32_HALF))?;
         let t = self.alu(Alu::Fclamp(clamp::ZERO_ONE), t, Val::Undef, Val::Undef)?;
-        Ok((self.alu(Alu::BitfieldSelect, Val::Const(CUBE_S_MASK), s, face)?, t))
+        Ok((s, t, face))
     }
 
     /// An explicit level's staging word, `u2u32(build_sfixed_8_8(lod))`:
@@ -2653,9 +2701,11 @@ impl NirNode {
             Kind::Store { .. } | Kind::UniformIdx { .. } | Kind::Discard => 1,
             /* a fragment look-up's computed coordinate (nir_fs.rs
              * `TexCoord::Computed`; undefined for the other forms) */
-            Kind::Phi | Kind::VsTex { explicit: false, .. } => 2,
-            /* a cube's third staging source (nir_fs.rs) */
-            Kind::Tex | Kind::VsTex { explicit: true, .. } => 3,
+            Kind::Phi | Kind::VsTex { explicit: false, layers: false, .. } => 2,
+            /* a cube's third staging source (nir_fs.rs); a layered vertex
+             * look-up's layer and level node */
+            Kind::Tex | Kind::VsTex { .. } => 3,
+            Kind::VsTexLayer { explicit } => 1 + usize::from(explicit),
             _ => 0,
         }
     }
@@ -6419,7 +6469,19 @@ fn walk<'s>(
                 offset: None,
             } => {
                 let cube = dim == TexDim::Cube;
-                let (s, t) = if cube {
+                /* the `cube_noseam` variant of the binding: the cube read
+                 * as the 2D array of its faces, so the unit wraps and
+                 * filters inside the face as ES 2.0 3.7.5 does
+                 * (docs/notes/mali-cube-noseam.md) */
+                let noseam = crate::shaderc::compile_lod_key().cube_noseam;
+                let layers = cube && noseam.checked_shr(u32::from(sampler)).is_some_and(|b| b & 1 != 0);
+                let mut layer = Val::Undef;
+                let (s, t) = if layers {
+                    let (x, y, z) = (lane(w, coord, 0), lane(w, coord, 1), lane(w, coord, 2));
+                    let (s, t, l) = vs.cube_layer(x, y, z)?;
+                    layer = l;
+                    (s, t)
+                } else if cube {
                     /* [`Nir::cube_desc`]. A constant lane of the direction
                      * stays an operand: the intrinsics fold no constant,
                      * and `va_lower_constants` makes it an immediate
@@ -6452,11 +6514,24 @@ fn walk<'s>(
                 let medium = class_of(m, ValueId(id.0))? == Prec::Medium;
                 let half = medium && vs_tex_read16(m, id)?;
                 /* `nir_scalar_is_zero`: the bits 0 */
-                let (kind, src) = if level == Val::Const(F32_ZERO) {
-                    (Kind::VsTex { explicit: false, cube, sampler, index: 0, medium }, [s, t, Val::Undef])
+                let explicit = level != Val::Const(F32_ZERO);
+                let x = if explicit { vs.sfixed_8_8(level)? } else { Val::Undef };
+                let kind = Kind::VsTex { explicit, cube, layers, sampler, index: 0, medium };
+                let src = if layers {
+                    /* the layer and the level, staged after S and T */
+                    let k = Kind::VsTexLayer { explicit };
+                    let ls = [layer, x, Val::Undef];
+                    let seen = vs.order[..vs.len]
+                        .iter()
+                        .copied()
+                        .find(|&n| vs.nodes[n as usize].kind == k && vs.nodes[n as usize].src == ls);
+                    let p = match seen {
+                        Some(p) => p,
+                        None => vs.push(k, ls)?,
+                    };
+                    [s, t, Val::Lane(p, 0)]
                 } else {
-                    let x = vs.sfixed_8_8(level)?;
-                    (Kind::VsTex { explicit: true, cube, sampler, index: 0, medium }, [s, t, x])
+                    [s, t, x]
                 };
                 /* a second look-up of one sampler at one coordinate and
                  * level is the first's (`nir_opt_cse`; gm2_texvert_4: one

@@ -28,6 +28,7 @@ fn record(stage: u32, varyings: &[VaryingSlot]) -> MaliShader<'_> {
         sampler: None,
         samplers: &[],
         cube_samplers: 0,
+        cube_layers: 0,
         helper_threads: false,
         can_discard: false,
         ubo: &[],

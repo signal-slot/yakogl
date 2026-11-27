@@ -1056,20 +1056,33 @@ pub fn vs_variant(
                 lanes[id][0] = Src::ssa(lo);
                 lanes[id][1] = Src::ssa(hi);
             }
-            nir::Kind::VsTex { explicit, cube, index, .. } => {
+            /* no code: a layered look-up reads its sources (below) */
+            nir::Kind::VsTexLayer { .. } => {}
+            nir::Kind::VsTex { explicit, cube, layers, index, .. } => {
                 /* `bi_emit_tex_valhall` (bifrost_compile.c:3488-3574): the
                  * staging words collected (the coordinate, or a cube's
                  * descriptor pair, then the level), TEX_SINGLE of the
                  * handle at the texture's dimension, its fp32 result split;
-                 * a staging word not in a register is moved there first */
-                let n = if explicit { 3 } else { 2 };
-                let mut sr = [Src::NULL; 3];
+                 * a staging word not in a register is moved there first.
+                 * A `layers` look-up (the `cube_noseam` variant) stages
+                 * the face's S and T, the layer, then the level, a 2D
+                 * array's order (`VA_TEX_SR_ARRAY` before `VA_TEX_SR_LOD`,
+                 * pan_nir_lower_tex.c:787-799) */
+                let mut words = [nd.src[0], nd.src[1], nd.src[2], nir::Val::Undef];
+                if layers {
+                    let nir::Val::Lane(p, 0) = nd.src[2] else { return Err(MaliError::Defect(super::Defect::IrIndex)) };
+                    let pn = vs.nodes.get(p as usize).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+                    words[2] = pn.src[0];
+                    words[3] = pn.src[1];
+                }
+                let n = 2 + usize::from(layers) + usize::from(explicit);
+                let mut sr = [Src::NULL; 4];
                 /* a constant goes to the COLLECT as it is: the constant
                  * passes make it a FAU word and the vector's lowering moves
                  * it into each staging register (unitype_100.expect.json:
                  * `MOV.i32 r2, u6.w0`, `MOV.i32 r3, u6.w0`) */
                 for (k, x) in sr.iter_mut().enumerate().take(n) {
-                    let s = src(lanes, nd.src[k])?;
+                    let s = src(lanes, words[k])?;
                     *x = if s.ssa_value().is_some() || matches!(s.idx, Idx::Const(_)) {
                         s
                     } else {
@@ -1078,7 +1091,11 @@ pub fn vs_variant(
                 }
                 let c = alu(p, Op::Collect, &sr[..n])?;
                 let lod = if explicit { LodMode::Explicit } else { LodMode::Zero };
-                let dim = if cube { TexDim::Cube } else { TexDim::D2 };
+                let dim = match (cube, layers) {
+                    (_, true) => TexDim::D2Array,
+                    (true, false) => TexDim::Cube,
+                    (false, false) => TexDim::D2,
+                };
                 /* the texels the live users read, one register each in
                  * lane order (`nir_opt_shrink_vectors` and the write mask;
                  * unitype_100.expect.json's `TEX_SINGLE.slot0.reserved.32
