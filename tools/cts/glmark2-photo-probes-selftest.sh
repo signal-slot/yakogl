@@ -186,6 +186,61 @@ NAME="unknown frame"; bad2 python3 -I "$PROBES" "$T/x.png" --frame nosuch
 # the default framing keeps its limits: 1920-wide windows do not fit the panel
 NAME="default frame window outside panel"; bad2 python3 -I "$PROBES" "$T/a.png" --window 1000,0,800,600
 
+# JPEG input: converted by Pillow / ffmpeg / ImageMagick; no decoder in the tool
+PYBIN=$(command -v python3)
+JPG="$T/x.jpg"; made=""
+if python3 -I -c 'import PIL' 2>/dev/null; then
+    python3 -I -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGB").save(sys.argv[2], "JPEG", quality=92)' "$T/x.png" "$JPG" && made=Pillow
+elif command -v ffmpeg >/dev/null; then
+    ffmpeg -v error -y -i "$T/x.png" -q:v 2 "$JPG" && made=ffmpeg
+elif command -v magick >/dev/null; then
+    magick "$T/x.png" -quality 92 "$JPG" && made=magick
+elif command -v convert >/dev/null; then
+    convert "$T/x.png" -quality 92 "$JPG" && made=convert
+fi
+if [ -n "$made" ] && [ -s "$JPG" ]; then
+    python3 -I "$PROBES" "$T/x.png" $X >"$T/po"
+    python3 -I "$PROBES" "$JPG" $X >"$T/jo" 2>"$T/je"; rc=$?
+    [ $rc -eq 0 ] && ok "x2-kvm JPEG ($made): exit 0" || bad "x2-kvm JPEG rc=$rc: $(cat "$T/je")"
+    python3 -I - "$T/po" "$T/jo" <<'PY' && ok "JPEG probes within tolerance of the PNG's" || bad "JPEG probes differ from the PNG's"
+import re, sys
+def v(p):
+    t = open(p).read()
+    return [int(h[i:i+2], 16) for h in re.findall(r"(?:c|tl|tr|bl|br) ([0-9a-f]{8})", t) for i in (0, 2, 4)]
+a, b = v(sys.argv[1]), v(sys.argv[2])
+sys.exit(0 if len(a) == 15 == len(b) and max(abs(x - y) for x, y in zip(a, b)) <= 16 else 1)
+PY
+    genx "$T/xsj.png" 1920 1080 100 0
+    case $made in
+        Pillow) python3 -I -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGB").save(sys.argv[2], "JPEG", quality=92)' "$T/xsj.png" "$T/xsj.jpg";;
+        ffmpeg) ffmpeg -v error -y -i "$T/xsj.png" -q:v 2 "$T/xsj.jpg";;
+        magick) magick "$T/xsj.png" -quality 92 "$T/xsj.jpg";;
+        convert) convert "$T/xsj.png" -quality 92 "$T/xsj.jpg";;
+    esac
+    python3 -I "$PROBES" "$T/xsj.jpg" $X >"$T/o" 2>"$T/e"; rc=$?
+    [ $rc -eq 2 ] && grep -q "framing wrong" "$T/e" && ok "x2-kvm JPEG with a shifted window: exit 2, flagged" || bad "x2-kvm JPEG shifted rc=$rc"
+else
+    echo "skip JPEG encode cases: no JPEG encoder (Pillow, ffmpeg, magick or convert) on this host"
+fi
+# a JPEG header with no converter at all: exit 2 with the reason (PATH emptied, no Pillow
+# needed: if Pillow imports the converter is Pillow and the case is skipped)
+printf '\xff\xd8\xff\xe0JFIF-not-an-image' > "$T/h.jpg"
+if "$PYBIN" -I -c 'import PIL' 2>/dev/null; then
+    echo "skip no-converter case: Pillow is importable"
+else
+    mkdir "$T/empty"
+    PATH="$T/empty" "$PYBIN" -I "$PROBES" "$T/h.jpg" $X >"$T/o" 2>"$T/e"; rc=$?
+    [ $rc -eq 2 ] && grep -q "no JPEG decoder" "$T/e" && ok "JPEG without any converter: exit 2, says so" || bad "no-converter rc=$rc"
+    # a stub ffmpeg that writes the synthetic PNG: the plumbing (TMPDIR file, PNG read) works
+    mkdir "$T/stub"
+    printf '#!/bin/sh\nfor a; do o=$a; done\ncp "%s" "$o"\n' "$T/x.png" > "$T/stub/ffmpeg"
+    chmod +x "$T/stub/ffmpeg"
+    PATH="$T/stub:/usr/bin:/bin" "$PYBIN" -I "$PROBES" "$T/h.jpg" $X >"$T/o" 2>"$T/e"; rc=$?
+    [ $rc -eq 0 ] && grep -q "probes c c8a02800" "$T/o" && ok "JPEG through an external converter (stub ffmpeg): exit 0" || bad "stub ffmpeg rc=$rc: $(cat "$T/e")"
+    PATH="$T/stub:/usr/bin:/bin" TMPDIR="$T" "$PYBIN" -I "$PROBES" "$T/h.jpg" $X >/dev/null 2>&1
+    [ -z "$(ls -d "$T"/photo-probes-* 2>/dev/null)" ] && ok "converter temp dir removed" || bad "converter temp dir left"
+fi
+
 # bad input: exit 2
 NAME="missing file"; bad2 python3 -I "$PROBES" "$T/none.png"
 printf 'not a png' > "$T/junk.png"
