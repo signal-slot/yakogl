@@ -416,7 +416,8 @@ pub(crate) struct FallbackCounters {
     pub gpu_waits: AtomicU64,
     /// Bytes the CPU read or wrote over the carve-out: the CPU mipmap filter
     /// ([`cpu_filter_bytes`]) and the CPU tiled copy (`tiled_copy.rs`
-    /// `refresh`). The depth resolve's bytes are not counted yet.
+    /// `refresh`) and the CPU depth resolve (ds_cache.rs `resolve_depth`,
+    /// the D24S8 bytes it reads, 4 a texel).
     pub carveout_cpu_bytes: AtomicU64,
 }
 
@@ -464,9 +465,8 @@ pub struct YakoglGcFallbackStats {
 
 /// The GC7000 back end's fallback counters since boot ([`FallbackCounters`]),
 /// for glmark2's PERF page 4: the strong definition of the sample's `__weak`
-/// one, which answers -ENOTSUP. `gpu_waits` is 0, and `carveout_cpu_bytes`
-/// leaves out the depth resolve, until those are counted (ds_cache.rs,
-/// backend.rs). 0, or -EINVAL (-22) for a null `out`.
+/// one, which answers -ENOTSUP. `gpu_waits` is 0 until it is counted
+/// (backend.rs); `carveout_cpu_bytes` includes the depth resolve's reads. 0, or -EINVAL (-22) for a null `out`.
 ///
 /// # Safety
 /// `out` must be null or valid for a write.

@@ -791,6 +791,7 @@ pub unsafe fn resolve_depth(
         // SAFETY: the caller's contract: `h` rows of `pitch` floats.
         let out = unsafe { core::slice::from_raw_parts_mut(dst, h as usize * pitch as usize) };
         depth_format::read_super_tiled(PeDepthFormat::D24S8, px, e.stride, w, h, out, pitch);
+        count_resolve_bytes(w as u64 * h as u64 * 4);
         return 0;
     }
     /* a row at a time on plain slices: no closure, no checked index per
@@ -805,7 +806,18 @@ pub unsafe fn resolve_depth(
         let out = unsafe { core::slice::from_raw_parts_mut(dst.add(y * pitch as usize), cols) };
         resolve_row(src, out);
     }
+    count_resolve_bytes(rows as u64 * cols as u64 * 4);
     0
+}
+
+/// PERF page 4 v3's counter (`mipmap::FallbackCounters::carveout_cpu_bytes`)
+/// gets the bytes a CPU depth resolve READS from the carve-out surface: 4
+/// bytes (one D24S8 word) a resolved texel, `w * h * 4` for a whole plane
+/// (the floats written to the texture's own storage are not added). One add a
+/// resolve, not a texel. A resolve that fills a clear value reads no surface
+/// and adds nothing.
+fn count_resolve_bytes(n: u64) {
+    super::mipmap::fallback_counters().carveout_cpu_bytes.fetch_add(n, core::sync::atomic::Ordering::Relaxed);
 }
 
 /// One row of D24S8 words at `src` into `out`'s depth floats, `src` holding
