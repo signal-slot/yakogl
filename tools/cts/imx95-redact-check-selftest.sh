@@ -88,7 +88,7 @@ for leak in 02:5e 02-5e 192.0.2 198.51 203.0.113 2001:db8 99000001 0a0b0c0d ttyU
 done
 ok "--check prints no value"
 
-python3 -I "$tool" red || bad "rewrite failed"
+python3 -I "$tool" --fix red || bad "rewrite failed"
 {
 	echo 'U-Boot 2024.04-7.1.0+git (Nov 01 2026 - 00:00:00 +0000)'
 	echo 'Model: Toradex 0000 Verdin iMX95 Hexa 8GB WB IT V1.0A, Serial# <serial>'
@@ -134,10 +134,18 @@ rc=0; got=$(python3 -I "$tool" --check tok) || rc=$?
 [ "$rc" -eq 0 ] && [ -z "$got" ] && ok "a raw dEQP version token is not a hit" || bad "raw token rc=$rc: $got"
 
 cp red/console.log again.log
-python3 -I "$tool" red
+python3 -I "$tool" --fix red
 cmp -s again.log red/console.log && ok "a second rewrite changes nothing" || bad "not idempotent"
 [ "$(cat outside.log)" = "ipaddr=192.0.2.77" ] && ok "a symlink is not followed" || bad "symlink target rewritten"
 
+# a bare call reports, exits 2 and leaves the dirty file unchanged
+cp raw/console.log bare.log
+rc=0; got=$(python3 -I "$tool" bare.log 2>/dev/null) || rc=$?
+[ "$rc" -eq 2 ] && cmp -s raw/console.log bare.log && ok "a bare call exits 2 and leaves the file unchanged" ||
+	bad "bare call rc=$rc or file changed"
+case "$got" in *bare.log:2:serial*) ok "a bare call prints the hits" ;; *) bad "bare call prints no hits" ;; esac
+rc=0; python3 -I "$tool" --fix >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok "--fix without a path is a usage error" || bad "--fix no path rc=$rc"
 rc=0; python3 -I "$tool" --check >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "no path is a usage error" || bad "no path rc=$rc"
 rc=0; python3 -I "$tool" --check missing >/dev/null 2>&1 || rc=$?
