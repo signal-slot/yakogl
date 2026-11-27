@@ -35,17 +35,21 @@ file cited here.
    `resets=absent`, and a 2 s timeout every frame would read 1 FPS, not 2.
    The only time quantum on these paths is the 1 ms poll sleep
    (`gc_render.c:969`), about 1 ms a wait.
-3. **The frame is set by the CPU depth resolve, which reads non-cacheable
-   memory one byte at a time.** Both scenes render depth into a 1600x1200
+3. **The frame is set by the CPU depth resolve, which at `964f50f0` read
+   non-cacheable memory one byte at a time.** Both scenes render depth into a 1600x1200
    depth texture every frame (twice the canvas) and then sample it. The GC
    back end turns the D24S8 surface into R32F texels on the CPU
    (`src/vivante/ds_cache.rs:606-613`): 1.92 M texels, 7.68 MB read and
    7.68 MB written, both in the carve-out, which is mapped Normal
-   non-cacheable (`driver/src/vivante/gc_render.c:79-89`). Compiled for the
-   board's target (`aarch64-unknown-none`, whose features are
-   `+v8a,+strict-align,+neon`), the loop reads each texel with **three `ldrb`
-   byte loads**: 5.76 M uncached loads per frame. The host compiles the same
-   loop to wide SIMD loads, so it takes 0.3 ms there. The AM62P calibrates
+   non-cacheable (`driver/src/vivante/gc_render.c:79-89`). At the tree of
+   this measurement (`964f50f0`), compiled for the board's target
+   (`aarch64-unknown-none`, whose features are `+v8a,+strict-align,+neon`),
+   the loop read each texel with **three `ldrb` byte loads**: 5.76 M
+   uncached loads per frame. Today's `resolve_row` (`ds_cache.rs:822`,
+   `25fa1a96`) reads the aligned middle of a row with one `u128` load
+   (`ldp`) per four words, checked at `5483d7cf`: the byte loads are what
+   the 2 FPS baseline paid, and the X2 rows measure what is left. The host
+   compiles the same loop to wide SIMD loads, so it takes 0.3 ms there. The AM62P calibrates
    the cost: the PowerVR's resolve of the same 1600x1200 texture, one aligned
    32-bit load per texel on the same A53 core class and non-cacheable memory,
    took 349 ms a frame. Three loads where that loop had one puts this one at
@@ -108,7 +112,9 @@ file cited here.
   (`src.as_chunks::<4>()`, `u32::from_ne_bytes(*s)`, `ds_cache.rs:610-611`).
   Under `+strict-align` the compiler may not assume that a `[u8; 4]` is
   4-byte aligned, so it loads the three bytes it needs one by one. It does
-  not vectorise the loop. The surface itself is 64-byte aligned.
+  not vectorise the loop. The surface itself is 64-byte aligned. This is
+  `964f50f0`'s loop: `resolve_row` (landed in `25fa1a96`) issues the wide
+  `ldp` load instead, checked at `5483d7cf`.
 
 ## The frames
 
@@ -472,10 +478,15 @@ The Verdin iMX8MP is away (off the farm since 2026-11-16, no return date). The
 owner's rule of 2026-11-27 moves the i.MX8MP / GC7000UL board work to the
 Armadillo-X2 (same i.MX 8M Plus SoC and GC7000UL GPU), recorded rows included,
 so every figure below is **measured on the Armadillo-X2 in place of the Verdin
-iMX8MP** and each record says so. The table is **empty**: no X2 figure exists
-yet; every cell is a placeholder until a session fills it. The X2 cannot run
-until its podman container is stopped for the run; that step is in
-`docs/notes/x2-glmark2-slow-scenes.md` (last section; read only here).
+iMX8MP** and each record says so. The table's before rows hold the
+2026-11-27 session (item gm-before-x2): the images were built and shadow
+was started, but the kexec loader refused the jump and nothing ran, so no
+ms a frame exists yet and every after cell is still a placeholder. The
+container that stopped the 2026-11-24 and 2026-11-25 sessions can now be
+stopped for a run (`X2_STOP_CONTAINERS=1`, `225c6956`;
+`docs/notes/x2-glmark2-slow-scenes.md`, last section); what stops a run
+today is the loader's interrupt-chip list, recorded in `gc-depth-sample.md`,
+"The X2 session of 2026-11-27".
 
 ### What each session records
 
@@ -512,13 +523,31 @@ until its podman container is stopped for the run; that step is in
   is expected unchanged (`gc-slow-terrain.md`). If the verdict is (c), the CPU
   fixes stay and there is no "after" beyond them.
 
-### Table (empty; measured on the Armadillo-X2)
+### Table (before rows: the 2026-11-27 attempt, no jump; measured on the Armadillo-X2 in place of the Verdin iMX8MP)
 
 | scene | when | origin/main commit | image sha256 | records/x2/ directory | page 0 v0 | page 4 v3 KiB (CPU mip and tiled copy; not the resolve) | page 0 v2 (gl; shows the resolve) | page 0 v5 | page 1 v4 | ms a frame |
 |---|---|---|---|---|---:|---:|---:|---:|---:|---:|
-| shadow | before | — | — | records/x2/— | — | — | — | — | — | — |
+| shadow | before | `02c5c9af` | `2247c47eedb058d23f7a6fd3570af75134487835c6597d50d5d6238d64589c15` | `records/x2/20261127-0538-gm-before-shadow-02c5c9af/` | — | — | — | — | — | no figure: the jump was refused |
 | shadow | after | — | — | records/x2/— | — | — | — | — | — | — |
-| refract | before | — | — | records/x2/— | — | — | — | — | — | — |
+| refract | before | `02c5c9af` | `8feb2585a44db698171221bdaedee6d1726433952eeae393bbb3d35e2ebfd1fb` | none (dry run only) | — | — | — | — | — | no figure: not reached |
 | refract | after | — | — | records/x2/— | — | — | — | — | — | — |
-| terrain (control) | before | — | — | records/x2/— | — | — | — | — | — | — |
+| terrain (control) | before | `02c5c9af` | `b2057bb8cb2d09b65d5164a3e3b6731c23e6eadf35f261ce561154a2fdb24658` | none (dry run only) | — | — | — | — | — | no figure: not reached |
 | terrain (control) | after | — | — | records/x2/— | — | — | — | — | — | — |
+
+Stop, 2026-11-27 (item gm-before-x2, measured on the Armadillo-X2 in place
+of the Verdin iMX8MP): shadow's one run (`shadow/20261127-0540-shadow-nosel-2247c47e/`
+inside the record, no selector) never left Linux. `x2 status` read
+`containers 0`, every image carried `gc_wdog_arm: armed`, and all 15 dry
+runs (three scenes x no selector, `0x1000`, `0x1001`, `0x1003`, `0x1004`)
+returned rc 0; then `kexec_zephyr --crash` refused the jump because
+`crash_irq_chips` (`4c0626d1`) accepts no interrupt on the X2's `gpio-mxc`
+or `irqsteer` chips — it printed "not triggering", brought the CPUs back
+and unloaded the crash image, and the runner's `not_back` line describes a
+jump that never happened. The runner stopped without retry, so refract and
+terrain were not run; their before rows hold only their built images. The
+record's `meta.txt` says `board_measured=Armadillo-X2 (i.MX 8M Plus,
+GC7000UL), stands in for the Verdin iMX8MP`. A rerun can reuse the three
+sha256 values above (images from `02c5c9af`, about 1.5 min a build on that
+machine) once the loader accepts the X2 — the change to
+`driver/tools/kexec-zephyr/**` named in `gc-depth-sample.md`'s session
+section. Until it lands no cell of this table can fill.

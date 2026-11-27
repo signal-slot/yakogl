@@ -38,6 +38,15 @@ need it. If the customer id is read later and differs, recheck the outcome
 on that board. A second board session (the (b) arms, knobs 3 and 4) is also
 on the X2. Where a section below says "board session", it means the X2's.
 
+**Status 2026-11-27: no verdict is recorded yet.** That day's `dtpu`
+session on the X2 never reached the page: the crash loader refused the jump
+because `crash_irq_chips` accepts no interrupt on the X2's chips
+(`gc-depth-sample.md`, "The X2 session of 2026-11-27"). Until a page whose
+check 3 passed exists there is no code for wire-verdict to take, and the
+11-11 record's prediction of code 3 is a prediction, not a result. Once the
+loader accepts the X2 and the page is recorded, the carry-over stated above
+applies to its code.
+
 ## The three outcomes, read from case `dtpu`
 
 `gc-depth-sample.md` section (a), "The board experiment", defines checks 3 to 7
@@ -430,7 +439,9 @@ from a CPU model that counts every ground fragment, including the ones the
 horse later covers, so they are upper bounds, and `horse.3ds` is not in the
 tree to re-run it; refract carries an analytic bound, not a pixel count. The
 verdict code itself is measured on the Armadillo-X2 in place of the Verdin
-iMX8MP, as "Where the verdict comes from" above records.
+iMX8MP, as "Where the verdict comes from" above records — and, as of
+2026-11-27, still awaits the rerun recorded there: no verdict code exists
+yet, code 3 included.
 
 ### (a) Host test: a new test file for the sample path (never committed)
 
