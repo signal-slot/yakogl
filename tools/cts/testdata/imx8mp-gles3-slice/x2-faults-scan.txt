@@ -1,0 +1,4 @@
+-- rows: selector, start, elapsed board time, results, recoveries, end
+row  52  01:02:03  10:00+  results  187  recoveries  0  !! NO FINISH (watchdog end)
+         last result: dEQP-GLES3.functional.state_query.integers.max_texture_size
+!! NO FINISH row 52 (watchdog end) at 01:02:03; last result dEQP-GLES3.functional.state_query.integers.max_texture_size; case begun, no result; 187 result(s), 0 recovery(ies)

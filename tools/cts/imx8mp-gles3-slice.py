@@ -26,6 +26,12 @@ the line that counts), an entry outside the range, or an entry of the range with
 (exit 2), as is a commit that is not 40 hex characters. --records names the record directories
 (`records/imx8mp/...`: run directories `<YYYYMMDD-HHMM>-e<NN>-<sha8>` or a parent holding them); with it, every
 entry needs a run directory, and the README names the given directories by their last component only.
+--scan is the stdout of imx8mp-console-scan.py (repeatable): its `!! NO FINISH row N (hang|watchdog end|reset) ...;
+last result NAME;` lines give an entry's kind and last case. For every row recorded as reset or hung the README gets
+a "## Resets and hangs" section with one marker-led line per event, which imx8mp-gles3-report.py counts: `WDOG1 eNN
+...` (a WDOG1 reset: verdict done_with_resets or a numeric resets= above 0, or a scan NO FINISH of kind reset or
+watchdog end) or `Hang: eNN ...` (verdict no_record, failed or died_after=..., or a scan NO FINISH of kind hang),
+`; last case NAME` appended when the scan names one. A row of neither kind adds nothing (no section).
 --results is the tally's results.tsv (its rows of the slice give the counts and the failing names the README
 lists per entry); it must have a row for every entry of the slice.
 
@@ -47,6 +53,8 @@ import argparse, os, re, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINE = re.compile(r'^\s*(board\.sh\s+(imx8mp|x2)\s+e(\d+)(?:-p(\d+))?\s+rc=\S+\s+verdict=\S+.*?)\s*$')
 X2_MEASURED = 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2 (crash-route kexec)'
+
+SCAN_NF = re.compile(r'^!! NO FINISH row (\d+) \((hang|watchdog end|reset)\) at [^;]*; last result ([^;]*);')
 
 RUN_DIR = re.compile(r'-e(\d+)-[0-9a-f]{8}$')
 
@@ -84,6 +92,47 @@ def read_lines(paths):
     if len(boards) > 1:
         raise Refuse('verdict lines of two boards (board.sh imx8mp and board.sh x2): one slice is one board\'s session')
     return rows, pages, (boards.pop() if boards else 'imx8mp')
+
+
+def read_scans(paths):
+    """{entry: (kind, last case or None)} from the stdout of imx8mp-console-scan.py (kind: reset | hang)."""
+    out = {}
+    for p in paths:
+        with open(p, errors='replace') as f:
+            for l in f:
+                m = SCAN_NF.match(l.strip())
+                if m:
+                    case = m.group(3).strip()
+                    out[int(m.group(1))] = ('hang' if m.group(2) == 'hang' else 'reset',
+                                            None if case in ('none', '(none)', '') else case)
+    return out
+
+
+def fault_kind(line, scan):
+    """'reset', 'hang' or None for a row: the scan's NO FINISH kind if it has one, else the verdict line's."""
+    if scan:
+        return scan[0]
+    v, r = kv(line, 'verdict'), kv(line, 'resets')
+    if v == 'done_with_resets' or (r.isdigit() and int(r) > 0):
+        return 'reset'
+    if v in ('no_record', 'failed') or v.startswith('died_after'):
+        return 'hang'
+    return None
+
+
+def fault_lines(want, rows, scans):
+    o = []
+    for e in want:
+        sc = scans.get(e)
+        k = fault_kind(rows[e], sc)
+        if not k:
+            continue
+        l = rows[e]
+        t = 'rc=%s verdict=%s resets=%s back_after=%s' % (kv(l, 'rc'), kv(l, 'verdict'), kv(l, 'resets'), kv(l, 'back_after'))
+        case = '; last case %s' % sc[1] if sc and sc[1] else ''
+        o.append(('WDOG1 e%02d: the entry ended on a WDOG1 reset (%s)%s' if k == 'reset' else
+                  'Hang: e%02d: the entry hung (%s)%s') % (e, t, case))
+    return o
 
 
 def run_dirs(records):
@@ -240,6 +289,7 @@ def build(a):
         miss = [e for e in want if e not in have]
         if miss:
             raise Refuse('no record directory for: %s' % ' '.join('e%02d' % e for e in miss))
+    scans = read_scans(a.scan)
     res = read_results(a.results) if a.results else None
     if res is not None:
         miss = [e for e in want if e not in res]
@@ -297,6 +347,9 @@ def build(a):
         for e in want:
             names = [n for n in res[e][8].split(';') if n and n != '-']
             o.append('- e%d: %s' % (e, ('%d failing: ' % len(names) + '; '.join(names)) if names else 'none named'))
+    ev = fault_lines(want, rows, scans)
+    if ev:
+        o += ['', '## Resets and hangs', ''] + ['- ' + x for x in ev]
     if new:
         o += CONSOLE
     o += ['', '`imx8mp-gles3-merge.py --check` reads the verdict lines above; `results.tsv` and `rows.md` of the',
@@ -334,6 +387,7 @@ def main():
     ap.add_argument('--records', nargs='*', default=[])
     ap.add_argument('--results')
     ap.add_argument('--out')
+    ap.add_argument('--scan', action='append', default=[], metavar='FILE')
     ap.add_argument('--artefacts', metavar='FILE')
     ap.add_argument('--preflight', metavar='FILE')
     ap.add_argument('--window', metavar='START/END')

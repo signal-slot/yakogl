@@ -14,6 +14,7 @@
 # begun) says it was measured on the Armadillo-X2, names records/x2 and the X2 commands, passes merge --check
 # --partial alone and beside the Verdin slice, takes --run-date for the Run lines, and lines of both boards in one
 # slice are refused.
+# Reset and hang rows (--scan, x2-faults-*.txt): marker-led README lines, counted by report.py's fault_events.
 # Host only, no argument; scratch under $TMPDIR (else the current directory), never /tmp.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -249,6 +250,37 @@ run --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --out "$tm
 grep -qF '`2026-11-15-imx8mp-gles3-'$h8'-rows58-58`' "$tmp/n/2026-11-imx8mp-gles3-x2-$h8-rows58-58/README.md" \
 	&& ok "Verdin: the slice name never comes from --out" || bad "Verdin: slice name taken from --out"
 cmp -s "$tmp/plain.md" "$tmp/a/slice/README.md" && ok "Verdin README unchanged by the X2 support" || bad "Verdin README changed"
+
+# 6. one reset row and one hang row (x2-faults-lines.txt: e52 ends on a WDOG1 window (back_after 612s, the scan's
+# NO FINISH kind "watchdog end", with its last case), e53 is verdict=no_record): the README carries a marker-led line
+# for each, `WDOG1 e52 ...` and `Hang: e53 ...`, and imx8mp-gles3-report.py counts 1 reset and 1 hang, none unknown.
+# Without the scan, a verdict done_with_resets row gives the same WDOG1 line (no last case).
+f=$tmp/f
+run --commit $full --rows 53-54 --date 2026-11-16 --lines "$slice/x2-faults-lines.txt" --results "$slice/x2-results.tsv" \
+	--scan "$slice/x2-faults-scan.txt" --out "$f" > "$tmp/f.log" 2>&1 && ok "fault slice written" || bad "fault slice refused: $(cat "$tmp/f.log")"
+cp "$slice/x2-results.tsv" "$f/results.tsv"
+grep -q '^- WDOG1 e52: .*back_after=612s.*; last case dEQP-GLES3\.functional\.state_query\.integers\.max_texture_size$' "$f/README.md" \
+	&& ok "fault: WDOG1 e52 line with the last case" || bad "fault: WDOG1 e52 line"
+grep -q '^- Hang: e53: .*verdict=no_record' "$f/README.md" && ok "fault: Hang e53 line" || bad "fault: Hang e53 line"
+grep -qF 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2 (crash-route kexec)' "$f/README.md" \
+	&& ok "fault: still says measured on the Armadillo-X2" || bad "fault: no measured-on line"
+cat > "$tmp/count.py" <<'PYEOF'
+import importlib.util, sys
+sp = importlib.util.spec_from_file_location('rep', sys.argv[1])
+m = importlib.util.module_from_spec(sp)
+sp.loader.exec_module(m)
+resets, hangs, short, unnamed = m.fault_events([sys.argv[2]], [])
+print(len(resets), len(hangs), len(unnamed))
+PYEOF
+[ "$(python3 -I "$tmp/count.py" "$here/imx8mp-gles3-report.py" "$f")" = "1 1 0" ] \
+	&& ok "report.py counts 1 reset and 1 hang, none unknown" || bad "report.py count: $(python3 -I "$tmp/count.py" "$here/imx8mp-gles3-report.py" "$f" 2>&1)"
+python3 -I "$redact" --check "$f/README.md" > "$tmp/r.txt" 2>&1 && ok "fault: redact --check passes" || bad "fault: redact: $(cat "$tmp/r.txt")"
+python3 -I "$merge" --check --partial "$f" > "$tmp/m.txt" 2>&1 && bad "fault: merge --check passed a no_record row" \
+	|| ok "fault: merge --check still refuses the not-clean row (as it must)"
+sed 's/e52 rc=0 verdict=done /e52 rc=0 verdict=done_with_resets /' "$slice/x2-faults-lines.txt" > "$tmp/f2.txt"
+run --commit $full --rows 53-54 --date 2026-11-16 --lines "$tmp/f2.txt" > "$tmp/f2.md" 2>&1
+grep -q '^- WDOG1 e52: ' "$tmp/f2.md" && ! grep -q 'last case' "$tmp/f2.md" && ok "fault: verdict alone gives the WDOG1 line" || bad "fault: verdict-only line"
+grep -q '^## Resets and hangs' "$tmp/x/slice/README.md" && bad "a clean slice has the fault section" || ok "a clean slice has no fault section"
 
 echo "slice-selftest: $nok ok, $nfail failed"
 [ "$nfail" = 0 ]
