@@ -353,6 +353,21 @@ text. `iand` of two masks is refused until step 2, so the probe can be
 of `mask_op` :2232, which step 2 leaves refused for want of a reference) and
 then needs no second move.
 
+*Landed.* `int_lane` has the three arms: `Ine` of two ints, `I2b` of an int
+as `ine(i, 0)`, and `inot` of a 32-bit integer compare as its dual
+(`ieq` and `ine`, `ilt` and `ige`). Byte-equal with them:
+`deqp_intval4_{ne_int_fs, ne_ivec2_fs, bvec2_of_ivec2_fs, not_eq_int_fs}`,
+`deqp_intval3_{opfs_not_equal_int_highp, opfs_notequal_ivec3_mediump,
+reslib_int_to_bool_fs, reslib_ivec4_to_bvec4_fs}` and
+`deqp_fsint_{ne_ivec4_highp, notequal_ivec4_highp}`; no `opt.rs` change was
+needed for the `ior` accumulator. One shape is kept refused with this text:
+an int that is both tested and converted, `vec4(bool(h), .., float(h))`
+(`deqp_intrnd_int_uniform_lanes_fs`), whose words come out in another order
+than Mesa's (the `S32_TO_F32` before the `ICMP_OR` and its `MUX.v2i16`).
+`deqp_intval3_rsg_condcomb80_fs` moves to the control-flow text (its `if`
+on `d != d`, which Mesa folds to false). The gap probe is now
+`float((v.x > 0.0) && (int(v.y) < 1))`.
+
 ### M2. `iand` / `ior` of masks (step 2)
 
 *What.* `int_lane` arms `Iand`/`Ior`: both 16-bit masks through `and_masks`

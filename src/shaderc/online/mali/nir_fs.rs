@@ -2825,6 +2825,23 @@ impl<'s> Fs<'s> {
             _ => false,
         };
         let int = |f: &Self, v: Val| !f.mask_lane(v) || int_word(f, v);
+        let has32 = |f: &Self, op: Alu, src: [Val; 3]| {
+            let nd = NirNode { kind: Kind::Alu(op), src, bits: 32, width: 1 };
+            f.nir.nodes[..f.nir.n].contains(&nd)
+        };
+        let icmp_dual = |f: &Self, v: Val| match f.alu_of(v) {
+            Some((Alu::Icmp(c), [a, b, _])) => {
+                let d = match c {
+                    Cmpf::Eq => Cmpf::Ne,
+                    Cmpf::Ne => Cmpf::Eq,
+                    Cmpf::Lt => Cmpf::Ge,
+                    Cmpf::Ge => Cmpf::Lt,
+                    Cmpf::Gt | Cmpf::Le => return None,
+                };
+                Some((d, a, b))
+            }
+            _ => None,
+        };
         match a {
             AluOp::F2i if self.is_f16(p) || self.uniform_dword(p).is_some() => self.int32(Alu::F2i32, [p, u, u], at),
             /* of an fp32 value (case 42's `int(uv.x * float(sz.x))`,
@@ -2863,6 +2880,15 @@ impl<'s> Fs<'s> {
                 self.op32(Alu::Bcsel, [inner, Val::Const(0), Val::Const(F32_ONE)], at)
             }
             AluOp::B2f if self.bool32(p) => self.op32(Alu::B2f, [p, u, u], at),
+            /* `inot` of an integer compare is the dual compare
+             * (nir_opt_algebraic.py: `inot(ieq(a, b))` is `ine(a, b)`,
+             * `inot(ilt(a, b))` `ige(a, b)` and the reverses; no
+             * `is_used_once`): deqp_intval4_not_eq_int_fs's `!(i == 2)`,
+             * `ICMP_OR.u32.ne.m1` */
+            AluOp::Bnot | AluOp::Inot if self.bool32(p) && icmp_dual(self, p).is_some() => {
+                let Some((c, a, b)) = icmp_dual(self, p) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                self.int32(Alu::Icmp(c), [a, b, u], at)
+            }
             AluOp::Bnot | AluOp::Inot if self.mask_lane(p) => match not(self, p) {
                 Some(inner) => Ok(inner),
                 None => self.int32(Alu::Inot, [p, u, u], at),
@@ -2920,6 +2946,16 @@ impl<'s> Fs<'s> {
              * of `i <= 1`) */
             AluOp::Ile => self.int32(Alu::Icmp(Cmpf::Ge), [q, p, u], at),
             AluOp::Ieq => self.int32(Alu::Icmp(Cmpf::Eq), [p, q, u], at),
+            /* `!=` of two run-time ints, `ICMP_OR.u32.ne.m1` (intval-rest M1,
+             * docs/notes/mali-intval-rest-lowering.md 4.1:
+             * deqp_intval4_ne_int_fs), and `bool(i)`, `ine(i, 0)` */
+            AluOp::Ine if int(self, p) && int(self, q) => self.int32(Alu::Icmp(Cmpf::Ne), [p, q, u], at),
+            /* an int that is both tested and converted (`vec4(bool(h), ..,
+             * float(h))`) has Mesa's words in another order
+             * (deqp_intrnd_int_uniform_lanes_fs: the `MUX.v2i16` before
+             * the `S32_TO_F32`): not lowered, here and at `I2f` below */
+            AluOp::I2b if int(self, p) && has32(self, Alu::I2f, [p, u, u]) => Err(MaliError::IntValue),
+            AluOp::I2b if int(self, p) => self.int32(Alu::Icmp(Cmpf::Ne), [p, Val::Const(0), u], at),
             /* case 79's `int(abs(u_d.z)) + 1` (`IADD_IMM.i32 r1, r1^, #0x2`
              * once fused), `float(q.x)` (an fp32 value: lower_precision
              * lowers no conversion from an integer, intbig_case79.stderr's
@@ -2936,6 +2972,9 @@ impl<'s> Fs<'s> {
              * ivec4_highp: `IMUL.i32` per lane; a `-i` alone `ISUB.s32 0, a`) */
             AluOp::Imul if int(self, p) && int(self, q) => self.int32(Alu::Imul, [p, q, u], at),
             AluOp::Ineg if int(self, p) => self.int32(Alu::Ineg, [p, u, u], at),
+            AluOp::I2f if int(self, p) && has32(self, Alu::Icmp(Cmpf::Ne), [p, Val::Const(0), u]) => {
+                Err(MaliError::IntValue)
+            }
             AluOp::I2f if int(self, p) => self.op32(Alu::I2f, [p, u, u], at),
             /* `float(v_idx)` of a flat `uint` varying (case 89), fp32 as
              * `i2f32` is; motion.rs moves it into the vertex shader */
