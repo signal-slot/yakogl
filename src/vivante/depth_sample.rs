@@ -46,7 +46,7 @@
 //! in (the deps cache's `mesa-pan/mesa-26.2.1`; `third_party/mesa-26.2.1`
 //! holds no etnaviv).
 
-use crate::backend::{GlesTextureBind, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_2D};
+use crate::backend::{swizzle_source, GlesTextureBind, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_2D};
 use crate::util::ENOTSUP;
 
 /// `TEXTURE_FORMAT_D24X8` (Mesa `common_3d.xml.h`, X:60; etnaviv_format.c
@@ -129,13 +129,53 @@ pub fn gc_depth_sampled(id: u32, w: u32, h: u32) -> bool {
     mode() != DEPTH_TPU_OFF && id != 0 && view(id, 0).is_some_and(|v| v.covers(w, h))
 }
 
+/// Does `t` ask for a depth compare that reads the depth's value
+/// (GL_TEXTURE_COMPARE_MODE GL_COMPARE_REF_TO_TEXTURE with a function other
+/// than GL_NEVER and GL_ALWAYS; `GlesTextureBind::compare_op`, src/gl/draw.rs
+/// `compare_op`)? Such a reader needs the exact 24 bits the CPU resolve
+/// converts, and a D24X8 view may return fewer (gl_test `dtpu` verdict code 3,
+/// docs/notes/gc-depth-sample-wire.md). NEVER (op 0) and ALWAYS (op 7) give a
+/// constant whatever the depth, so they take the view; so does a binding with
+/// compare_op 0 that was built from `GlesTextureBind::ZERO`.
+pub fn exact_depth_reader(t: &GlesTextureBind) -> bool {
+    t.compare_op & 16 == 0 && !matches!(t.compare_op & 7, 0 | 7)
+}
+
+/// Is `t`'s GL_TEXTURE_SWIZZLE_* the identity (every component reads its
+/// own channel, [`swizzle_source`])?
+fn identity_swizzle(t: &GlesTextureBind) -> bool {
+    (0..4).all(|k| swizzle_source(k, t.swizzle[k]) == k)
+}
+
 /// The binding `emit_slot` describes instead of `t` (whose texels are
 /// stale) in `mode`, for the surface `v`. -ENOTSUP when there is no surface,
-/// the texture does not fit inside it, or the mode is not 1 or 2.
+/// the texture does not fit inside it, or the mode is not 1 or 2; and, in
+/// either mode, for an [`exact_depth_reader`] (a shadow compare must read the
+/// resolve's 24 bits, not a view that may hold fewer), and in mode 2 for a
+/// non-identity swizzle (the raw view's channels are bytes of the word, not
+/// components a GL swizzle names). Mode 1 keeps `t`'s swizzle: `emit_slot`'s
+/// `texture::descriptor_swizzle` composes it with the view's own (R, R, R, 1),
+/// as it composes the R32F texels' swizzle with `depth_luminance`, so an
+/// ES 2.0 depth texture (`depth_luminance` 1, base (d, d, d, 1)) reads through
+/// the view what its resolved texels read, whatever its swizzle. (An ES 3.0
+/// binding, `depth_luminance` 0, reads (d, 0, 0, 1) from its texels and
+/// (d, d, d, 1) from the view, swizzled or not, as before this guard; a
+/// shader that reads only `.r`, glmark2's included, sees no difference.)
+///
+/// A refusal here fails the draw by name: the GL core already left the
+/// texels stale on [`gc_depth_sampled`]'s yes, which cannot see the compare
+/// mode (`samples_rendered_depth(id, w, h)` carries neither it nor the unit
+/// whose sampler object may set it). Keeping such a reader on the CPU resolve
+/// needs the GL core to ask with the binding's compare (src/gl, #397).
+/// CPU readbacks are not affected: every CPU read or write of the texels
+/// resolves them first (`gl::texture::settle_texture` calls `resolve_depth`).
 pub fn view_binding(t: &GlesTextureBind, mode: i32, v: Option<DepthView>) -> Result<GlesTextureBind, i32> {
     let Some(v) = v.filter(|v| v.covers(t.width, t.height)) else {
         return Err(-ENOTSUP);
     };
+    if exact_depth_reader(t) || (mode == DEPTH_TPU_RAW8888 && !identity_swizzle(t)) {
+        return Err(-ENOTSUP);
+    }
     /* one 2D level at the surface: LINEAR (no `cpu`, so no tiled copy),
      * LINEAR_STRIDE = stride_texels * 4 = the surface's stride */
     let at = GlesTextureBind {
@@ -153,8 +193,15 @@ pub fn view_binding(t: &GlesTextureBind, mode: i32, v: Option<DepthView>) -> Res
         ..*t
     };
     match mode {
-        /* (d, d, d, 1): R in G and B (`depth_luminance`), A 1 */
-        DEPTH_TPU_D24X8 => Ok(GlesTextureBind { format: GC_TEXFMT_DEPTH_VIEW, depth_luminance: 1, no_alpha: 1, ..at }),
+        /* (d, d, d, 1): R in G and B (`depth_luminance`), A 1, with the
+         * texture's swizzle on top */
+        DEPTH_TPU_D24X8 => Ok(GlesTextureBind {
+            format: GC_TEXFMT_DEPTH_VIEW,
+            depth_luminance: 1,
+            no_alpha: 1,
+            swizzle: t.swizzle,
+            ..at
+        }),
         /* the word's bytes as they are: NEAREST (a filter across bytes is
          * not a filter of the depth), identity swizzle */
         DEPTH_TPU_RAW8888 => Ok(GlesTextureBind {
@@ -182,6 +229,12 @@ pub fn binding(t: &GlesTextureBind, kick: u32) -> Result<GlesTextureBind, i32> {
             t.width,
             t.height,
             v.stride
+        ),
+        (Err(_), Some(v)) if v.covers(t.width, t.height) => crate::glog_once!(
+            "vivante: dtpu mode {mode}: a {}x{} depth texture with a depth compare (op {}) or a swizzle the view cannot keep; the draw is refused",
+            t.width,
+            t.height,
+            t.compare_op
         ),
         _ => crate::glog_once!(
             "vivante: dtpu mode {mode}: a {}x{} depth texture does not fit a live depth surface; the draw is refused",
@@ -635,5 +688,128 @@ mod copy_tests {
                 }
             }
         }
+    }
+}
+
+/* ---- The view's guards: the texture's swizzle and exact-depth readers ---- */
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+    use crate::backend::{
+        GLES_SWIZZLE_ALPHA, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_ONE, GLES_SWIZZLE_RED,
+        GLES_SWIZZLE_ZERO, GLES_TEXFMT_R32F,
+    };
+    use crate::vivante::regs::{GC_SWIZZLE_0, GC_SWIZZLE_1, GC_SWIZZLE_R};
+    use crate::vivante::texture::{descriptor_swizzle, gc_texfmt};
+
+    const SURFACE: DepthView = DepthView { gpu: 0x0010_0000, stride: 64 * 4, rows: 64 };
+    /* compare_op as the GL core sets it for a DEPTH24_STENCIL8 texture
+     * (src/gl/draw.rs `compare_op`): bit 3 fixed-point, bit 4 no compare */
+    const FIXED: u8 = 8;
+    const NO_COMPARE: u8 = 16 | FIXED;
+
+    /// The GL core's ES 2.0 depth texture binding (`depth_luminance` 1).
+    fn depth_texture(compare_op: u8, swizzle: [u8; 4]) -> GlesTextureBind {
+        GlesTextureBind {
+            format: GLES_TEXFMT_R32F,
+            type_: GLES_TEXTYPE_2D,
+            layers: 1,
+            width: 64,
+            height: 64,
+            mip_levels: 1,
+            no_alpha: 1,
+            depth_luminance: 1,
+            depth_id: (1 << 30) | 1,
+            compare_op,
+            swizzle,
+            ..GlesTextureBind::ZERO
+        }
+    }
+
+    /// CONFIG1's four swizzle fields `emit_slot` writes for a binding.
+    fn words(b: &GlesTextureBind) -> [u32; 4] {
+        descriptor_swizzle(&gc_texfmt(b.format), b)
+    }
+
+    /// What the texels' R32F binding reads in GC terms (R the depth), the
+    /// CPU resolve's answer the view must give.
+    fn cpu_words(t: &GlesTextureBind) -> [u32; 4] {
+        words(&GlesTextureBind { depth_id: 0, ..*t })
+    }
+
+    #[test]
+    fn the_identity_swizzle_keeps_the_views_own_descriptor() {
+        let b = view_binding(&depth_texture(NO_COMPARE, [0; 4]), DEPTH_TPU_D24X8, Some(SURFACE)).expect("it fits");
+        assert_eq!(words(&b), [GC_SWIZZLE_R, GC_SWIZZLE_R, GC_SWIZZLE_R, GC_SWIZZLE_1], "(d, d, d, 1)");
+        assert_eq!(words(&b), cpu_words(&depth_texture(NO_COMPARE, [0; 4])));
+    }
+
+    /// Mode 1 keeps the texture's swizzle: an ES 2.0 depth texture's view
+    /// reads what its resolved texels would, for every component source.
+    #[test]
+    fn a_swizzled_depth_view_reads_what_the_texels_would() {
+        let (r, g, b, a) = (GLES_SWIZZLE_RED, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_ALPHA);
+        let (z, o) = (GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE);
+        for swizzle in [[0; 4], [a, b, g, r], [z, o, r, a], [g, g, a, o], [0, 0, 0, z], [a, 0, z, 0]] {
+            let t = depth_texture(NO_COMPARE, swizzle);
+            let v = view_binding(&t, DEPTH_TPU_D24X8, Some(SURFACE)).expect("mode 1 keeps a swizzle");
+            assert_eq!((v.format, v.swizzle), (GC_TEXFMT_DEPTH_VIEW, swizzle));
+            assert_eq!(words(&v), cpu_words(&t), "swizzle {swizzle:?}");
+        }
+        /* written out: (A, B, G, R) of (d, d, d, 1) is (1, d, d, d), and
+         * (0, 1, R, A) is (0, 1, d, 1) */
+        let v = view_binding(&depth_texture(NO_COMPARE, [a, b, g, r]), DEPTH_TPU_D24X8, Some(SURFACE)).unwrap();
+        assert_eq!(words(&v), [GC_SWIZZLE_1, GC_SWIZZLE_R, GC_SWIZZLE_R, GC_SWIZZLE_R]);
+        let v = view_binding(&depth_texture(NO_COMPARE, [z, o, r, a]), DEPTH_TPU_D24X8, Some(SURFACE)).unwrap();
+        assert_eq!(words(&v), [GC_SWIZZLE_0, GC_SWIZZLE_1, GC_SWIZZLE_R, GC_SWIZZLE_1]);
+    }
+
+    /// The raw view's channels are bytes of the D24S8 word, which no GL
+    /// swizzle names: it takes the identity alone.
+    #[test]
+    fn the_raw_view_refuses_a_swizzle() {
+        let raw = |swizzle| view_binding(&depth_texture(NO_COMPARE, swizzle), DEPTH_TPU_RAW8888, Some(SURFACE));
+        let explicit = [GLES_SWIZZLE_RED, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_ALPHA];
+        for identity in [[0; 4], explicit] {
+            assert_eq!(raw(identity).expect("the identity").swizzle, [0; 4]);
+        }
+        assert_eq!(raw([GLES_SWIZZLE_ALPHA, 0, 0, 0]).err(), Some(-ENOTSUP));
+        assert_eq!(raw([0, 0, 0, GLES_SWIZZLE_ONE]).err(), Some(-ENOTSUP));
+    }
+
+    /// A shadow compare that reads the depth (LESS .. NOTEQUAL) needs the
+    /// resolve's 24 bits: both modes refuse the view. No compare, NEVER and
+    /// ALWAYS (a constant whatever the depth) take it, as does a binding built
+    /// from `ZERO` (compare_op 0).
+    #[test]
+    fn a_depth_compare_is_refused_the_view() {
+        for mode in [DEPTH_TPU_D24X8, DEPTH_TPU_RAW8888] {
+            for op in 1..=6u8 {
+                for fixed in [0, FIXED] {
+                    let t = depth_texture(op | fixed, [0; 4]);
+                    assert!(exact_depth_reader(&t));
+                    assert_eq!(view_binding(&t, mode, Some(SURFACE)).err(), Some(-ENOTSUP), "mode {mode}, op {op}");
+                }
+            }
+            for op in [NO_COMPARE, 16, FIXED, FIXED | 7, 7, 0] {
+                let t = depth_texture(op, [0; 4]);
+                assert!(!exact_depth_reader(&t), "op {op}");
+                assert!(view_binding(&t, mode, Some(SURFACE)).is_ok(), "mode {mode}, op {op}");
+            }
+        }
+    }
+
+    /// Mode 0 is today's path: the view is never made, whatever the binding.
+    #[test]
+    fn mode_0_makes_no_view() {
+        for op in [NO_COMPARE, FIXED | 1] {
+            for swizzle in [[0; 4], [GLES_SWIZZLE_ALPHA, 0, 0, 0]] {
+                let t = depth_texture(op, swizzle);
+                assert_eq!(view_binding(&t, DEPTH_TPU_OFF, Some(SURFACE)).err(), Some(-ENOTSUP));
+            }
+        }
+        #[cfg(not(feature = "test-knobs"))]
+        assert!(!gc_depth_sampled((1 << 30) | 1, 64, 64), "no knob: the CPU resolve");
     }
 }
