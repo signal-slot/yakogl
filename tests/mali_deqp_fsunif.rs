@@ -46,6 +46,10 @@ mod mali_ref;
 
 /// The refusal, without the `Valhall: ` prefix and the ` is not lowered yet`
 /// suffix.
+/// Where the int and bool array shapes stand once their rows are laid
+/// (plan #377 spike-uniform-rest3, select.rs `UboLayout::fs16`): the
+/// broadcast colour of tests/mali_deqp_fclane.rs.
+const COLOUR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 const FS_UNIFORM: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
 
 /// The references the compiler makes byte-equal: `highp_mat4_add_float`,
@@ -57,10 +61,10 @@ const MATCHED: &[&str] = &["highp_mat4_add_float", "struct_basic"];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("arr_bvec4", FS_UNIFORM),
-    ("arr_ivec4", FS_UNIFORM),
+    ("arr_bvec4", COLOUR_LANE),
+    ("arr_ivec4", COLOUR_LANE),
     ("arr_mat4", FS_UNIFORM),
-    ("struct_int_ivec4", FS_UNIFORM),
+    ("struct_int_ivec4", COLOUR_LANE),
     ("mat4_add_float", FS_UNIFORM),
     ("mat2_mul_mat2", FS_UNIFORM),
 ];

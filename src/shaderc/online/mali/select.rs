@@ -600,15 +600,15 @@ impl UboLayout {
                 continue;
             }
             let (comps, halves) = match u.gl_type as u32 {
-                GL_INT | GL_BOOL if u.array_len <= 1 => (1, false),
+                GL_INT | GL_BOOL => (1, false),
                 /* a bvec's lanes are 32-bit words, as a bool's (intbool_76_boolany);
                  * an ivec's too (`caps->int16` is false, pan_screen.c:591:
                  * lower_precision narrows no integer; fsivec4's `u2.w0`,
                  * `u2.w1`; deqp_intval_reslib_mixed_fs's `uniform ivec3
                  * ref_out0`, `ICMP_OR.u32.eq.m1 r1, r1^, u2.w1, 0x0`) */
-                GL_BOOL_VEC2 | GL_INT_VEC2 if u.array_len <= 1 => (2, false),
-                GL_BOOL_VEC3 | GL_INT_VEC3 if u.array_len <= 1 => (3, false),
-                GL_BOOL_VEC4 | GL_INT_VEC4 if u.array_len <= 1 => (4, false),
+                GL_BOOL_VEC2 | GL_INT_VEC2 => (2, false),
+                GL_BOOL_VEC3 | GL_INT_VEC3 => (3, false),
+                GL_BOOL_VEC4 | GL_INT_VEC4 => (4, false),
                 GL_FLOAT => (1, true),
                 /* an array of them too, one element from a word of its own
                  * (deqp_uniarray_vec2_const_fs, vec3_const_fs) */
@@ -692,6 +692,12 @@ impl UboLayout {
         let r = self.row(dword).filter(|r| r.halves)?;
         let k = dword - r.dword;
         Some((r.word + k / 2, (k % 2) as u8, r.word))
+    }
+
+    /// The component count of the row that holds front-end dword `dword`
+    /// (1 for a float uniform or a float array's element).
+    pub fn row_comps(&self, dword: u16) -> Option<u16> {
+        self.row(dword).map(|r| r.comps)
     }
 
     /// The words of the `load_ubo` that reads Mesa's word `w` once

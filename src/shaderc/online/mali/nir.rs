@@ -1191,6 +1191,15 @@ pub(super) fn array_element(u: &ir::UniformDecl<'_>) -> Option<(u16, u16)> {
         GL_FLOAT_VEC2 => (2, 2),
         GL_FLOAT_VEC3 => (4, 3),
         GL_FLOAT_VEC4 => (4, 4),
+        /* an int or bool array: fp32 words, one a component, an element
+         * at the vector's stride as a float array's (deqp_unif2_arr_int_array,
+         * arr_bool_array: `u5.w1`, `u6.w0`, `u6.w1` each loaded alone;
+         * Mesa narrows no integer, docs/notes/mali-unif2-lowering.md 6
+         * step 3) */
+        GL_INT | GL_UNSIGNED_INT | GL_BOOL => (1, 1),
+        GL_INT_VEC2 | GL_UNSIGNED_INT_VEC2 | GL_BOOL_VEC2 => (2, 2),
+        GL_INT_VEC3 | GL_UNSIGNED_INT_VEC3 | GL_BOOL_VEC3 => (4, 3),
+        GL_INT_VEC4 | GL_UNSIGNED_INT_VEC4 | GL_BOOL_VEC4 => (4, 4),
         _ => return None,
     };
     let n = u16::from(u.array_len);
@@ -4473,6 +4482,42 @@ fn vs_zero_and(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
     vs.alu(Alu::B2f, c, u, u)
 }
 
+/// The 32-bit boolean `a` of a lane `v` that is `b2f(a)`: the walk's
+/// `B2f` of a boolean ([`vs_is_bool`]), or the `bcsel(c, 0.0, 1.0)` the
+/// walk makes of `bcsel(inot(c), 1.0, 0.0)`, whose boolean is `inot(c)`
+/// (`(false, c)`: the `inot` is still to make). None: not such a lane.
+fn vs_b2f_mask(vs: &Nir<'_>, m: &Module<'_>, v: Val) -> Option<(bool, Val)> {
+    match vs_alu_of(vs, v)? {
+        (Alu::B2f, [a, ..]) if vs_is_bool(vs, m, a) && !vs_is_mask16(vs, a) => Some((true, a)),
+        (Alu::Bcsel, [c, Val::Const(F32_ZERO), Val::Const(F32_ONE)])
+            if vs_is_bool(vs, m, c) && !vs_is_mask16(vs, c) =>
+        {
+            Some((false, c))
+        }
+        _ => None,
+    }
+}
+
+/// `fmul(b2f(a), b2f(b))` of two [`vs_b2f_mask`]s: `b2f(iand(a, b))`
+/// (nir_opt_algebraic.py:1679).
+fn vs_b2f_and(vs: &mut Nir<'_>, m: &Module<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    let mask = |vs: &mut Nir<'_>, v: Val| -> Result<Val, MaliError> {
+        match vs_b2f_mask(vs, m, v) {
+            Some((true, a)) => Ok(a),
+            Some((false, c)) => vs.alu(Alu::Inot, c, u, u),
+            None => Err(MaliError::Defect(Defect::IrIndex)),
+        }
+    };
+    let a = mask(vs, p)?;
+    let b = mask(vs, q)?;
+    /* the later boolean first: Mesa's `LSHIFT_AND.i32 r0, u6.w0, 0x0.b00,
+     * r0^` and `ICMP_AND.u32.eq.m1 r0, u6.w0, 0x7060504.b0, r0^` read the
+     * mask so far last */
+    let c = vs.alu(Alu::Iand, b, a, u)?;
+    vs.alu(Alu::B2f, c, u, u)
+}
+
 /// The node a lane `v` is of.
 fn lane_node(v: Val) -> Option<u16> {
     match v {
@@ -4621,6 +4666,34 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
         let zy = vs.alu(Alu::Ior, b[2], b[1], u)?;
         let any = vs.alu(Alu::Ior, zy, b[0], u)?;
         return vs.alu(Alu::Inot, any, u, u);
+    }
+    /* `b == bvec2(c0, c1)` of booleans against a constant of true and
+     * false lanes: each lane's `ieq(b, true)` is `b` and `ieq(b, false)`
+     * `inot(b)` (nir_opt_algebraic.py), ANDed y first
+     * (deqp_unif2_vs_bool_uniform's `bvec2(false, true)`: `LSHIFT_OR.i32
+     * r0, 0x0, 0x0.b00, u5.w1.not`, `LSHIFT_AND.i32 r0, u6.w0, 0x0.b00,
+     * r0^`, then the `CSEL.u32.eq`). Other widths have no reference */
+    if a == AluOp::Ball && op == AluOp::Ieq && n == 2 {
+        let mut b = [(u, false); 2];
+        for (i, x) in b.iter_mut().enumerate() {
+            let j = s.swizzle[i] as usize;
+            *x = match (lane(w, cs[0], j), lane(w, cs[1], j)) {
+                (p, Val::Const(c @ (0 | u32::MAX))) | (Val::Const(c @ (0 | u32::MAX)), p)
+                    if vs_is_bool(vs, m, p) && !matches!(p, Val::Const(_)) && !vs_is_mask16(vs, p) =>
+                {
+                    (p, c == u32::MAX)
+                }
+                _ => return Err(MaliError::Arithmetic),
+            };
+        }
+        if b.iter().all(|&(_, t)| !t) {
+            return Err(MaliError::Arithmetic);
+        }
+        let mut t = [u; 2];
+        for (o, &(p, tr)) in t.iter_mut().zip(b.iter()) {
+            *o = if tr { p } else { vs.alu(Alu::Inot, p, u, u)? };
+        }
+        return vs.alu(Alu::Iand, t[1], t[0], u);
     }
     match (a, op, n) {
         (AluOp::Ball, AluOp::Feq, 2) => {
@@ -6225,6 +6298,18 @@ fn walk<'s>(
                          * ([`vs_zero_and`]) */
                         AluOp::Fmul if vs_zero_test(&vs, x(0)).is_some() && vs_zero_test(&vs, x(1)).is_some() => {
                             vs_zero_and(&mut vs, x(0), x(1))?
+                        }
+                        /* any other product of two `b2f` of 32-bit
+                         * booleans: `b2f(iand(a, b))` (nir_opt_algebraic.py:1679),
+                         * the `iand` of a compare its `ICMP_AND` (opt.rs
+                         * `fuse_cmp`); deqp_unif2_arr_int_array's three
+                         * `compare_int`s: `ICMP_OR.u32.eq.m1`, two
+                         * `ICMP_AND.u32.eq.m1`, one `CSEL.u32.eq`;
+                         * arr_bool_array's `[0] == false`, `[1] == true`,
+                         * `[2] == true`: `LSHIFT_OR.i32 .. u5.w1.not`, two
+                         * `LSHIFT_AND.i32` ([`vs_b2f_mask`]) */
+                        AluOp::Fmul if vs_b2f_mask(&vs, m, x(0)).is_some() && vs_b2f_mask(&vs, m, x(1)).is_some() => {
+                            vs_b2f_and(&mut vs, m, x(0), x(1))?
                         }
                         AluOp::Fmul if split == [false; 2] || !(is_zero(x(0)) || is_zero(x(1))) => {
                             match vs_fmul_const_up(&mut vs, m, &s, x(0), x(1))? {

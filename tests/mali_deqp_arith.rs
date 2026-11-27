@@ -338,7 +338,9 @@ const REFUSED: &[(&str, &str)] = &[
     /* random.storeoutput fs mediump: 31 cases of shaders.random.basic_expression.combined.11 */
     ("random_storeoutput_fs_mediump", OPERAND),
     /* uniform_api.bool_compare vs none: 179 cases of uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_float_both */
-    ("uniform_api_bool_compare_vs_none", ARITH),
+    /* its vertex bvec2 compare since plan #377 spike-uniform-rest3; the
+     * fragment broadcast colour next */
+    ("uniform_api_bool_compare_vs_none", FORM),
 ];
 
 #[test]

@@ -31,7 +31,9 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_unifmp_` prefix.
-const LOWERED: &[&str] = &[];
+/// `rsg_sconv12` since plan #377 spike-uniform-rest3: two float uniforms'
+/// halves of two words as one `MKVEC.v2i16` (nir_fs.rs `vectorise`).
+const LOWERED: &[&str] = &["rsg_sconv12"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -45,7 +47,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("inv_mediump_cse2", TEXT_FSU),
     ("mat4_sub_mat4", TEXT_FSU),
     ("rsg_expr10", TEXT_FSU),
-    ("rsg_sconv12", TEXT_FSU),
     ("struct_array", TEXT_FSU),
     ("struct_nested", TEXT_FSU),
     ("struct_sampler", TEXT_FSU),
@@ -153,7 +154,6 @@ fn rsg_expr10() {
 /// `shaders.random.scalar_conversion.fragment.12`: `vec4(c, b, 0, a)` of two
 /// mediump float uniforms in swapped order (`MKVEC.v2i16 u2.w1.h0, u2.w0.h0`).
 #[test]
-#[ignore = "refused (FsUniform: two fp16 uniform halves not an aligned pair); pinned by refusals_pinned"]
 fn rsg_sconv12() {
     assert_matches("rsg_sconv12");
 }

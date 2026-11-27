@@ -57,16 +57,20 @@ const FS_UNIFORM: &str = "a mediump fragment shader uniform other than a float, 
 /// The references the compiler makes byte-equal: none yet.
 const MATCHED: &[&str] = &[];
 
+/// The broadcast colour (tests/mali_deqp_fclane.rs), where the int and bool
+/// arrays stand since plan #377 spike-uniform-rest3 laid their rows.
+const COLOUR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
+
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
     ("random_4", FS_UNIFORM),
     ("random_9", FS_UNIFORM),
-    ("random_31", FS_UNIFORM),
-    ("random_34", FS_UNIFORM),
-    ("random_62", FS_UNIFORM),
+    ("random_31", COLOUR_LANE),
+    ("random_34", COLOUR_LANE),
+    ("random_62", COLOUR_LANE),
     ("random_80", FS_UNIFORM),
     ("random_81", FS_UNIFORM),
-    ("random_93", FS_UNIFORM),
+    ("random_93", COLOUR_LANE),
 ];
 
 /// [`mali_ref::assert_matches`] of a reference whose struct members

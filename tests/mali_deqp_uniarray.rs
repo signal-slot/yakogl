@@ -21,7 +21,7 @@
 mod mali_ref;
 
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp (compare_float's abs and ?: on the elements, Mesa's FMAX of the three abs and one FCMP), owned by constop"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (compare_float's abs and ?: on the elements, Mesa's FMAX of the three abs and one FCMP), owned by constop"]
 fn api_float() {
     mali_ref::assert_matches("deqp_uniarray_api_float");
 }
@@ -152,14 +152,10 @@ fn vec4_const_vs() {
 
 /// Each ignored reference's refusal at the tip.
 const REFUSALS: &[(&str, &str)] = &[
-    (
-        "api_float",
-        "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp",
-    ),
-    (
-        "struct",
-        "a gl_FragColor lane other than the varying's own lane or a constant",
-    ),
+    /* the elements' halves of two words are one pair since plan #377
+     * spike-uniform-rest3 (nir_fs.rs `vectorise`); the colour next */
+    ("api_float", "a gl_FragColor lane other than the varying's own lane or a constant"),
+    ("struct", "a gl_FragColor lane other than the varying's own lane or a constant"),
 ];
 
 #[test]
