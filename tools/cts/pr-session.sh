@@ -67,6 +67,20 @@ usage() {
     exit 2
 }
 
+# board.sh run writes its record to <logdir>/<YYYYMMDD-HHMM>-<name>-<sha8>/
+# (console.txt inside), not to <logdir> itself: find_console DIR prints the
+# console.txt of the newest such record, or DIR/console.txt if it is there.
+find_console() {
+    local d=$1 f
+    if [ -f "$d/console.txt" ]; then echo "$d/console.txt"; return 0; fi
+    # the names start with the date, so the last in sort order is the newest
+    f=$(LC_ALL=C ls -d "$d"/*/console.txt 2> /dev/null | sort | tail -1)
+    [ -n "$f" ] || return 1
+    echo "$f"
+}
+# internal, for the selftest: pr-session.sh --find-console <logdir>
+if [ "${1:-}" = --find-console ]; then [ $# -eq 2 ] || usage; find_console "$2"; exit; fi
+
 KNOB= CAP= ONE=0 CASES= GLM=0 LOCAL=0 DRY=0 LEG= CASES_SET=0
 [ $# -ge 1 ] || usage
 case "$1" in -*) usage ;; esac
@@ -236,8 +250,9 @@ for i in "${!LABELS[@]}"; do
     VERDICTS+=("$l: $(grep -a 'verdict=' "$BUILD/run-$l.out" | tail -1)")
     [ -n "$LEG" ] || grep -aq 'verdict=done' "$BUILD/run-$l.out" || rc=1
     # the serial log, redacted again as board.sh does (its copy already is)
-    if [ -f "$BUILD/run-$l/console.txt" ]; then
-        cp "$BUILD/run-$l/console.txt" "$OUT/$l.log"
+    CONSOLE=$(find_console "$BUILD/run-$l") || CONSOLE=
+    if [ -n "$CONSOLE" ]; then
+        cp "$CONSOLE" "$OUT/$l.log"
         for s in "${BOARD_HOST#*@}" "${BOARD_UART%%:*}"; do
             [ ${#s} -ge 6 ] || continue
             esc=$(printf '%s' "$s" | sed 's/[][\\.*^$/|(){}+?]/\\&/g')
