@@ -446,6 +446,40 @@ Left (pins unchanged):
 | `struct_member_fs` | `FsUniform` | the mediump fragment walk's leaf for the int member converted, `S32_TO_F32 r0, u3.w1` then `FADD.f32 r0.h0, r0^, 0x0.neg`, paired by `MKVEC.v2i16` with the narrowed fp32 member `b[1]` (`FADD.f32 r1.h0, u3.w0, 0x0.neg`); the other two members `V2F32_TO_V2F16 r0, u2.w0, u2.w1` |
 | `struct`, `api_float` | `ColourForm` / `FsUniform` | `compare_float`'s `abs` and `?:` (Mesa's `FMAX` of the abs values and one `FCMP`), constop's fragment compare tree |
 
+## 11. What landed (lower-uniform-rest3)
+
+spike-uniform-rest3's patch (nir.rs `array_element` for int and bool
+arrays, `vs_b2f_and`, the `bvec2 ==` reduction; nir_fs.rs `vectorise`'s
+`MKVEC.v2i16` of two uniforms' halves; select.rs) was already at the
+integration tip 7f72cb46, with its pin moves, so this item adds none of it.
+It lowers the two `value.initial` vertex references of
+`tests/mali_deqp_vsuarr.rs` that compiled with other words than Mesa's,
+both now byte-equal and un-ignored:
+
+- **`init_int`** (`mediump int u_var[3]`, each `== 0`). The FAU slots
+  were right: `fau.rs` `push_ubo` pushes the words in ascending order, so
+  `u_var[0]` is FAU 11 in ours and Mesa's. What differed was the order of
+  the first `umax`: Mesa's is `umax(u_var[1], u_var[0])` (`MOV.i32 r0,
+  u5.w1`, then `CSEL.u32.gt r0, u6.w0, r0^, u6.w0, r0^`). nir.rs
+  `vs_zero_and` now puts the word of the later load first when both
+  operands are words of two different loads. Lanes of one load (an ivec's
+  x and y, deqp_vs16ref_uapi_ivec3) keep x first.
+- **`init_bool`** (`bool u_var[3]`, each `== false`). Mesa ORs the
+  elements and negates once: `iand(inot(a), inot(b))` is `inot(ior(a, b))`,
+  whose `b2f` is `bcsel(ior, 0.0, 1.0)`: `MOV.i32 r0, u5.w1`,
+  `LSHIFT_OR.i32 r0, u6.w0, 0x0.b00, r0^`, `LSHIFT_OR.i32 r0, r0^,
+  0x0.b00, u6.w1`, `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`. nir.rs
+  `vs_b2f_and` builds it when both booleans of the product are negated:
+  two words go later first, and a computed value goes before a word. The
+  product it returns reads as negated again, so the chain goes on.
+
+No other byte-compare moved: every `tests/mali_deqp_*.rs` and
+`mali_glmark2_corpus` pass, and the glmark2 fixture is unchanged.
+`init_bvec4`, `init_ivec4` and `init_multi` still stop at `Arith`, and
+`init_mat4`, `init_struct_mat` and `init_nested_mat` at `UniformArray`
+(pins unchanged). `struct` and `api_float` of this family are as
+section 10 left them.
+
 ## Open
 
 - ~~The exact generated GLSL of A-F is not read~~. The `indexing` and

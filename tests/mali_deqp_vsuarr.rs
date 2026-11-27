@@ -39,17 +39,18 @@ mod mali_ref;
 /// The refusal, without the `Valhall: ` prefix.
 const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
 
-/// The references the compiler makes byte-equal. None yet.
-const MATCHED: &[&str] = &[];
+/// The references the compiler makes byte-equal: `init_bool` (the OR chain
+/// of the negated elements, nir.rs `vs_b2f_and`) and `init_int` (the later
+/// element first in the `umax`, nir.rs `vs_zero_and`), plan #377
+/// lower-uniform-rest3.
+const MATCHED: &[&str] = &["init_bool", "init_int"];
 
 /// The arithmetic refusal (the vertex shader's), without the `Valhall: ` prefix.
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
 
-/// The references that compile now and still differ from Mesa's words:
-/// `init_bool` (our `.not` ORs and `LSHIFT_AND` against Mesa's OR chain, 9
-/// words to 7) and `init_int` (the FAU words of the first two elements are
-/// swapped).
-const DIFFERS: &[&str] = &["init_bool", "init_int"];
+/// The references that compile now and still differ from Mesa's words.
+/// None.
+const DIFFERS: &[&str] = &[];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
@@ -129,7 +130,6 @@ fn refusals_pinned() {
 /// (`MOV.i32`, two `LSHIFT_OR.i32`) and selects 1.0 where the OR is 0
 /// (`CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`). FAU 11 to 13.
 #[test]
-#[ignore = "differs: our OR chain is 9 words against Mesa's 7 (uniform bool u_var[3]); pinned by refusals_pinned"]
 fn init_bool() {
     mali_ref::assert_matches("deqp_vsuarr_init_bool");
 }
@@ -138,7 +138,6 @@ fn init_bool() {
 /// three words (`CSEL.u32.gt` twice), one `ICMP_OR.u32.eq.m1 r0, r0^, 0x0,
 /// 0x0`, then the 1.0 / 0 select.
 #[test]
-#[ignore = "differs: the first two elements' FAU words are swapped (uniform mediump int u_var[3]); pinned by refusals_pinned"]
 fn init_int() {
     mali_ref::assert_matches("deqp_vsuarr_init_int");
 }
