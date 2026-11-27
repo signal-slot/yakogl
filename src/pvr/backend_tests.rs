@@ -4118,10 +4118,10 @@ fn ds_write_and_stencil_resolve_round_trip_through_the_packed_words() {
     assert_eq!((stencil_at(5, 5), stencil_at(6, 5), stencil_at(7, 5)), (0x11, 0x22, 0xcd));
     assert_eq!(depth_at(6, 5), before);
     assert_eq!(depth_at(3, 5), 8_388_608.0 / 16_777_215.0, "a stencil write leaves the depth");
-    /* nothing held, a bad plane, a rectangle outside the buffer */
+    /* a bad plane, a rectangle outside the buffer (an object nothing holds
+     * is staged: ds_write_into_an_object_no_frame_drew_into_is_staged) */
     // SAFETY: as above.
     unsafe {
-        assert_eq!(pvr_backend_ds_write(id + 1, 0, f.as_ptr().cast(), 0, 0, 1, 1, 1), 1);
         assert_eq!(pvr_backend_ds_write(id, 2, f.as_ptr().cast(), 0, 0, 1, 1, 1), -crate::util::EINVAL);
         assert_eq!(pvr_backend_ds_write(id, 0, f.as_ptr().cast(), 64, 0, 1, 1, 1), -crate::util::EINVAL);
     }
@@ -4135,21 +4135,52 @@ fn ds_write_and_stencil_resolve_round_trip_through_the_packed_words() {
     assert_eq!((depth_at(3, 4), stencil_at(5, 5)), before);
 }
 
-/// A renderbuffer no frame has drawn into has no buffer: the write answers 1
-/// and so does the probe (the GL core then refuses the blit instead of
-/// reporting a write that did not happen), and neither allocates.
+/// A renderbuffer no frame has drawn into has no buffer: its planes are
+/// staged (`ds_stage`, fbo-msaablit), so the probe and the write answer 0,
+/// no buffer is allocated, and the resolves read what was written (depth
+/// 1.0 and stencil 0 where nothing was). Once the staging entries are all
+/// taken, another object's probe answers 1, as before (the GL core refuses
+/// the blit), and deleting a staged object frees its entry.
 #[test]
-fn ds_write_probe_answers_1_for_an_object_no_frame_drew_into() {
+fn ds_write_into_an_object_no_frame_drew_into_is_staged() {
     let rig = Rig::new();
     let id = 0x0000_0066;
     let f = [0.5f32];
-    // SAFETY: an empty rectangle reads no element; the write reads one float.
+    let st = [0x5au8];
+    // SAFETY: an empty rectangle reads no element; each write reads one element.
     unsafe {
-        assert_eq!(pvr_backend_ds_write(id, 0, f.as_ptr().cast(), 0, 0, 0, 0, 0), 1);
-        assert_eq!(pvr_backend_ds_write(id, 1, f.as_ptr().cast(), 0, 0, 0, 0, 0), 1);
-        assert_eq!(pvr_backend_ds_write(id, 0, f.as_ptr().cast(), 0, 0, 1, 1, 1), 1);
+        assert_eq!(pvr_backend_ds_write(id, 0, f.as_ptr().cast(), 0, 0, 0, 0, 0), 0);
+        assert_eq!(pvr_backend_ds_write(id, 1, f.as_ptr().cast(), 0, 0, 0, 0, 0), 0);
+        assert_eq!(pvr_backend_ds_write(id, 0, f.as_ptr().cast(), 1, 0, 1, 1, 1), 0);
+        assert_eq!(pvr_backend_ds_write(id, 1, st.as_ptr().cast(), 1, 0, 1, 1, 1), 0);
     }
-    assert!(ds_of(&rig, id).is_none());
+    assert!(ds_of(&rig, id).is_none(), "staged, not a buffer");
+    let (mut d, mut s) = ([7.0f32; 6], [7u8; 6]);
+    // SAFETY: 2 rows of 3 floats and of 3 bytes.
+    unsafe {
+        assert_eq!(pvr_backend_depth_resolve(id, d.as_mut_ptr(), 3, 2, 3), 0);
+        assert_eq!(pvr_backend_stencil_resolve(id, s.as_mut_ptr(), 3, 2, 3), 0);
+    }
+    assert_eq!(d, [1.0, 8_388_608.0 / 16_777_215.0, 1.0, 1.0, 1.0, 1.0]);
+    assert_eq!(s, [0, 0x5a, 0, 0, 0, 0]);
+    /* every entry taken: a fifth object answers 1 */
+    for k in 1..crate::pvr::ds_stage::STAGED_MAX as u32 {
+        // SAFETY: one float.
+        assert_eq!(unsafe { pvr_backend_ds_write(id + k, 0, f.as_ptr().cast(), 0, 0, 1, 1, 1) }, 0);
+    }
+    let other = id + crate::pvr::ds_stage::STAGED_MAX as u32;
+    // SAFETY: as above.
+    unsafe {
+        assert_eq!(pvr_backend_ds_write(other, 0, f.as_ptr().cast(), 0, 0, 0, 0, 0), 1);
+        assert_eq!(pvr_backend_ds_write(other, 0, f.as_ptr().cast(), 0, 0, 1, 1, 1), 1);
+    }
+    /* gone: the entry is free again, and the object reads nothing */
+    pvr_backend_attachment_gone(id);
+    // SAFETY: as above.
+    unsafe {
+        assert_eq!(pvr_backend_depth_resolve(id, d.as_mut_ptr(), 3, 2, 3), 1);
+        assert_eq!(pvr_backend_ds_write(other, 0, f.as_ptr().cast(), 0, 0, 0, 0, 0), 0);
+    }
 }
 
 /// A buffer whose plane held only a whole clear takes a write as live (the

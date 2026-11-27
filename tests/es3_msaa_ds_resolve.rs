@@ -2,9 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! dEQP-GLES3 `fbo.msaa.{2,4}_samples.*` with a depth and/or stencil
 //! attachment (12 cases: depth_component16/24/32f, depth24_stencil8,
-//! depth32f_stencil8, stencil_index8) answer GL_INVALID_OPERATION on the
-//! PowerVR (plan #325 item msaa-ds-resolve), through the GL API over the REAL
-//! PowerVR host back end.
+//! depth32f_stencil8, stencil_index8) answered GL_INVALID_OPERATION on the
+//! PowerVR (plan #325 item msaa-ds-resolve, the AM62P board run), through the
+//! GL API over the REAL PowerVR host back end. The trace below is the cause
+//! as it was before the fix.
 //!
 //! The failing call is the resolve `glBlitFramebuffer` of
 //! es3fFboMultisampleTests.cpp (BasicFboMultisampleCase::render): READ is the
@@ -13,7 +14,7 @@
 //! is not a multisample rule: the source is fine (the colour-only cases of
 //! the group pass this call, as the first test pins). The cause is the
 //! destination: `blit.rs::dst_writable` probes `YakoglBackend::ds_write` with
-//! an empty rectangle, the PowerVR (`pvr_backend_ds_write`) answers 1 "nothing
+//! an empty rectangle, the PowerVR (`pvr_backend_ds_write`) answered 1 "nothing
 //! is held for the plane" for a depth/stencil id no frame has drawn into
 //! (`ds_plane_buf` is None: the back end allocates a ZS buffer on the first
 //! draw; `ds_write` has no size to allocate by), and the GL core turns that
@@ -22,23 +23,17 @@
 //! whole call, colour too. ES 3.0 4.3.3 makes this blit legal (same size,
 //! formats match, NEAREST).
 //!
-//! Fix proposal (src/gl/blit.rs, plan #313's file, and one entry in
-//! src/pvr/backend.rs; not made here): when the probe answers 1 for a
-//! destination renderbuffer, the GL core knows the id, size and format
-//! (`PlaneDst::Renderbuffer { id, w, h }`), so a back-end entry that creates
-//! the ZS buffer for `id` at that size (a new `ds_ensure(id, w, h, samples,
-//! has_stencil)` in `YakoglBackend`, or `ds_write` taking the size) must run
-//! before the probe; `pvr_backend_ds_write` then fills it as it does a drawn
-//! buffer (its "a buffer no kick has stored into yet is first filled with
-//! what a frame would initialise it to" path already exists). Adding a table
-//! entry means every `YakoglBackend {` literal in tests/ and src/ (grep
-//! first, CLAUDE.md). The GL_MAX_SAMPLES of 4 stays, and no one-sample
-//! storage is handed out for a four-sample request.
+//! Fixed in src/pvr only (plan #400, item fbo-msaablit): such a write is
+//! staged (src/pvr/ds_stage.rs) and the object's first frame loads it
+//! (`ds_seed_staged`), so the probe answers 0 and the blit goes ahead. The
+//! fix proposal this file once made (a new `YakoglBackend` entry and a
+//! src/gl/blit.rs change) was not needed. tests/pvr_msaa_ds_blit.rs checks
+//! the values the blit writes and the next draw loads, for the six formats
+//! at 2 and 4 samples; the test below is the acceptance test of the fix,
+//! here as it was written.
 //!
 //! The 4x depth/stencil source the blit reads is covered by
-//! tests/pvr_msaa_rb.rs (the destination is drawn there first, which is why
-//! that test passes). The ignored test below fails today and is the
-//! acceptance test of the fix: remove its `#[ignore]` with the fix.
+//! tests/pvr_msaa_rb.rs (the destination is drawn there first).
 //!
 //! HOST-ONLY: the GPU is a stand-in that paints memory; no board was used.
 //! The rig is the one of tests/pvr_msaa_rb.rs.
@@ -861,12 +856,11 @@ fn colour_resolve_into_a_fresh_framebuffer_is_accepted() {
     release(&[ms_fb, one_fb], &[ms_c, one_c]);
 }
 
-/// Pins today's answer: the resolve blit of depth/stencil into a destination
-/// no frame has drawn into is GL_INVALID_OPERATION, for the two sample counts
-/// for each plane and both counts. (blit.rs says the cause once per process in the log, so the line is not asserted per iteration.)
+/// ES 3.0 4.3.3: the same blit is legal, for both sample counts and each
+/// plane (it was GL_INVALID_OPERATION before fbo-msaablit).
 #[cfg(feature = "msaa-fbo")]
 #[test]
-fn depth_stencil_resolve_into_an_undrawn_destination_is_refused_today() {
+fn depth_stencil_resolve_into_an_undrawn_destination_is_accepted() {
     for (samples, mask) in [
         (2, GL_DEPTH_BUFFER_BIT),
         (4, GL_DEPTH_BUFFER_BIT),
@@ -881,37 +875,9 @@ fn depth_stencil_resolve_into_an_undrawn_destination_is_refused_today() {
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, one_fb);
             glBlitFramebuffer(0, 0, W, H, 0, 0, W, H, GL_COLOR_BUFFER_BIT | mask, GL_NEAREST);
         }
-        assert_eq!(err(), GL_INVALID_OPERATION, "{samples} samples, mask {mask:#x}");
+        assert_eq!(err(), GL_NO_ERROR, "{samples} samples, mask {mask:#x}: {:?}", logs());
         release(&[ms_fb, one_fb], &rbs);
     }
-}
-
-/// ES 3.0 4.3.3: the same blit is legal. Fails today (see the header).
-#[cfg(feature = "msaa-fbo")]
-#[test]
-#[ignore = "msaa-ds-resolve: needs a back-end ZS buffer for an undrawn destination (src/gl/blit.rs, #313)"]
-fn depth_stencil_resolve_into_an_undrawn_destination_is_accepted() {
-    let _g = rig();
-    let (ms_fb, one_fb, rbs) = msaa_and_fresh_resolve(GL_DEPTH24_STENCIL8, 4);
-    // SAFETY: plain GL calls.
-    unsafe {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, ms_fb);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, one_fb);
-        glBlitFramebuffer(
-            0,
-            0,
-            W,
-            H,
-            0,
-            0,
-            W,
-            H,
-            GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT,
-            GL_NEAREST,
-        );
-    }
-    assert_eq!(err(), GL_NO_ERROR, "{:?}", logs());
-    release(&[ms_fb, one_fb], &rbs);
 }
 
 /// Without `msaa-fbo` the PowerVR's `max_samples` is 0: GL_MAX_SAMPLES is 1,
