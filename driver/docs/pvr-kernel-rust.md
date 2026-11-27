@@ -49,7 +49,12 @@ Zephyr/the OS needs it there), **C lab** (bring-up rig, not ported), or
 
 ### driver/src/pvr_fw_boot.c
 
-| function | lines (674ea1cf) | origin | fate | step |
+The line numbers in the tables are those of the C file before the port (the
+file is shorter now); they are not current. The recorder's pre-port revision
+(`674ea1cf`) is not in this repository's history; its records are the committed
+`tools/pvr/km/records.sha256`.
+
+| function | lines (pre-port C) | origin | fate | step |
 |---|---|---|---|---|
 | `pvr_heap_alloc`, `heap_carveout_off`, `heap_cpu/gpu/fwaddr/phys` | 142-170 | mainline (pvr_fw.c FW-heap bump) | `mem.rs` | 2 |
 | `pt_alloc_page` | 175-192 | mainline (pvr_mmu.c page-table page alloc) | `mem.rs` | 2 |
@@ -103,7 +108,7 @@ Not in this task: `pvr_fw_trace_decode.c` (ours, on the DDK's
 ## Checks
 
 Each step is proved on the host before the board: the C it replaces is cut
-out of origin/main 674ea1cf by a recorder (`tools/pvr/km/`), run against a
+out of the pre-port C by a recorder (`tools/pvr/km/`), run against a
 recording platform (memory, cache maintenance, barriers, register bus), and its
 record is committed; `tools/pvr/km/km_check.c` runs the same scenario on the
 Rust modules (libyakogl_drivers.a for the host) and `tools/check.sh` requires
@@ -113,7 +118,7 @@ purpose (step 4's sizes), where the difference is committed and explained.
 ## Results
 
 Every step was board-verified on the AM62P before the next
-(tools/cts/RESULTS.md, "AM62P: the PowerVR kernel side in Rust"): the
+(the session logs are not kept): the
 firmware handshake as predicted at each step (step 4 moved the objects:
 `objs from 0xc0000`, `heap used to 0xd8d28`), dEQP fbo + shaders.texture_functions
 731/0/0/0 after every step, and after step 5 fragment_ops.blend 1060/0/0/0 and

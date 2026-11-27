@@ -182,4 +182,4 @@ Open:
   (`&mbox0`) and firmware driver (rpi_fw). Its ISR takes every reply from
   MAIL0 while our `rpi_mbox.c` polls MAIL0, so both nodes are disabled in
   `driver/samples/zephyr/common/rpi_4b_sram.dtsi`. The lasting form is
-  `rpi_mbox.c` on Zephyr's rpi_fw API (`tools/cts/RESULTS.md`, Work list).
+  `rpi_mbox.c` on Zephyr's rpi_fw API (not done; the dtsi's own comment says the same).

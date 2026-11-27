@@ -7,7 +7,7 @@ Verdin i.MX8M Plus every sample and dEQP group read byte-identical SNVS
 records with the C and with the Rust kernel side: gc_gl_triangle (parity),
 the gc_gl_test regression set (35/38), gc_slint (1666 frames), dEQP
 fragment_ops.blend 1060/0, shaders.texture_functions 20/0 and fbo 711/0
-(tools/cts/RESULTS.md, "GC7000 kernel side in Rust"). The staged smaller
+(records not kept). The staged smaller
 steps (gc_identify, gc_fence, gc_clear, gc_triangle) and the X2 adopt run
 were not run with the Rust before the switch. Source-form group C
 (docs/source-form.md): `gc_bringup.c`, `gc_hw.c`,
@@ -30,7 +30,7 @@ from a measurement on the board.
 | rnndb | etna_viv rules-ng-ng headers in `driver/src/vivante/hw/*.xml.h` | MIT | register names, offsets, fields, command words; `regs.rs` is checked against them by a test |
 | galcore | NXP's Vivante kernel driver, `drivers/mxc/gpu-viv` of [nxp-imx/linux-imx](https://github.com/nxp-imx/linux-imx) branch `lf-6.12.y` (commit `df24f942`, 2025-11-21) | dual MIT / GPL-2.0-or-later, used under MIT | documentation of sequences and of the part's database entry; cited by file and function; nothing copied or vendored |
 | RM | i.MX 8M Plus Applications Processor Reference Manual, IMX8MPRM Rev. 3, 08/2024 | NXP document | GPC, CCM, the GPU register block, the interrupt |
-| board | measurements on the Verdin iMX8M Plus ("Hardware findings that still hold" below, RESULTS; the bring-up record `docs/notes/imx8mp-gc-driver-notes.md`) | test data | values that differ from galcore and have run on the board since 2026-09-20 |
+| board | measurements on the Verdin iMX8M Plus ("Hardware findings that still hold" below; the bring-up record `docs/notes/imx8mp-gc-driver-notes.md`) | test data | values that differ from galcore and have run on the board since 2026-09-20 |
 
 galcore's licence: every `.c` and `.h` of the 112 under `drivers/mxc/gpu-viv`
 carries the same header. It begins "The MIT License (MIT) / Copyright (c) 2014 -
@@ -63,7 +63,7 @@ driver/drivers/gpu/gpu_vivante_gc_rust.c the Zephyr side
 ```
 
 `c_golden.rs` was written by `gclab/kerneltest`, which compiled
-the C on the host; both were deleted with the C (4c25beb0). The record stays
+the C on the host; both were deleted with the C (in the history before the public snapshot). The record stays
 as the replay test's data.
 
 The shim keeps the names and signatures of `gc.h` and `gc_internal.h`, so the
@@ -161,7 +161,7 @@ the row gives them (`None` matches any); a row also names the one
   value unchanged;
 - STM32MP257F-DK, `GCNANOULTRA31_VIP2`: model 0x8000, revision 0x6205,
   product 0x80003, eco 0, customer not matched (the board read 0x15 on
-  2026-11-21, see the GC8000 section); Mesa st `gc_feature_database.h:4720`, Linux `etnaviv_hwdb.c:199-216`:
+  2026-11-21, see the GC8000 section); Mesa st `gc_feature_database.h`, Linux `etnaviv_hwdb.c`:
   temps 64, threads 512, 2 shader cores, 512 instructions, 320 constants, 1
   pixel pipe, **16 streams**, 16 varyings, vertex output buffer 0x400, vertex
   cache 0x10, MMU v2, security and security AHB. The other candidate rows of
@@ -226,7 +226,7 @@ what to look at first if a GPU bring-up problem appears.
 3. Reading MINOR_FEATURE_1..5 (galcore reads them on this SoC; the C did not).
    The values are only logged, but they fill the exported words, so the
    gc_identify log changes.
-4. The product id 0x70003 match (measured once, RESULTS 2026-09; customer
+4. The product id 0x70003 match (measured once, 2026-09; customer
    and eco ids not recorded).
 5. The ISR now holds the spinlock across the INTR_ACKNOWLEDGE read (the C took
    it per event).
@@ -323,29 +323,29 @@ DK. How it differs from the i.MX8MP's GC7000UL:
 
 - **Identity.** model 0x8000, revision 0x6205, product 0x80003, eco 0; the
   table-driven row is `hw::DB_STM32MP257F`, `GCNANOULTRA31_VIP2`, customer not
-  matched (`driver/rust/src/gpu/vivante/hw.rs:107-135`; the ST row of the
+  matched (`driver/rust/src/gpu/vivante/hw.rs`; the ST row of the
   golden-stream shim is 3dd64152). Limits are Mesa's st row and Linux's hwdb
-  (`hw.rs:104-106`); 16 streams against the i.MX8MP's 8 (pre-study, section
-  5.2, Q1 in `docs/notes/pre-study-stm32mp257f-dk.md:816`). The
+  (the comment above `DB_STM32MP257F`); 16 streams against the i.MX8MP's 8 (pre-study, section
+  5.2, Q1 in `docs/notes/pre-study-stm32mp257f-dk.md`). The
   board image refuses any other model and revision with one line and resets
-  through PSCI (`driver/zephyr/lib/board/stm32mp2/gc_power_mp2.c:13-18`).
+  through PSCI (`driver/zephyr/lib/board/stm32mp2/gc_power_mp2.c`).
 - **Power.** Not the GPC and CCM of the i.MX8MP: the `vivante,gc` node has no
   "gpc" or "ccm" ranges, so `gpu_vivante_gc_rust.c` calls the weak
-  `gc_board_power_on` (31e07d90), which `gc_power_mp2.c:9-12` implements
+  `gc_board_power_on` (31e07d90), which `gc_power_mp2.c` implements
   through `yd_mp2_gpu_power_on`: OP-TEE's SCMI pseudo-TA (PERFORMANCE domain 1,
   POWER domain 0), then the gate and reset in `RCC_GPUCFGR` (offset 0x83C),
   then `HI_IDLE_STATE` until idle. The order and the register are in
-  `driver/rust/src/soc/stm32mp2/power.rs:4-24` and `rcc.rs:4,31-32`; the
+  `driver/rust/src/soc/stm32mp2/power.rs` and `rcc.rs`; the
   offset is "unconfirmed from RM0457" there.
-- **No IOMMU.** The GPU node has no `iommus` (ST's `stm32mp255.dtsi:169-183`,
-  pre-study Q10, `docs/notes/pre-study-stm32mp257f-dk.md:825`), so the
+- **No IOMMU.** The GPU node has no `iommus` (ST's `stm32mp255.dtsi`,
+  pre-study Q10, `docs/notes/pre-study-stm32mp257f-dk.md`), so the
   carveout is mapped flat in the GPU's own MMU v2, as on the i.MX8MP.
 - **Carveout.** 64 MiB no-map `gpu-reserved` at 0xfa800000, below 4 GiB
-  (`driver/zephyr/lib/board/stm32mp2/app.overlay:6-8`, pre-study Q10); the
-  binding asks for at least 64 MiB (`driver/dts/bindings/gpu/vivante,gc.yaml:40`).
+  (`driver/zephyr/lib/board/stm32mp2/app.overlay`, pre-study Q10); the
+  binding asks for at least 64 MiB (`driver/dts/bindings/gpu/vivante,gc.yaml`).
 - **Interrupt.** GIC SPI 183, register block 0x48280000, 0x800 bytes
-  (`app.overlay:5-6`). Nothing at or above 0x800 is read from the CPU
-  (`gc_power_mp2.c:19-20`, as in "Hardware findings that still hold").
+  (`app.overlay`). Nothing at or above 0x800 is read from the CPU
+  (`gc_power_mp2.c`, as in "Hardware findings that still hold").
 - **Samples.** `gc_fence` and `gc_clear` build for the DK's A35, with the
   power through `stm32mp2_gpu.h` (31e07d90, `driver/samples/zephyr/gc_fence/README.md`,
   `gc_clear/README.md`). That commit's message says "Not run on a board"; both have since run (items 8-10 below).
@@ -412,7 +412,7 @@ Still unverified on the board:
 
 1. The core clock rate beyond the SCMI level read: PERFORMANCE domain 1 read
    back 800000 kHz, but the 800 MHz clock itself was never read
-   (`app.overlay:8-10`).
+   (`app.overlay`).
 2. A cacheable mapping of the carveout with clean/invalidate (Q14): only the
    non-cacheable one was tried.
 3. The minimum reset assert time: the reset was held for one write and read
@@ -420,6 +420,11 @@ Still unverified on the board:
 4. The GL regression set beyond case 1, and the display (P8, P9).
 
 ## Board runs, and what is left
+
+The Verdin i.MX8MP is off the farm since 2026-11-16 (no return date); the
+same i.MX8MP work (this GPU, the samples and dEQP below) runs on the
+Armadillo-X2 (same SoC and GPU), with `tools/board.sh x2` (a kexec
+development run). A record measured there says so.
 
 Done on the Verdin iMX8M Plus, C kernel against Rust kernel, byte-identical
 SNVS records: `gc_gl_triangle` (parity), `gc_gl_test` (regression set),
@@ -431,7 +436,6 @@ Left:
 
 - The Armadillo-X2 `gc_gl_triangle` adopt run with the Rust kernel side.
 - `gclab` and `gcgpu.ko` are removed (`git ls-files
-  driver/tools/gclab` is empty). The RESULTS Work list row that asks for
-  this follow-up may now be closed.
+  driver/tools/gclab` is empty).
 - The galcore variants in the table above can be tried one at a time,
   measured, never folded in unmeasured.

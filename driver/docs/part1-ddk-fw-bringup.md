@@ -6,6 +6,8 @@ private: false
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
+> 注記（2026-11-27 時点）: この記事は 2026 年 9 月の調査時点の記録である。記事中の Linux カーネルモジュールのハーネス（`Kbuild`、`pvr_mod.c`、`insmod`）は 2026-10-04 に削除され、今のカーネル側は Rust（`driver/rust/src/gpu/pvr/`、`driver/docs/pvr-kernel-rust.md`）、ボードでの手順は `driver/docs/one-method.md` と `tools/board.sh` である。`driver/tools/pvrlab/` に残るのは `gl_test` などのボード側テストで、Linux KO のビルドはもうない。ここに書いた調査手順（構造体レイアウトのダンプ、FW トレースのデコード）は `driver/tools/offsetof/` と `driver/tools/sfdecode/` に今も残っている。
+
 ## このシリーズについて
 
 Toradex Verdin AM62P（TI AM62P、PowerVR BXS-4-64 GPU 内蔵）で、A53 コアを Linux ではなく Zephyr で動かしたまま実 GPU でレンダリングするための、自作ドライバの開発記録である。
