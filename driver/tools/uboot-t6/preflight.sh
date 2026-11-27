@@ -23,13 +23,16 @@
 #              the top (its line names <LABEL>/zephyr/zephyr.bin) or under
 #              the label (its line names zephyr/zephyr.bin). A label whose
 #              zephyr/ holds no zephyr.bin is named; a top-level file that is
-#              not one of the <LABEL>.built files, SHA256SUMS or COMMIT is
+#              not one of the <LABEL>.built files (or a <LABEL>.log beside its .built),
+#              SHA256SUMS or COMMIT is
 #              named. Both layouts in one directory fail.
 #      Either layout needs one <image-dir>/COMMIT (one sha) that is an
 #      ancestor of origin/main (git merge-base --is-ancestor on the local
-#      ref; nothing is fetched). tools/cts/t6-deqp-images.sh writes neither
-#      SHA256SUMS nor COMMIT today (as of 2026-11-26): preflight then names
-#      exactly what is missing.
+#      ref; nothing is fetched). tools/cts/t6-deqp-images.sh writes both
+#      SHA256SUMS and COMMIT; a selective build keeps the other labels'
+#      SHA256SUMS lines (sums-merge) and refuses a different COMMIT with
+#      exit 2. Its build logs <LABEL>.log sit at the top beside the
+#      <LABEL>.built files; one with no matching .built is named.
 #   d  records/ is gitignored.
 #   e  if console-check.sh is executable, the command to run it is printed;
 #      it is not run.
@@ -81,10 +84,14 @@ if [ ${#labels[@]} != 0 ]; then
 	# rows layout: <LABEL>/zephyr/zephyr.bin per label. Top-level files are
 	# the builder's metadata (the <LABEL>.built files, SHA256SUMS, COMMIT);
 	# anything else at the top means the directory is not one layout clean.
+	# A <LABEL>.log (the build log) is accepted beside its <LABEL>.built.
 	strays=()
-	while IFS= read -r f; do strays+=("$f"); done < <(find "$DIR" -mindepth 1 -maxdepth 1 -type f ! -name SHA256SUMS ! -name COMMIT ! -name '*.built' -printf '%f\n' | sort)
+	while IFS= read -r f; do strays+=("$f"); done < <(find "$DIR" -mindepth 1 -maxdepth 1 -type f ! -name SHA256SUMS ! -name COMMIT ! -name '*.built' -printf '%f\n' | sort | while IFS= read -r f; do
+		case $f in *.log) [ -f "$DIR/${f%.log}.built" ] && continue ;; esac
+		echo "$f"
+	done)
 	if [ ${#strays[@]} != 0 ]; then
-		fail "c: top-level file of a row image directory, not a <LABEL>.built, SHA256SUMS or COMMIT: ${strays[*]}"
+		fail "c: top-level file of a row image directory, not a <LABEL>.built, SHA256SUMS or COMMIT (a <LABEL>.log needs its .built): ${strays[*]}"
 	fi
 	for l in "${labels[@]}"; do
 		rel=$l/zephyr/zephyr.bin
