@@ -164,13 +164,13 @@ Mesa's shaders first; ours only after Mesa's passed. If the board does not
 come back within the runner's limit, stop: no retry
 (`tools/probes/rpi_5/README.md`).
 
-## On the board (M5, 2026-11-20)
+## On the board
 
-Both images built from `0c58c457` with `-DYAKOGL_WERROR=ON` (zephyr
+Both images (M5) built from `0c58c457` with `-DYAKOGL_WERROR=ON` (zephyr
 `af17c0c8aa2a`, 82,208 bytes each; `rpi5_triangle` sha256
 `1a8697651604f873...`, `rpi5_triangle_ours` sha256 `0fb81874ead08a6f...`) and
-run once each through `tools/board.sh pi5 run`, Mesa's shaders first, with no
-change to the probe or the driver:
+run once each on 2026-11-20 through `tools/board.sh pi5 run` (Mesa first at
+11:38 JST, ours at 11:47 JST), with no change to the probe or the driver:
 
 - `rpi5_triangle`: `rc=0 verdict=done boot=tryboot row
   boot_verdict=complete result=legacy:v3d_triangle_pass resets=0
@@ -239,6 +239,8 @@ What it answers:
   the rows.
 - Our 7.1 compiler's pass-through VS, CS and FS run on the hardware and
   give the same pixels as Mesa's.
+
+Current result: tools/cts/RESULTS.md, section V3D 7.1: Raspberry Pi 5 on Zephyr.
 
 ## Limits
 

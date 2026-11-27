@@ -14,8 +14,22 @@ west build -p always -b rpi_5 -DYAKOGL_WERROR=ON -d build/rpi5_triangle_ours yak
 ```
 
 What it does, its console, the verdict line (`v3d_triangle: PASS (...;
-shaders ours)` or `v3d_triangle: FAIL (...; shaders ours)`), how to run it
-and its board results: `../rpi5_triangle/README.md`.
+shaders ours)` or `v3d_triangle: FAIL (...; shaders ours)`) and how to run
+it: `../rpi5_triangle/README.md`.
 
 Verdicts: `../rpi5_triangle/verdicts.sh <console.log>` also reads this
 image's `shaders ours` log (see "Verdicts" in `../rpi5_triangle/README.md`).
+
+## On the board
+
+M5: **PASS** from commit `0c58c457` (image `0fb81874`), run on 2026-11-20
+11:47 JST through `tools/board.sh pi5 run`: `rc=0 verdict=done
+result=legacy:v3d_triangle_pass back_after=215s`, end line `v3d_triangle:
+PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside, 2796 outside, 288
+edge, tol 3; shaders ours)` — the same pixels as Mesa's run; our 7.1
+compiler's pass-through FS / VS / CS (12, 28, 20 instructions; indirect 219
+bytes). A readiness re-run on 2026-11-25 from origin/main `a6f49077` (image
+`4e23b31b`, recorded in `rpi5_tex`'s row) printed `v3d_triangle: PASS`, 0 of
+4096 px wrong.
+
+Current result: tools/cts/RESULTS.md, section V3D 7.1: Raspberry Pi 5 on Zephyr.
