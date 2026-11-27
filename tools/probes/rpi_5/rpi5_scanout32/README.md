@@ -181,7 +181,7 @@ back is reported as needing a person.
 Host checks: `sh tools/probes/rpi_5/rpi5_scanout32/verdicts_selftest.sh`
 (the verdict script, 229 checks), `sh tools/probes/rpi_5/rpi5_scanout32/swap_check_selftest.sh`
 (the decision header `src/swap_check.h`, the placement after the END on
-`rpi5_dlmap`'s layout included, 207 checks),
+`rpi5_dlmap`'s layout included, 215 checks),
 `sh tools/probes/rpi_5/rpi5_scanout32/io_filter_selftest.sh` (the write
 filter, 56 checks) and `sh tools/v3d/check71.d/hvs6_dlist_swap.sh`
 (`hvs6_dlist_swap.h` against its channel model, 328 checks).
@@ -232,7 +232,7 @@ question this probe can only bound.
 
 ### 2026-11-27: 8 vblank swaps landed, firmware list restored (PASS, q4: yes)
 
-This is the current result. It replaces the open status of the 2026-11-26 run
+This is the current result. It replaces the unanswered status of the 2026-11-26 run
 below.
 
 One tryboot session on the Pi 5 (BCM2712 D0), with the image of `c0b4f33b`
