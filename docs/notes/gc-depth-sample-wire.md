@@ -370,6 +370,68 @@ no longer called. Its `cache_invd` (`:598`) and the GL core's `cache_flush`
 only edit. `victim` (`:642-658`) needs nothing: a Live plane is never given
 away (`may_go`, `:647`), and a sampled plane is Live.
 
+### (a) Code 3 (check 4 fails, 5 passes): the bit budget of glmark2's two scenes
+
+The first variant of (a).10 is verdict code 3: the TPU's D24X8 answers from
+the surface, but with fewer than 24 bits, its word off by at most 2^8 of
+16,777,215 (about 1.5e-5), a 16-bit depth. Check 5 proves that bound only
+for its 127 values whose low 17 bits are all 0 or all 1; "at most 255
+everywhere" is the 16-bit-cut model's inference, not a measurement. The
+model fits the X2 development record of 2026-11-11 exactly: the ramp's words
+are `n * 2^17` and `n * 2^17 - 1`; cutting the low 8 bits leaves the first
+exact and moves the second by exactly 255, which is check 4 failing at
+index 1 with index 0 equal. A cut to fewer than 16 bits would be off by up
+to `2^17 - 1` and fail check 5 too: that is code 4, and nothing here covers
+it.
+
+Item code3-precision (plan #417, host only) worked out what the two scenes
+spend of that error. The budget, against the full bound:
+
+- **shadow** makes one hard decision a pixel: with `d` the sampled depth, a
+  fragment is shadowed when `d < z + 0.1505` (`data/shaders/shadow.frag`,
+  the bias on the receiver's z at `:9`, the sample at `:10`, the compare at
+  `:13`). The map is twice the 800x600 canvas, 1600x1200
+  (`src/scene-shadow.cpp:84-85`), cleared to 1.0 (`:150`), with near/far 2
+  and 50 (`:371`) and the light at (0, 3, 2) (`:39`). The ground's biased z
+  runs 0.4423 to 0.7214, so a cleared texel (0xFFFF00 under code 3,
+  0.9999848) keeps a margin of 0.2786 and never flips. Only in rotations 42
+  to 110 degrees does a horse part sit deeper than the biased ground, and
+  there the margins thin: over 36 frames of that band 214 ground fragments
+  have a margin under 65,536 units, 10 under 4,096, and 1 under 255 (about 6
+  a frame under 8 bits). A CPU model of the scene's own geometry changes
+  **zero** pixels for a 16-bit sample (cut or true), in those 36 frames and
+  in 12 frames over the full turn; at the +255 worst case it changes **1
+  pixel** (rotation 48 degrees, margin 141 units: one pixel from 0.15 to
+  0.30 grey). A cut only ever samples low, and low means shadowed, so only
+  a lit fragment at that thin edge could flip; in the model none did.
+  **8 to 10 bits keep the picture the same to the eye; 16 is comfortable**:
+  one pixel on an occasional frame is no worse than the gap that already
+  exists between fp32 depth on the GPU and on the CPU.
+- **refract** makes no decision to flip. `data/shaders/light-refract.frag`
+  uses the sampled depth directly as a distance (`:25-26`), along a vector
+  of length at most 1, so the bound moves the exit point by at most 1.5e-5,
+  the normal-map coordinate by 0.012 of a texel and the image coordinate by
+  0.005 to 0.05 of a texel: under one colour step almost everywhere, +/- 1
+  step at the sharpest `nasa1` edges at worst. **About 12 bits is the
+  budget; 16 is enough.**
+
+**Conclusion: under code 3, (a) is safe as the default: no bias change and
+no `src/gl` change.** Code 3 costs exactness, not glmark2. The CPU resolve
+stays wherever exact depth is read: glReadPixels, the copies and the blits
+((a).11 keeps it for them), the GLES3 dEQP depth and shadow-texture tests,
+and the compare mode when it exists, since a 16-bit answer on a 24-bit
+format can fail a dEQP check that counts the format's bits. wire-verdict
+takes the default from the record's code, not from this subsection: (a) as
+the default for codes 1, 2 (with (a).10's flush or wait) and 3, and for none
+of 0, 4, 5.
+
+This is derived on the host, not measured on a board. The flip counts come
+from a CPU model that counts every ground fragment, including the ones the
+horse later covers, so they are upper bounds, and `horse.3ds` is not in the
+tree to re-run it; refract carries an analytic bound, not a pixel count. The
+verdict code itself is measured on the Armadillo-X2 in place of the Verdin
+iMX8MP, as "Where the verdict comes from" above records.
+
 ### (a) Host test: a new test file for the sample path (never committed)
 
 The real GL core, the real Vivante back end and the in-process compiler over
