@@ -1,0 +1,134 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# Verdin iMX95 dEQP-GLES2 S1b, rows T6S1R13-T6S1R24, at e63ab28e
+
+Plan #407 (issue #7, item B8), session S1b: rows T6S1R13 to T6S1R24 of
+`tools/cts/mali-gles2-tree.txt` (the NanoPC-T6's rows, unchanged) on the
+Toradex Verdin iMX95 (i.MX 95, Mali-G310, Mallow carrier) under Zephyr,
+started by hand from the module's own U-Boot prompt. Board session
+2026-11-25.
+
+| | |
+|---|---|
+| commit | `e63ab28e30ae913f06bb595bc10f972fc1c2ff77` (on origin/main) |
+| build string | `e63ab28e` (every `.built` line: `build=e63ab28e`; every capture: `vi95_deqp: build e63ab28e`, `sample: build tree=e63ab28e table=6c5b8a70`) |
+| Zephyr | `af17c0c8aa2a` (`*** Booting Zephyr OS build af17c0c8aa2a ***`) |
+| stage 1 | `tools/cts/deps-env.sh --build DEQP_WORK --board verdin_imx95` (VK-GL-CTS 93bca018) |
+| stage 2 | `tools/cts/imx95-deqp-images.sh tools/cts/mali-gles2-tree.txt <img-dir> T6S1R13 ... T6S1R24` |
+| CSF firmware | the T6's `mali_csffw.bin`, sha256 a27847ea...a2405b, through `driver/tools/mkmalifw.sh` (not committed) |
+| image | `zephyr.bin` 12,768,592 bytes, AArch64 `image_size` 0xbf04000 (191.0 MiB of the 256 MiB window), every row |
+| lifetime | 600 s + WDOG3 60 s (`fed until 600 s of uptime` on every console) |
+
+## Route
+
+Per row, as `python3 -I tools/cts/imx95-uboot-row.py` prints it, with the
+staging on the boot FAT partition (`--storage 0:1 --stage /boot/`):
+
+1. the module's Linux: `cat > /boot/<LABEL>.bin` over ssh, `md5sum` equal to the host's;
+2. reboot to U-Boot (autoboot stopped with a key), then
+   `fatload mmc 0:1 0xd0000000 <LABEL>.bin; md5sum 0xd0000000 0xc2d550`
+   (equal to the host's md5 on every row; `fatload` instead of the tool's
+   `ext4load` because partition 1 is FAT) and
+   `dcache off; icache flush; go 0xd0000000`;
+3. the image ends by PSCI SYSTEM_RESET; the board boots its Linux again; the
+   staged file is removed and the BBM record read back with
+   `tools/imx95_bbm_record.sh read`.
+
+At the end `/boot` held the same 31 files with the same md5 as before the
+session. No boot partition, boot command, U-Boot variable or other rootfs
+file was written.
+
+## Per row
+
+`console/<LABEL>.log` is the console of the row, as in S1a: from the
+echoed `go` line (`dcache off; icache flush; go 0xd0000000`) to the last
+byte before the next boot's `U-Boot SPL` banner (each log's licence is in
+its `.license` sidecar). The `fatload`/`md5sum` lines before it and the
+next boot's U-Boot output after it are not part of the capture; U-Boot's
+`md5sum` result per row is in the table under "The captures".
+`rows.tsv` is built from them by `python3 -I tools/cts/imx95-rows-tsv.py
+--out rows.tsv --lifetime-s 600 console/T6S1R*.log`
+(the files, not the directory, which would read the sidecars as captures)
+and passes its `--check`. No `--bbm-dir`: every read-back exited 3 with
+no record words (below), which the tool reads as `not-read` either way.
+
+| row | cases | Pass | Fail | status | run (console) | of the 600 s lifetime | bbm |
+|---|---|---|---|---|---|---|---|
+| T6S1R13 | 36 | 36 | 0 | done, `deqp: PASS` | 3.0 s | 0.5 % | not-read |
+| T6S1R14 | 112 | 108 | 4 | done, `deqp: FAIL rc=-1` | 16.5 s | 2.7 % | not-read |
+| T6S1R15 | 80 | 80 | 0 | done, `deqp: PASS` | 14.9 s | 2.5 % | not-read |
+| T6S1R16 | 192 | 86 | 106 | done, `deqp: FAIL rc=-1` | 9.8 s | 1.6 % | not-read |
+| T6S1R17 | 90 | 87 | 3 | done, `deqp: FAIL rc=-1` | 28.2 s | 4.7 % | not-read |
+| T6S1R18 | 58 | 58 | 0 | done, `deqp: PASS` | 4.3 s | 0.7 % | not-read |
+| T6S1R19 | 343 | 58 | 285 | done, `deqp: FAIL rc=-1` | 17.5 s | 2.9 % | not-read |
+| T6S1R20 | 336 | 68 | 268 | done, `deqp: FAIL rc=-1` | 18.8 s | 3.1 % | not-read |
+| T6S1R21 | 294 | 48 | 246 | done, `deqp: FAIL rc=-1` | 15.8 s | 2.6 % | not-read |
+| T6S1R22 | 294 | 68 | 226 | done, `deqp: FAIL rc=-1` | 14.9 s | 2.5 % | not-read |
+| T6S1R23 | 203 | 203 | 0 | done, `deqp: PASS` | 30.1 s | 5.0 % | not-read |
+| T6S1R24 | 374 | 374 | 0 | done, `deqp: PASS` | 32.7 s | 5.5 % | not-read |
+| all | 2412 | 1274 | 1138 | 12 done, no hang, no lifetime | | | |
+
+Run (console) is the `run over: PSCI SYSTEM_RESET at N ms` uptime. Timed on
+the host, from typing `go` to the Linux kernel's start on the next boot,
+the rows took 9 to 40 s (the run plus U-Boot's boot to the kernel). No row
+came near the lifetime; none needed WDOG3.
+
+Every case of every row has a result (`deqp: summary: N cases begun, N with
+a result, 0 without`). No QualityWarning, NotSupported, crash or GPU reset
+appears. The Fail causes visible in the captures are online-compiler
+refusals (`glCompileShader(...): online shaderc: the code generator
+refused ...`, `Compile failed`), 4 draws refused in each of T6S1R20 and
+T6S1R21 (`a vertex shader that reads more than one texture is not built
+yet`), and 3 `Image comparison failed` in T6S1R17 (texture.vertex.cube). The
+slice conversion, tally and causes are plan #407's analysis item.
+
+The rows `texture.size.*` (T6S1R15) and `texture.wrap.*` (T6S1R18) run 80
+and 58 cases; the tree's `# image` line counts the
+mustpass names they select (74 and 15).
+
+`dEQP-GLES2.info.renderer` (T6S1R24) reports `Arm Mali-G310v2 (YakoGL)`.
+
+## BBM record (U2)
+
+Not read back on any row: the module's kernel (Toradex BSP 6.6.157) has no
+SCMI raw interface, so `tools/imx95_bbm_record.sh read` exits 3 ("no SCMI
+raw interface ... the record cannot be read from Linux"). The console's
+`yk-record:` line stands for the record: `594b0201 00000001 00000000
+00000000` on the PASS rows, `594b0201 00000002 00000000 00000000` on the
+FAIL rows.
+
+## The captures
+
+The console was read through the serial-console tool of the lease, which
+shows control bytes as `\xNN` text; the captures keep that text (`\x00`
+after the reset) and drop the carriage returns. The session captured each
+row from the `fatload` line to the next boot's `Starting kernel`; the
+committed logs are that capture cut to the S1a range above, with nothing
+else changed. The first cut (pull request #13293) kept the next boot's
+U-Boot output, and the gate's redaction scan read its device path
+`mmc@<address>` as an e-mail address on every row; the cut range holds no
+U-Boot or Linux output. Every `Test case` line is followed by the `deqp:`
+result of the same case, and the per-status counts equal each row's
+`deqp: done:` line.
+
+U-Boot's `md5sum 0xd0000000 0xc2d550` after `fatload`, equal to the host
+image's md5 on every row:
+
+| label | md5 of the loaded image |
+|---|---|
+| T6S1R13 | `29c47ca909c33256de9b7142d0df4ad2` |
+| T6S1R14 | `3b334cf1c62ca7f1562beb16896d5489` |
+| T6S1R15 | `e5cf165248efc91fa75213c04778b314` |
+| T6S1R16 | `2e7069022bd64bca09148e73e6a2a0e1` |
+| T6S1R17 | `ed7606b31981da538d443664312b4554` |
+| T6S1R18 | `ccbd696653cd47d014c7cc1733f1201f` |
+| T6S1R19 | `80bb089db86877779e94b8c92841d4c1` |
+| T6S1R20 | `4491b743a3023d7884128df950faa6b4` |
+| T6S1R21 | `62882be582d8c9c8098b44b0cc07eea0` |
+| T6S1R22 | `f64818e2e9fcfc00006367a79da4ac6f` |
+| T6S1R23 | `15ed8b4d7b18c2001179a5287e53b34b` |
+| T6S1R24 | `8e4a6e9471fc45ee98617d3510ebb97a` |
+
+No host name, address, MAC, serial number, user name or UART path appears
+in the logs; the module's serial number and root PARTUUID, which appeared
+in the next boot's U-Boot output of the first cut, are outside the range.
