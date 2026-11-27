@@ -236,7 +236,9 @@ constexpr uint32_t KICK_BOUND_US = 100;
 #endif
 FrameCost s_cost;
 
-#if defined(CONFIG_YAKOGL_GPU_V3D)
+/* V3D 7.1 (Raspberry Pi 5): the 7.1 table has no counters (v3d_counters and
+ * the rest are the 4.2 backend's), so the line reads "absent". */
+#if defined(CONFIG_YAKOGL_GPU_V3D) && !defined(CONFIG_YAKOGL_GPU_V3D71)
 /* The V3D backend's counters (src/v3d/backend.rs, cumulative since init; no C
  * header declares them). docs/notes/glmark2-scene-counters.md. */
 extern "C" {
@@ -330,7 +332,8 @@ struct SceneCounters {
     }
 };
 #endif
-#if defined(CONFIG_YAKOGL_GPU_V3D) || defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+#if (defined(CONFIG_YAKOGL_GPU_V3D) && !defined(CONFIG_YAKOGL_GPU_V3D71)) || \
+    defined(CONFIG_YAKOGL_DRV_GPU_PVR)
 SceneCounters s_ctr0; /* read at the scene's first frame (log_scene_info) */
 #endif
 
@@ -1274,7 +1277,8 @@ public:
         s_cost = fresh;
 #endif
         s_cost.steps_known = osal_draw_stats(s_cost.steps0, &s_cost.untimed0);
-#if defined(CONFIG_YAKOGL_GPU_V3D) || defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+#if (defined(CONFIG_YAKOGL_GPU_V3D) && !defined(CONFIG_YAKOGL_GPU_V3D71)) || \
+    defined(CONFIG_YAKOGL_DRV_GPU_PVR)
         s_ctr0.read();
 #endif
 #if defined(GM_PERF)
@@ -1446,7 +1450,8 @@ private:
         if (s_cost.frames == 0) {
             return;
         }
-#if defined(CONFIG_YAKOGL_GPU_V3D) || defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+#if (defined(CONFIG_YAKOGL_GPU_V3D) && !defined(CONFIG_YAKOGL_GPU_V3D71)) || \
+    defined(CONFIG_YAKOGL_DRV_GPU_PVR)
         SceneCounters now;
         now.read();
         printk("glmark2-counters: %s: frames %llu", scene_->info_string().c_str(),
@@ -1639,6 +1644,30 @@ int parse_size(const char *s, uint32_t *w, uint32_t *h)
 
 /* ---- the run ------------------------------------------------------------- */
 
+#if defined(CONFIG_YAKOGL_GPU_V3D71)
+/* The stand-in native window of an --off-screen run on the Pi 5: RGBA8888,
+ * packed, in the image's RAM (identity mapped, so phys is the address). */
+bool s_stand_in_window = false;
+constexpr uint32_t OFFSCREEN_MAX_PIXELS = 1920u * 1200u;
+alignas(4096) uint8_t s_offscreen_pixels[OFFSCREEN_MAX_PIXELS * 4u];
+
+struct board_window off_screen_window(uint32_t w, uint32_t h)
+{
+    struct board_window win = {};
+    if (w == 0u || h == 0u || w * h > OFFSCREEN_MAX_PIXELS) {
+        return win;
+    }
+    win.phys = reinterpret_cast<uintptr_t>(s_offscreen_pixels);
+    win.cpu = s_offscreen_pixels;
+    win.w = w;
+    win.h = h;
+    win.stride = w * 4u;
+    win.format = GLES_NATIVE_FORMAT_RGBA8888;
+    printk("glmark2: no board window; an off-screen run on a %ux%u stand-in buffer\n", w, h);
+    return win;
+}
+#endif
+
 int run()
 {
     uint32_t w, h;
@@ -1653,6 +1682,16 @@ int run()
         return -EINVAL;
     }
     int rc = board_window(w, h, &win);
+#if defined(CONFIG_YAKOGL_GPU_V3D71)
+    /* The Pi 5's board layer has no window yet (-ENODEV). An --off-screen run
+     * renders into glmark2's own framebuffer object and never shows the
+     * native window, so a packed buffer of the image stands in for it. */
+    if (rc == -ENODEV) {
+        win = off_screen_window(w, h);
+        rc = win.cpu != nullptr ? 0 : -ENOMEM;
+        s_stand_in_window = (rc == 0);
+    }
+#endif
     if (rc != 0) {
         printk("glmark2: board_window(%u, %u) = %d\n", w, h, rc);
         return rc;
@@ -1683,6 +1722,12 @@ int run()
         printk("glmark2: --help/--version/--list-scenes/--validate is not a benchmark run\n");
         return -EINVAL;
     }
+#if defined(CONFIG_YAKOGL_GPU_V3D71)
+    if (s_stand_in_window && !Options::offscreen) {
+        printk("glmark2: the board has no window: CONFIG_GLMARK2_ARGS needs --off-screen\n");
+        return -EINVAL;
+    }
+#endif
     Log::init("glmark2-es2", Options::show_debug, &s_setup_log);
     if (!ResultsFile::init(Options::results_file)) {
         printk("glmark2: --results-file needs a file system\n");
