@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The draws of dEQP-GLES3 `fragment_out.random.*` with an integer colour
-//! attachment beside an attachment of another layout that the PowerVR back
-//! end still refuses, each with its framebuffer and the line it is refused
-//! with (plan #325 item mrt-frameload; RC1 and RC14 of
-//! docs/es3-cts-failures.md).
+//! attachment beside an attachment of another layout that are past the
+//! pixel's four output registers or that the PowerVR back end still refuses,
+//! each with its framebuffer and what the back end does with it (plan #325
+//! item mrt-frameload; RC1 and RC14 of docs/es3-cts-failures.md).
 //!
 //! The lists are the cases a host run of `fragment_out.` ends with
 //! `glDrawElements: GL_INVALID_OPERATION` for (`GPU=powervr MODULE=gles3
@@ -13,22 +13,20 @@
 //! four-attachment ones that `backend::DRAW_TARGETS` 4 lets link (at three
 //! they fail at the link: an output location past the draw buffers). The
 //! run's fifteenth three-buffer case, random.65 (RGBA16F beside R8), has no
-//! integer attachment and is not here. None of the thirty-four is a defect
-//! of `pvr_backend_draw`'s own: each is refused for one of three reasons
-//! that the back end cannot lift alone, and this file pins which, so a list
-//! that changes its reason (or starts to be drawn) is seen:
+//! integer attachment and is not here. This file pins what becomes of each,
+//! so a list that changes its answer is seen:
 //!
-//! - **The four output registers** (`REFUSE_FOUR_REGISTERS`): a BXS-4-64
-//!   pixel has four 32-bit output registers and the attachments' dwords do
-//!   not fit them in draw-buffer order (`mrt_layout::register_layout`
-//!   refuses the list with `OutputRegs`). The answer designed for such a
-//!   framebuffer is GL_FRAMEBUFFER_UNSUPPORTED from the GL core
-//!   (docs/notes/pvr-mrt4-budget.md, plan #368 item `pvr-budget-fb`), which
-//!   dEQP reads as NotSupported. Where `mrt_layout::layout` spills the last
-//!   attachment to a tile buffer with a captured end-of-tile program
-//!   (`eot3_tb`) the mixed key still has no layout
-//!   (`target_key::shc_mixed_out_layout`), so no variant exists to draw
-//!   with.
+//! - **Past the four output registers, spilled**: a BXS-4-64 pixel has
+//!   four 32-bit output registers and the attachments' dwords do not fit
+//!   them in draw-buffer order (`mrt_layout::register_layout` refuses the
+//!   list with `OutputRegs`). `mrt_layout::layout` stores the first
+//!   attachment that does not fit, and every one after it, to tile buffers
+//!   that the captured end-of-tile program loads back (`eot2_tb1`,
+//!   `eot3_tb`, `eot3_tb12`; issue #313), and the mixed key lays the list
+//!   out the same way (`target_key::shc_mixed_out_places`): the eleven
+//!   lists are drawn with their mixed key's variant, and refused only
+//!   without it (`REFUSE_NOT_A_MIX`). They were refused by the budget
+//!   (`REFUSE_FOUR_REGISTERS`) until those programs were uploaded.
 //! - **SRGB8_ALPHA8 in a mix** (`REFUSE_SRGB`): the sRGB class has no slot
 //!   code in the mixed key (plan #368 item `pvr-srgb-mix`,
 //!   docs/notes/pvr-blend-multi.md section 3).
@@ -39,7 +37,9 @@
 //!   sixteen lists are past the four registers as well, and two fit them.
 //!
 //! A mix inside the budget is drawn: the last test gives the lists of the
-//! same group that are, with the program the key names.
+//! same group that are, with the program the key names. The SRGB and
+//! fourth-draw-buffer reasons are the two that the back end cannot lift
+//! alone.
 //!
 //! HOST-ONLY: the pure acceptance rule (`pvr::backend::int_targets_drawn`,
 //! `pvr::target_keys`, `pvr::mrt_layout`); nothing is drawn.
@@ -55,7 +55,7 @@ use yakogl::pvr::backend::{int_targets_drawn, surf_out_dwords};
 use yakogl::pvr::mrt_layout::{layout, register_layout, EotProgram, LayoutError};
 use yakogl::pvr::target_keys::*;
 use yakogl::shaderc::ShcShader;
-use yakogl::target_key::shc_mixed_out_layout;
+use yakogl::target_key::{shc_mixed_out_layout, shc_mixed_out_places};
 
 /* The surfaces the GL core keeps dEQP's renderbuffers as
  * (`renderbuffer_surf_format`, src/gl/framebuffer.rs): GL_R8, GL_RG8,
@@ -94,27 +94,40 @@ fn dwords(fmts: &[u8]) -> Vec<u8> {
 }
 
 /// What `mrt_layout::layout` (the walk with tile buffers) makes of a list
-/// the registers refuse.
+/// the registers refuse: the end-of-tile program and the spilled targets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Spill {
-    /// The last attachment in tile buffer 0, emitted by `eot3_tb`.
+    /// The last of three attachments in tile buffer 0, `eot3_tb`.
     Eot3Tb,
-    /// No end-of-tile program was captured for the spill.
-    NoProgram,
+    /// The second of two attachments in tile buffer 0, `eot2_tb1`.
+    Eot2Tb1,
+    /// The last two of three attachments in tile buffers 0 and 1,
+    /// `eot3_tb12`.
+    Eot3Tb12,
+}
+
+impl Spill {
+    fn program(self) -> (EotProgram, u8) {
+        match self {
+            Spill::Eot3Tb => (EotProgram::Eot3Tb, 1),
+            Spill::Eot2Tb1 => (EotProgram::Eot2Tb1, 1),
+            Spill::Eot3Tb12 => (EotProgram::Eot3Tb12, 2),
+        }
+    }
 }
 
 /// `fragment_out.random.<n>`: the attachments and the spill of the list.
 const PAST_FOUR_REGISTERS: &[(u32, &[u8], Spill)] = &[
     (9, &[GLES_SURF_R32I, GLES_SURF_R16I, GLES_SURF_RGBA32UI], Spill::Eot3Tb),
-    (11, &[GLES_SURF_RG32I, GLES_SURF_RGBA32I], Spill::NoProgram),
-    (18, &[GLES_SURF_R32UI, GLES_SURF_RGBA32I], Spill::NoProgram),
-    (31, &[GLES_SURF_RG8UI, GLES_SURF_RGBA32UI, GLES_SURF_RG32I], Spill::NoProgram),
+    (11, &[GLES_SURF_RG32I, GLES_SURF_RGBA32I], Spill::Eot2Tb1),
+    (18, &[GLES_SURF_R32UI, GLES_SURF_RGBA32I], Spill::Eot2Tb1),
+    (31, &[GLES_SURF_RG8UI, GLES_SURF_RGBA32UI, GLES_SURF_RG32I], Spill::Eot3Tb12),
     (50, &[GLES_SURF_R16UI, GLES_SURF_RGBA16UI, RG8], Spill::Eot3Tb),
-    (53, &[GLES_SURF_RG8I, GLES_SURF_RGBA32UI], Spill::NoProgram),
+    (53, &[GLES_SURF_RG8I, GLES_SURF_RGBA32UI], Spill::Eot2Tb1),
     (62, &[GLES_SURF_R16I, GLES_SURF_RG8I, GLES_SURF_RGBA32I], Spill::Eot3Tb),
     (85, &[GLES_SURF_RGBA8UI, GLES_SURF_RGBA16UI, GLES_SURF_RG8UI], Spill::Eot3Tb),
-    (89, &[GLES_SURF_R32UI, GLES_SURF_RGBA32UI, GLES_SURF_RG16UI], Spill::NoProgram),
-    (92, &[GLES_SURF_RGBA16I, GLES_SURF_RGBA32I], Spill::NoProgram),
+    (89, &[GLES_SURF_R32UI, GLES_SURF_RGBA32UI, GLES_SURF_RG16UI], Spill::Eot3Tb12),
+    (92, &[GLES_SURF_RGBA16I, GLES_SURF_RGBA32I], Spill::Eot2Tb1),
     (97, &[GLES_SURF_RG8I, GLES_SURF_RG32I, GLES_SURF_RGBA8UI], Spill::Eot3Tb),
 ];
 
@@ -152,29 +165,38 @@ const FOUR_IN_A_MIX: &[(u32, &[u8], bool)] = &[
 ];
 
 #[test]
-fn lists_past_the_four_output_registers_are_refused_by_the_budget() {
+fn lists_past_the_four_output_registers_spill_and_are_drawn_with_their_variant() {
     for &(case, fmts, spill) in PAST_FOUR_REGISTERS {
         let d = draw(fmts);
         let dw = dwords(fmts);
-        assert_eq!(int_targets_drawn(&d, None), Err(REFUSE_FOUR_REGISTERS), "random.{case}");
-        assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS), "random.{case}");
-        /* the budget rule itself: the registers refuse the list */
+        /* the registers alone refuse the list */
         assert!(
             matches!(register_layout(&dw), Err(LayoutError::OutputRegs { .. })),
             "random.{case}: {dw:?} gives {:?}",
             register_layout(&dw)
         );
-        /* and what the tile buffers would make of it */
-        let with_tb = match layout(&dw) {
-            Ok(l) => {
-                assert_eq!((l.program, l.tile_buffers), (EotProgram::Eot3Tb, 1), "random.{case}");
-                Spill::Eot3Tb
-            }
-            Err(LayoutError::NoProgram { .. }) => Spill::NoProgram,
-            Err(e) => panic!("random.{case}: {dw:?} gives {e:?}"),
-        };
-        assert_eq!(with_tb, spill, "random.{case}");
+        /* the tile buffers take the attachments that do not fit */
+        let l = layout(&dw).unwrap_or_else(|e| panic!("random.{case}: {dw:?} gives {e:?}"));
+        assert_eq!((l.program, l.tile_buffers), spill.program(), "random.{case}");
+        /* the mixed key lays the list out as the walk does */
+        let (keys, n) = draw_target_keys(&d).unwrap_or_else(|e| panic!("random.{case}: {e}"));
+        let (_, span, spilled) = shc_mixed_out_places(&keys[..n]).unwrap_or_else(|| panic!("random.{case}: no places"));
+        assert_eq!((span, spilled), (l.output_regs, l.tile_buffers), "random.{case}");
+        /* drawn with the key's variant, refused without it or with another
+         * program's layout */
+        let mut fs = ShcShader::ZERO;
+        fs.blend_key = draw_mixed_key(&d).unwrap_or_else(|e| panic!("random.{case}: {e}"));
+        fs.num_outputs = span;
+        fs.num_tile_buffers = spilled;
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()), "random.{case}");
+        assert_eq!(int_targets_drawn(&d, None), Err(REFUSE_NOT_A_MIX), "random.{case}");
+        let no_store = ShcShader { num_tile_buffers: 0, ..fs };
+        assert_eq!(int_targets_drawn(&d, Some(&no_store)), Err(REFUSE_NOT_A_MIX), "random.{case}: nothing stored");
     }
+    /* six of the eleven had no end-of-tile program before eot2_tb1 and
+     * eot3_tb12 were uploaded */
+    let new: Vec<u32> = PAST_FOUR_REGISTERS.iter().filter(|r| r.2 != Spill::Eot3Tb).map(|r| r.0).collect();
+    assert_eq!(new, [11, 18, 31, 53, 89, 92]);
 }
 
 #[test]

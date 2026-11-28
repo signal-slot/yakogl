@@ -4,8 +4,9 @@
 //! registers or a tile buffer, and which captured end-of-tile program emits
 //! that layout (RC14 step 2's shared rule, docs/es3-cts-failures.md). The
 //! compiler places a fragment shader's colour outputs by it, and the back end
-//! picks its PBE source positions and its end-of-tile program by it. Pure;
-//! nothing here is wired into a draw yet.
+//! picks its PBE source positions and its end-of-tile program by it. Pure.
+//! `backend.rs` reads it where it accepts a draw into several attachments of
+//! one integer layout (`int_targets_drawn`).
 //!
 //! The rule ("layout B"), over the targets the end-of-tile program emits, in
 //! emit order:
@@ -30,18 +31,24 @@
 //! | layout | program | capture | static slot |
 //! |---|---|---|---|
 //! | 1..4 targets, none spilled | `eot1`..`eot4` | `eot N` | `eot_doutu_src0_n[N]` |
+//! | 2 targets, target 1 spilled | `eot2_tb1` | `eot 2 1` | `eot_doutu_src0_tb_n[2]` |
 //! | 3 targets, target 2 spilled | `eot3_tb` | `eot 3 2` | `eot_doutu_src0_tb_n[3]` |
+//! | 3 targets, targets 1, 2 spilled | `eot3_tb12` | `eot 3 1 2` | `eot_doutu_src0_tb_n[1]` |
 //! | 4 targets, target 3 spilled | `eot4_tb` | `eot 4 3` | `eot_doutu_src0_tb4_k[1]` (= `tb_n[4]`) |
 //! | 4 targets, targets 2, 3 spilled | `eot4_tb2` | `eot 4 2 3` | `eot_doutu_src0_tb4_k[2]` |
 //! | 4 targets, targets 1..3 spilled | `eot4_tb3` | `eot 4 1 2 3` | `eot_doutu_src0_tb4_k[3]` |
 //!
-//! It also reaches two layouts no program was captured for, which are refused
-//! ([`LayoutError::NoProgram`]): two targets with target 1 spilled (an RGBA32UI
-//! target and any other), and three with targets 1 and 2 spilled. In
-//! particular `eot_doutu_src0_tb_n[2]` holds `eot2_tb`, which was captured as
-//! `eot 3 1`: THREE emits, the tile buffer on emit 1 and emit 2 from an output
-//! register. It is not a two-target program, and this rule never asks for its
-//! layout (a register target after a spilled one), so it is never picked.
+//! That is every layout the rule reaches: [`LayoutError::NoProgram`] is left
+//! for a table that loses one. Two targets with target 1 spilled (an RGBA32UI
+//! target and any other, two RGBA32UI: dEQP's shader executor for `modf` of
+//! `vec3`/`vec4` and for the `mat4` precision cases) and three with targets 1
+//! and 2 spilled (three RGBA32UI: `fragment_out.array`) were refused until
+//! their programs were captured and uploaded. `eot_doutu_src0_tb_n[1]`, the
+//! slot of a count no tile-buffer render has, holds the three-target
+//! two-spill program. `eot2_tb` (`eot 3 1`: THREE emits, the tile buffer on
+//! emit 1 and emit 2 from an output register) is still captured, and the
+//! driver no longer uploads it: this rule never asks for its layout (a
+//! register target after a spilled one).
 //!
 //! The tile-buffer programs were captured with one sample per pixel
 //! (`msaa_samples 1`, `num_output_regs 4`, tools/pco_shc/README.md); a
@@ -95,8 +102,13 @@ impl Place {
 pub enum EotProgram {
     /// `eot1`..`eot4`: `targets` emits, all from output registers.
     Plain { targets: u8 },
+    /// `eot2_tb1` (`eot 2 1`): two emits, the last from tile buffer 0.
+    Eot2Tb1,
     /// `eot3_tb` (`eot 3 2`): three emits, the last from tile buffer 0.
     Eot3Tb,
+    /// `eot3_tb12` (`eot 3 1 2`): three emits, the last two from tile
+    /// buffers 0 and 1.
+    Eot3Tb12,
     /// `eot4_tb`, `eot4_tb2`, `eot4_tb3` (`spilled` 1, 2, 3): four emits,
     /// the last `spilled` from tile buffers 0..spilled.
     Eot4Tb { spilled: u8 },
@@ -110,7 +122,9 @@ impl EotProgram {
             EotProgram::Plain { targets: 2 } => "eot2",
             EotProgram::Plain { targets: 3 } => "eot3",
             EotProgram::Plain { .. } => "eot4",
+            EotProgram::Eot2Tb1 => "eot2_tb1",
             EotProgram::Eot3Tb => "eot3_tb",
+            EotProgram::Eot3Tb12 => "eot3_tb12",
             EotProgram::Eot4Tb { spilled: 1 } => "eot4_tb",
             EotProgram::Eot4Tb { spilled: 2 } => "eot4_tb2",
             EotProgram::Eot4Tb { .. } => "eot4_tb3",
@@ -121,7 +135,8 @@ impl EotProgram {
     pub const fn emits(self) -> u8 {
         match self {
             EotProgram::Plain { targets } => targets,
-            EotProgram::Eot3Tb => 3,
+            EotProgram::Eot2Tb1 => 2,
+            EotProgram::Eot3Tb | EotProgram::Eot3Tb12 => 3,
             EotProgram::Eot4Tb { .. } => 4,
         }
     }
@@ -130,7 +145,9 @@ impl EotProgram {
     pub const fn spilled_mask(self) -> u8 {
         match self {
             EotProgram::Plain { .. } => 0,
+            EotProgram::Eot2Tb1 => 1 << 1,
             EotProgram::Eot3Tb => 1 << 2,
+            EotProgram::Eot3Tb12 => 0b110,
             EotProgram::Eot4Tb { spilled } => (0xf << (4 - spilled)) & 0xf,
         }
     }
@@ -140,7 +157,10 @@ impl EotProgram {
     pub fn doutu(self, st: &PvrRenderStatic) -> u64 {
         match self {
             EotProgram::Plain { targets } => st.eot_doutu_src0_n[targets as usize],
+            EotProgram::Eot2Tb1 => st.eot_doutu_src0_tb_n[2],
             EotProgram::Eot3Tb => st.eot_doutu_src0_tb_n[3],
+            /* the slot of a count no tile-buffer render has */
+            EotProgram::Eot3Tb12 => st.eot_doutu_src0_tb_n[1],
             EotProgram::Eot4Tb { spilled } => st.eot_doutu_src0_tb4_k[spilled as usize],
         }
     }
@@ -149,7 +169,8 @@ impl EotProgram {
     pub fn pds_info(self, st: &PvrRenderStatic) -> u32 {
         match self {
             EotProgram::Plain { targets } => st.event_pixel_pds_info_n[targets as usize],
-            EotProgram::Eot3Tb => st.event_pixel_pds_info_tb_n[3],
+            EotProgram::Eot2Tb1 => st.event_pixel_pds_info_tb_n[2],
+            EotProgram::Eot3Tb | EotProgram::Eot3Tb12 => st.event_pixel_pds_info_tb_n[3],
             EotProgram::Eot4Tb { .. } => st.event_pixel_pds_info_tb_n[4],
         }
     }
@@ -163,7 +184,8 @@ pub enum LayoutError {
     /// Target `target` takes `dwords` registers: a format takes 1..4.
     Dwords { target: u8, dwords: u8 },
     /// `targets` targets whose last `spilled` spill: no end-of-tile program
-    /// was captured for that.
+    /// was captured for that. No layout [`layout`] makes reaches it since
+    /// `eot2_tb1` and `eot3_tb12` were captured.
     NoProgram { targets: u8, spilled: u8 },
     /// [`register_layout`] only: target `target` would take output registers
     /// `first..first + dwords`, past the [`OUTPUT_REGS`]-th: it does not fit
@@ -190,10 +212,12 @@ pub struct MrtLayout {
 
 /// The program for `targets` targets whose last `spilled` come from tile
 /// buffers, if one was captured.
-const fn program_for(targets: u8, spilled: u8) -> Option<EotProgram> {
+pub const fn program_for(targets: u8, spilled: u8) -> Option<EotProgram> {
     match (targets, spilled) {
         (1..=4, 0) => Some(EotProgram::Plain { targets }),
+        (2, 1) => Some(EotProgram::Eot2Tb1),
         (3, 1) => Some(EotProgram::Eot3Tb),
+        (3, 2) => Some(EotProgram::Eot3Tb12),
         (4, 1..=3) => Some(EotProgram::Eot4Tb { spilled }),
         _ => None,
     }
@@ -368,24 +392,36 @@ mod tests {
         assert_eq!((l.output_regs, l.tile_buffers, l.program), (4, 1, EotProgram::Eot3Tb));
         assert_eq!(l.place[2].source_pos(), 0);
 
-        /* RGBA32UI + R32F: the 4-dword target fills the four registers, the
-         * second spills as target 1 of two, and eot_doutu_src0_tb_n[2] is
-         * eot2_tb, a three-emit program: refused (the family:
-         * `spills_without_a_captured_program_are_refused`) */
-        assert_eq!(layout(&[4, 1]), Err(LayoutError::NoProgram { targets: 2, spilled: 1 }));
+        /* RGBA32UI + R32F: the 4-dword target fills the four registers and
+         * the second spills as target 1 of two (eot2_tb1; the family:
+         * `two_and_three_targets_spill_all_but_what_fits`) */
+        let l = layout(&[4, 1]).unwrap();
+        assert_eq!(places(&l), [reg(0), tb(0)]);
+        assert_eq!((l.output_regs, l.tile_buffers, l.program), (4, 1, EotProgram::Eot2Tb1));
     }
 
+    /// The two layouts that were refused until `eot 2 1` and `eot 3 1 2`
+    /// were captured: two targets with the second spilled, three with the
+    /// last two.
     #[test]
-    fn spills_without_a_captured_program_are_refused() {
-        /* two targets, the second spilled: eot_doutu_src0_tb_n[2] is
-         * eot2_tb, a three-emit program (`eot 3 1`), not this */
-        for d in [[4, 1], [3, 2], [2, 4], [4, 4], [1, 4]] {
-            assert_eq!(layout(&d), Err(LayoutError::NoProgram { targets: 2, spilled: 1 }), "{d:?}");
+    fn two_and_three_targets_spill_all_but_what_fits() {
+        /* two targets, the second spilled (two RGBA32UI: [4, 4]) */
+        for (d, regs) in [([4, 1], 4), ([3, 2], 3), ([2, 4], 2), ([4, 4], 4), ([1, 4], 1)] {
+            let l = layout(&d).unwrap_or_else(|e| panic!("{d:?}: {e:?}"));
+            assert_eq!(places(&l), [reg(0), tb(0)], "{d:?}");
+            assert_eq!((l.output_regs, l.tile_buffers, l.program), (regs, 1, EotProgram::Eot2Tb1), "{d:?}");
+            assert_eq!((l.place[0].source_pos(), l.place[1].source_pos()), (0, 0), "{d:?}");
         }
-        /* three targets, the last two spilled: no `eot 3 1 2` */
-        for d in [[4, 1, 1], [1, 4, 1], [2, 3, 1]] {
-            assert_eq!(layout(&d), Err(LayoutError::NoProgram { targets: 3, spilled: 2 }), "{d:?}");
+        /* three targets, the last two spilled (three RGBA32UI: [4, 4, 4]);
+         * a target after a spilled one spills whatever it takes */
+        for (d, regs) in [([4, 1, 1], 4), ([1, 4, 1], 1), ([2, 3, 1], 2), ([4, 4, 4], 4)] {
+            let l = layout(&d).unwrap_or_else(|e| panic!("{d:?}: {e:?}"));
+            assert_eq!(places(&l), [reg(0), tb(0), tb(1)], "{d:?}");
+            assert_eq!((l.output_regs, l.tile_buffers, l.program), (regs, 2, EotProgram::Eot3Tb12), "{d:?}");
         }
+        assert_eq!(program_for(2, 2), None);
+        assert_eq!(program_for(3, 3), None);
+        assert_eq!(program_for(1, 1), None);
     }
 
     #[test]
@@ -407,14 +443,7 @@ mod tests {
         for n in 1..=MAX_TARGETS as u32 {
             for code in 0..4u32.pow(n) {
                 let d: Vec<u8> = (0..n).map(|i| (code / 4u32.pow(i) % 4 + 1) as u8).collect();
-                let l = match layout(&d) {
-                    Ok(l) => l,
-                    Err(LayoutError::NoProgram { targets, spilled }) => {
-                        assert!(matches!((targets, spilled), (2, 1) | (3, 2)), "{d:?}");
-                        continue;
-                    }
-                    Err(e) => panic!("{d:?}: {e:?}"),
-                };
+                let l = layout(&d).unwrap_or_else(|e| panic!("{d:?}: {e:?}"));
                 let mut used = 0u8;
                 let mut mask = 0u8;
                 for (i, p) in places(&l).iter().enumerate() {
@@ -441,14 +470,15 @@ mod tests {
             }
         }
         /* every captured program but eot2_tb is reached */
-        let all = ["eot1", "eot2", "eot3", "eot4", "eot3_tb", "eot4_tb", "eot4_tb2", "eot4_tb3"];
+        let all =
+            ["eot1", "eot2", "eot3", "eot4", "eot2_tb1", "eot3_tb", "eot3_tb12", "eot4_tb", "eot4_tb2", "eot4_tb3"];
         assert_eq!(seen.into_iter().collect::<Vec<_>>(), {
             let mut v = all.to_vec();
             v.sort_unstable();
             v
         });
-        /* eot2_tb, in tb_n[2], is three emits with a register emit after a
-         * spilled one: a layout this rule never makes */
+        /* eot2_tb is three emits with a register emit after a spilled one:
+         * a layout this rule never makes (the driver uploads it nowhere) */
         assert_eq!(capture("eot2_tb"), (3, 0b010));
     }
 
@@ -457,8 +487,8 @@ mod tests {
         let st = PvrRenderStatic {
             eot_doutu_src0_n: [0, 0x1001, 0x1002, 0x1003, 0x1004],
             event_pixel_pds_info_n: [0, 11, 12, 13, 14],
-            eot_doutu_src0_tb_n: [0, 0, 0x2002, 0x2003, 0x2004],
-            event_pixel_pds_info_tb_n: [0, 0, 22, 23, 24],
+            eot_doutu_src0_tb_n: [0, 0x2001, 0x2002, 0x2003, 0x2004],
+            event_pixel_pds_info_tb_n: [0, 21, 22, 23, 24],
             eot_doutu_src0_tb4_k: [0, 0x2004, 0x3002, 0x3003],
             ..Default::default()
         };
@@ -470,6 +500,10 @@ mod tests {
         assert_eq!(pick(&[1, 1]), (0x1002, 12));
         assert_eq!(pick(&[1, 1, 1, 1]), (0x1004, 14));
         assert_eq!(pick(&[2, 2, 2]), (0x2003, 23));
+        assert_eq!(pick(&[4, 4]), (0x2002, 22));
+        /* three targets with two spilled: the slot of count 1, and the
+         * three-target PDS info */
+        assert_eq!(pick(&[4, 4, 4]), (0x2001, 23));
         assert_eq!(pick(&[1, 1, 2, 2]), (0x2004, 24));
         assert_eq!(pick(&[2, 2, 2, 2]), (0x3002, 24));
         assert_eq!(pick(&[4, 1, 1, 1]), (0x3003, 24));

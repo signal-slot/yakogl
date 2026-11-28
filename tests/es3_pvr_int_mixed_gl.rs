@@ -27,10 +27,25 @@
 //! stay refused by name: a colour mask that keeps some channels, and
 //! blending, each with an integer attachment beside another.
 //!
+//! Past the pixel's four output registers (issue #313, dEQP
+//! `fragment_out.array.{int,uint}` and `fragment_out.random`): three targets
+//! whose last one does not fit store it to tile buffer 0, and the
+//! end-of-tile program is the one that loads it back (`eot3_tb`, the static
+//! slot `eot_doutu_src0_tb_n[3]`), its PBE state reading from dword 0. D,
+//! three RG32UI and E, three RGBA16I, are one integer layout everywhere
+//! (the layout's own key, compiled per target); F, R32I + R16I + RGBA32UI
+//! (`fragment_out.random` seed 9), is a mix. G, RGBA8 + RGBA32UI, is two
+//! targets with the second spilled (`eot2_tb1`, `eot_doutu_src0_tb_n[2]`;
+//! refused by name until that program was captured). Checked: the draw is
+//! accepted, the kick's targets, the end-of-tile program, each PBE state,
+//! and the record of the key's program (its registers, its tile buffer, its
+//! key). The byte model has no tile-buffer store, so a spilled program is
+//! not run through it (tests/es3_pvr_mrt4.rs reads the stores).
+//!
 //! HOST-ONLY: no GPU runs and no pixel is read back. The draws are made
 //! without a colour clear (the clear of a mix is the item pvr-clear-load's).
-//! The back end draws the three accepted cases (`pvr::backend::
-//! int_targets_drawn`) and refuses the two by name.
+//! The back end draws the accepted cases (`pvr::backend::
+//! int_targets_drawn`) and refuses the others by name.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_int_mixed_gl
@@ -70,7 +85,7 @@ use yakogl::pvr::ffi::*;
 use yakogl::shaderc::online::powervr::chain::compile_fragment_for;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
-use yakogl::target_key::{gles_surf_target_key, shc_blend_key_mixed, shc_mixed_out_layout};
+use yakogl::target_key::{gles_surf_target_key, shc_blend_key_mixed, shc_mixed_out_layout, shc_mixed_out_places};
 
 mod usc_exec;
 
@@ -100,6 +115,9 @@ struct Platform {
 static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
 /// The PBE STATE word pair of each end-of-tile program built (slot 0).
 static EMITS: Mutex<Vec<Vec<u32>>> = Mutex::new(Vec::new());
+/// The DOUTU task control (the end-of-tile USC program) of each end-of-tile
+/// PDS program built.
+static DOUTUS: Mutex<Vec<u64>> = Mutex::new(Vec::new());
 /// The PBE REG word pair of attachment 0 of each kick submitted.
 static KICKS: Mutex<Vec<(u32, [[u64; 2]; PVR_RENDER_EOT_MAX_RT])>> = Mutex::new(Vec::new());
 
@@ -491,7 +509,7 @@ unsafe extern "C" fn pvr_pds_render_dma_program(
 /// Records the first PBE STATE word pair of each end-of-tile program.
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_generate_pixel_event_tq(
-    _doutu_src0: u64,
+    doutu_src0: u64,
     emit_words: *const u32,
     num_rt: u32,
     _has_slc_mcu_cache_controls: i32,
@@ -500,6 +518,7 @@ unsafe extern "C" fn pvr_pds_generate_pixel_event_tq(
     data_size_dw: *mut u32,
     code_size_dw: *mut u32,
 ) -> i32 {
+    DOUTUS.lock().unwrap_or_else(|e| e.into_inner()).push(doutu_src0);
     // SAFETY: the backend's emit words, buffers and sizes.
     unsafe {
         EMITS
@@ -655,6 +674,8 @@ struct Frame {
     emits: Vec<Emit>,
     /// The kick's `num_rt`.
     num_rt: u32,
+    /// The end-of-tile USC program's DOUTU task control.
+    doutu: u64,
 }
 
 /// Draws one triangle over the bound framebuffer with `fs`, no clear, then
@@ -673,6 +694,7 @@ fn drawn(fs: &str) -> Result<Frame, GLenum> {
 /// refuses gives an error or, for a variant it cannot build, no frame.
 fn try_draw(fs: &str) -> (GLenum, Option<Frame>) {
     EMITS.lock().unwrap().clear();
+    DOUTUS.lock().unwrap().clear();
     KICKS.lock().unwrap().clear();
     with_platform(|p| p.log.clear());
     let src = std::ffi::CString::new(fs).unwrap();
@@ -703,7 +725,8 @@ fn try_draw(fs: &str) -> (GLenum, Option<Frame>) {
     }
     assert_eq!(emits.len(), 1, "one end-of-tile program: {:?}", logs());
     assert_eq!(kicks.len(), 1, "one kick: {:?}", logs());
-    (GL_NO_ERROR, Some(Frame { emits: emits[0].chunks(2).map(|p| decode(p[1])).collect(), num_rt: kicks[0].0 }))
+    let doutu = DOUTUS.lock().unwrap()[0];
+    (GL_NO_ERROR, Some(Frame { emits: emits[0].chunks(2).map(|p| decode(p[1])).collect(), num_rt: kicks[0].0, doutu }))
 }
 
 /* ---- the mixes ------------------------------------------------------------------ */
@@ -871,6 +894,189 @@ fn mix_c_rgba16f_r32ui_rgba8_draws() {
     check(&MIX_C);
 }
 
+/* ---- past the four output registers: the last target in a tile buffer ----------- */
+
+const S16S16S16S16: u32 = 0x09;
+const U32U32U32U32: u32 = 0x0b;
+const U32U32: u32 = 0x28;
+const S16: u32 = 0x32;
+/// The stood-in static slots (`p_query`): `eot_doutu_src0_tb_n[3]`, three
+/// emits with the last from tile buffer 0 (`eot3_tb`), and `[2]`, two emits
+/// with the second from tile buffer 0 (`eot2_tb1`).
+const DOUTU_EOT3_TB: u64 = 0x2003;
+const DOUTU_EOT2_TB1: u64 = 0x2002;
+
+/// One list whose last target spills: the attachments' formats, the
+/// fragment shader, the PBE state of each attachment (the spilled one from
+/// dword 0), the registers the program's register targets span and the
+/// end-of-tile program.
+struct Spill {
+    name: &'static str,
+    formats: &'static [GLenum],
+    fs: &'static str,
+    pbe: &'static [Emit],
+    span: u8,
+    doutu: u64,
+}
+
+/// D: three RG32UI (dEQP `fragment_out.array.uint.rg32ui_*`): r0-r1, r2-r3,
+/// tile buffer 0.
+const SPILL_D: Spill = Spill {
+    name: "D: RG32UI x3",
+    formats: &[GL_RG32UI, GL_RG32UI, GL_RG32UI],
+    fs: "#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out uvec2 o[3];
+void main() {
+    o[0] = uvec2(1u, 2u);
+    o[1] = uvec2(3u, 4u);
+    o[2] = uvec2(5u, 6u);
+}
+",
+    pbe: &[emit(U32U32, 0, SOURCE_8, 0, 0), emit(U32U32, 0, SOURCE_8, 2, 1), emit(U32U32, 0, SOURCE_8, 0, 2)],
+    span: 4,
+    doutu: DOUTU_EOT3_TB,
+};
+
+/// E: three RGBA16I (dEQP `fragment_out.array.int.rgba16i_*`): two dwords
+/// each, the same places.
+const SPILL_E: Spill = Spill {
+    name: "E: RGBA16I x3",
+    formats: &[GL_RGBA16I, GL_RGBA16I, GL_RGBA16I],
+    fs: "#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out ivec4 o[3];
+void main() {
+    o[0] = ivec4(1, -2, 3, -4);
+    o[1] = ivec4(5, -6, 7, -8);
+    o[2] = ivec4(9, -10, 11, -12);
+}
+",
+    pbe: &[
+        emit(S16S16S16S16, 0, SOURCE_8, 0, 0),
+        emit(S16S16S16S16, 0, SOURCE_8, 2, 1),
+        emit(S16S16S16S16, 0, SOURCE_8, 0, 2),
+    ],
+    span: 4,
+    doutu: DOUTU_EOT3_TB,
+};
+
+/// F: dEQP `fragment_out.random` seed 9's list, R32I at r0, R16I at r1 and
+/// RGBA32UI, which needs four registers of its own, in tile buffer 0.
+const SPILL_F: Spill = Spill {
+    name: "F: R32I + R16I + RGBA32UI",
+    formats: &[GL_R32I, GL_R16I, GL_RGBA32UI],
+    fs: "#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out int o0;
+layout(location = 1) out int o1;
+layout(location = 2) out uvec4 o2;
+void main() {
+    o0 = -5;
+    o1 = 7;
+    o2 = uvec4(1u, 2u, 3u, 4u);
+}
+",
+    pbe: &[emit(S32, 0, SOURCE_8, 0, 0), emit(S16, 0, SOURCE_8, 1, 1), emit(U32U32U32U32, 0, SOURCE_8, 0, 2)],
+    span: 2,
+    doutu: DOUTU_EOT3_TB,
+};
+
+/// G: RGBA8 at r0 and RGBA32UI, which needs the four registers to itself,
+/// in tile buffer 0: two targets with the second spilled.
+const SPILL_G: Spill = Spill {
+    name: "G: RGBA8 + RGBA32UI",
+    formats: &[GL_RGBA8, GL_RGBA32UI],
+    fs: "#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out uvec4 o1;
+void main() {
+    o0 = vec4(1.0);
+    o1 = uvec4(1u, 2u, 3u, 4u);
+}
+",
+    pbe: &[emit(U8U8U8U8, 1, SOURCE_8, 0, 0), emit(U32U32U32U32, 0, SOURCE_8, 0, 1)],
+    span: 1,
+    doutu: DOUTU_EOT2_TB1,
+};
+
+/// The record of the fragment program `src` under the variant `key`: its
+/// `num_outputs`, `num_tile_buffers` and `blend_key`.
+fn record_for(src: &str, key: u32) -> (u8, u8, u32) {
+    let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).unwrap_or_else(|e| panic!("front end: {}", e.msg));
+        let rec = compile_fragment_for(&l.module, &l.reflection, a, key).unwrap_or_else(|e| panic!("chain: {e:?}"));
+        (rec.num_outputs, rec.num_tile_buffers, rec.blend_key)
+    })
+    .unwrap()
+}
+
+/// One list whose last target spills, end to end.
+fn check_spill(m: &Spill) {
+    let _g = rig();
+    let _f = Fbo::new(m.formats);
+    let n = m.formats.len();
+
+    /* the key the GL core gives the draw: the mixed key of a mix, the
+     * layout's own key where every attachment has one integer layout */
+    let targets: Vec<u32> = (0..n)
+        .map(|i| {
+            gles_surf_target_key(fb_target_format_n(ctx(), i as u8)).unwrap_or_else(|| panic!("{}: a key", m.name))
+        })
+        .collect();
+    assert_eq!(shc_mixed_out_layout(&targets), None, "{}: past the four registers", m.name);
+    let (_, span, spilled) = shc_mixed_out_places(&targets).unwrap_or_else(|| panic!("{}: places", m.name));
+    assert_eq!((span, spilled), (m.span, 1), "{}: registers spanned, targets spilled", m.name);
+    let mixed = shc_blend_key_mixed(&targets);
+    assert_eq!(yakogl::gl::target_keys::draw_mixed_key(ctx()), mixed, "{}: the GL core's mixed key", m.name);
+    let one_layout = targets.iter().all(|t| *t == targets[0]);
+    assert_eq!(mixed.is_none(), one_layout, "{}: a mix has a mixed key, one layout none", m.name);
+    let key = mixed.unwrap_or(targets[0]);
+
+    /* the draw is accepted: one kick of every target, the end-of-tile
+     * program that loads the last one back from tile buffer 0, and each
+     * attachment's PBE state, the spilled one's source at dword 0 */
+    let frame = drawn(m.fs).unwrap_or_else(|e| panic!("{}: draw error {e:#x}: {:?}", m.name, logs()));
+    assert_eq!(frame.num_rt as usize, n, "{}: kick num_rt", m.name);
+    assert_eq!(frame.doutu, m.doutu, "{}: the end-of-tile program", m.name);
+    assert_eq!(frame.emits[..n], *m.pbe, "{}: PBE states", m.name);
+    assert!(frame.emits[n..].iter().all(|e| *e == decode(0)), "{}: no further state", m.name);
+    let bad = ["refused", "no fragment shader variant", "not emitted"];
+    assert!(!logs().iter().any(|l| bad.iter().any(|b| l.contains(b))), "{}: {:?}", m.name, logs());
+
+    /* the program of the key: the registers of the targets that fit, one
+     * tile buffer, and the key the back end checks the draw against */
+    assert_eq!(record_for(m.fs, key), (m.span, 1, key), "{}: the record", m.name);
+}
+
+#[test]
+fn spill_d_three_rg32ui_draw() {
+    check_spill(&SPILL_D);
+}
+
+#[test]
+fn spill_e_three_rgba16i_draw() {
+    check_spill(&SPILL_E);
+}
+
+#[test]
+fn spill_f_r32i_r16i_rgba32ui_draws() {
+    check_spill(&SPILL_F);
+}
+
+#[test]
+fn spill_g_rgba8_beside_rgba32ui_draws() {
+    check_spill(&SPILL_G);
+}
+
 /// A colour mask that keeps some channels is still refused with an integer
 /// attachment beside another: no frame, no kick.
 #[test]
@@ -882,27 +1088,5 @@ fn partial_color_mask_stays_refused_by_name() {
     let (e, frame) = try_draw(MIX_A.fs);
     assert!(frame.is_none(), "refused, not drawn: {e:#x}: {:?}", logs());
     assert!(logs().iter().any(|l| l.contains("refused")), "named: {:?}", logs());
-    assert!(KICKS.lock().unwrap().is_empty(), "no kick");
-}
-
-/// An RGBA32UI attachment beside RGBA8 needs five output registers: refused
-/// by name (the pixel has four), not drawn with the wrong packing.
-#[test]
-fn rgba32ui_beside_rgba8_stays_refused_by_name() {
-    let _g = rig();
-    let _f = Fbo::new(&[GL_RGBA8, GL_RGBA32UI]);
-    let fs = "#version 300 es
-precision highp float;
-precision highp int;
-layout(location = 0) out vec4 o0;
-layout(location = 1) out uvec4 o1;
-void main() {
-    o0 = vec4(1.0);
-    o1 = uvec4(1u, 2u, 3u, 4u);
-}
-";
-    let (e, frame) = try_draw(fs);
-    assert!(frame.is_none() && e == GL_INVALID_OPERATION, "refused, not drawn: {e:#x}: {:?}", logs());
-    assert!(logs().iter().any(|l| l.contains("draw refused")), "named: {:?}", logs());
     assert!(KICKS.lock().unwrap().is_empty(), "no kick");
 }
