@@ -2946,6 +2946,11 @@ step "test    $MALI_CONFIG,report-es2 (tests/mali_{zs_words,blend_words_es2,blen
     --test mali_zs_words --test mali_blend_words_es2 --test mali_blend_states_es2 \
     --test mali_cube_samplers_es2 --test mali_fragment_random_es2 --test mali_draw_oom_es2 \
     --test mali_rgb565_stencil_es2 --test mali_draw_inval_es2
+# Plan #367's D-NPOTMIP pins (docs/notes/mali-npot-mip.md): refract's NPOT mip
+# chain reaches the Mali whole, and the refract draw's binding.
+step "test    $MALI_CONFIG (tests/mali_{npot_mip,npot_mip_gl,refract_draw}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_npot_mip --test mali_npot_mip_gl --test mali_refract_draw
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.

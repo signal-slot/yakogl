@@ -280,10 +280,12 @@ pub const NOT_BUILT_TEXTURE_FORMAT: &str =
     "mali: a texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (RGB8, RGBA8, RGB8A1) is not built yet";
 pub const NOT_BUILT_TEXTURE_TYPE: &str =
     "mali: a texture other than one 2D image, a cube map of six faces, a 2D array of at most 256 layers or a 3D texture of at most 256 4-byte slices is not built yet";
-/// A mip chain of a non-power-of-two image: the GL core lays none out for
-/// this backend (`npot_mip_chains`), so one would not be where
-/// [`chain_level`] looks.
-pub const NOT_BUILT_TEXTURE_NPOT_CHAIN: &str = "mali: a mip chain of a non-power-of-two texture is not built yet";
+/// A mip chain of a non-power-of-two cube map or 2D array: the GL core lays
+/// none out for this backend (`npot_mip_chains` is false for stacked
+/// layers), so one would not be where [`level_at`] looks. A single 2D image
+/// holds its chain (docs/notes/mali-npot-mip.md).
+pub const NOT_BUILT_TEXTURE_NPOT_CHAIN: &str =
+    "mali: a mip chain of a non-power-of-two cube map or 2D array is not built yet";
 /// An imported image's texture is copied (its rows are not
 /// [`TEXTURE_ROW_ALIGN`] bytes) and the GL core gave no CPU view of it, or
 /// one shorter than its rows.
@@ -2429,7 +2431,7 @@ pub(super) fn texture_of(
     let checks = [
         (!(t.type_ == backend::GLES_TEXTYPE_2D && layers == 1 || cube || array), NOT_BUILT_TEXTURE_TYPE),
         (f.is_none(), NOT_BUILT_TEXTURE_FORMAT),
-        (levels > 1 && !pot && f.is_some_and(|f| f.block_bytes == 0), NOT_BUILT_TEXTURE_NPOT_CHAIN),
+        (levels > 1 && !pot && layers > 1 && f.is_some_and(|f| f.block_bytes == 0), NOT_BUILT_TEXTURE_NPOT_CHAIN),
         (levels as usize > frame::MAX_TEXTURE_LEVELS, frame::NOT_BUILT_TEXTURE_SIZE),
     ];
     if let Some(&(_, why)) = checks.iter().find(|(on, _)| *on) {
@@ -2473,6 +2475,14 @@ pub(super) fn texture_of(
         }
     }
     Ok(sampled(t, &f, level))
+}
+
+/// [`texture_of`] for a host test of `tests/`: on the host `mali_draw`
+/// returns `-ENODEV` before it builds any texture, so a test that wants the
+/// descriptor's levels asks for one binding here.
+#[cfg(feature = "host-test")]
+pub fn host_texture_of(bind: &backend::GlesTextureBind, data: &mut Pool) -> Result<frame::SampledTexture, FrameError> {
+    texture_of(Some(bind), data)
 }
 
 /// GL's wrap mode as the sampler's.

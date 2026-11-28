@@ -1306,7 +1306,7 @@ pub(crate) const NPOT_RESTRICTED: bool = crate::REPORT_ES2 && !super::state::NPO
 /// faces of h >> l rows once h is not a power of two. Such a cube holds its
 /// chain packed for the native cube's copy instead ([`packed_npot_cube`]).
 fn npot_mip_chains(layers: u32) -> bool {
-    backend::native_layered_textures() || (backend::mip_level_align() == 0 && layers <= 1)
+    backend::native_layered_textures() || layers <= 1
 }
 
 /// A non-power-of-two 2D array of a decoded ETC2/EAC name on a back end that
@@ -1848,8 +1848,9 @@ pub(crate) fn chain_layout(
 /// A non-power-of-two size gets one level, unless `npot_chain` asks for its
 /// whole chain ([`npot_mip_chains`]): level i is then max(w >> i, 1) x
 /// max(h >> i, 1) (ES 2.0 3.7.7 with GL_OES_texture_npot, floor at every
-/// step). A backend that is not `pot_stack` lays it out by the same rules as
-/// a power-of-two chain. The PowerVR (`pot_stack`, `lvl_align` 0, one layer)
+/// step). A backend that is not `pot_stack`, or one that names every level's
+/// address from one pitch (`lvl_align` != 0: the Mali, for a single image),
+/// lays it out by the same rules as a power-of-two chain. The PowerVR (`pot_stack`, `lvl_align` 0, one layer)
 /// lays it out as the chain of the power-of-two extent, which is how Mesa
 /// 26.2.1's pvr driver lays out every image with more than one level and
 /// what its TPU walks from level 0's address ([`pot_chain_layout`]); the
@@ -1882,7 +1883,8 @@ pub(crate) fn chain_layout_npot(
     let row_align = backend::linear_row_align();
     let chain_pitch =
         if lvl_align != 0 || row_align != 0 { context::row_aligned(tex_pitch(w), bpp, row_align) } else { 0 };
-    let multi = !one_level && ((is_pot(w) && is_pot(h)) || (npot_chain && !pot_stack)) && (w > 1 || h > 1);
+    let multi =
+        !one_level && ((is_pot(w) && is_pot(h)) || (npot_chain && (!pot_stack || lvl_align != 0))) && (w > 1 || h > 1);
     /* GlTexture::level_pitch, which every reader and writer uses */
     let level_pitch = |lw: u32| if chain_pitch != 0 { chain_pitch } else { one_wide_level_pitch(w, lw, multi) };
     let mut off = [0u32; CAP_MIP_LEVELS];
