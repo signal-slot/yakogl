@@ -37,6 +37,40 @@
         autoboot line or for Linux's login on a UART silent for 30 s.
     prompt-go.py plan NAME SIZE CRC
         Prints the commands and what each answer must be, nothing else.
+    prompt-go.py check TRANSCRIPT NAME SIZE CRC
+        The lease console route (the lease's console server holds the
+        adapter's one slot; the agent types through its serial tools and
+        this code decides). TRANSCRIPT is plain text from the prompt on:
+        `=> CMD` echo lines and their answers, LF line ends, CR and NUL
+        removed (escape sequences are dropped here). Prints what to type
+        next, alone on the first line: the route's next command, `go
+        0x10000000` only when all five answers matched exactly as run
+        requires them, `reset` (an answer differed), or `none` (type
+        nothing); a "# " line after it says why. An answer counts only once
+        a prompt line follows it. A bare Enter that U-Boot answered counts
+        as the command "" (U-Boot repeats the last command on it). Exit: 0
+        the next command printed; 8 an answer differed or a command is out
+        of the route's order: `reset`; 4 a command not in go_allowed is in
+        the transcript (`reset` when the transcript ends at a prompt,
+        otherwise `none`); 5 `none`: no prompt yet, the last answer not
+        closed by a prompt, or `go` or `reset` already entered; 7 `none`:
+        U-Boot started Linux ("Starting kernel"); 2 usage.
+    prompt-go.py judge TRANSCRIPT RECORD_DIR NAME SIZE CRC PROBE
+        The lease route's record. TRANSCRIPT runs from the autoboot line to
+        Linux's login or the end of capture (the same plain text). Writes
+        answers.txt, image.log and verdict.txt as run does (image.log from
+        the end of the go line on, so its first line is blank and the
+        '## Starting application' line second, as in run's, and ends at
+        Linux's login line), and uart.log, the transcript with the first
+        line "lease route: typed through the lease console tools, no
+        typed.log" (and, with no login, a last "####" line, as run's).
+        Exit codes are run's, as far as the transcript shows them: 0, 8, 9,
+        10, 11; 4 (no prompt, Linux booted) or 7 (Linux booted during a
+        command) when Linux booted instead; 12 no autoboot line; 5 the
+        transcript ends at the prompt before `go` or leaves the route (a
+        command not in go_allowed or out of order, no reset after a
+        refusal); 6 refused and reset, no login in the transcript; 10 the
+        image started, no login in it. Nothing of this is typed anywhere.
     prompt-go.py --self-test
         The same code against a made-up U-Boot and image on a pty. No board.
 
@@ -439,6 +473,211 @@ def plan(name, size, crc):
 
 
 # --------------------------------------------------------------------------
+# The lease console route: the agent types through the lease's serial tools,
+# this code decides what may be typed next (check) and judges the record
+# (judge) from the plain transcript of what the console showed.
+
+LEASE_NOTE = "lease route: typed through the lease console tools, no typed.log"
+ESC_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def lease_lines(data):
+    """The transcript's lines: CR and NUL dropped (in case the tool that made
+    it left any), LF line ends."""
+    return data.replace(b"\r", b"").replace(b"\0", b"").decode("latin-1").split("\n")
+
+
+def is_prompt(line):
+    return line == "=>" or line.startswith("=> ")
+
+
+def lease_entries(lines, i0, go):
+    """The `=> CMD` lines from lines[i0] on, each with its answer (the lines
+    up to the next prompt line, escape sequences dropped, as enter() returns
+    it) and closed (a prompt came after it). Parsing ends at the line that
+    enters `go` or `reset` (nothing after them is a prompt answer) or a
+    "Starting kernel" line. A bare prompt with a blank answer is dropped (the
+    prompt after an answer); a bare Enter that U-Boot answered stays, as the
+    command "" (U-Boot repeats the last command on it), which no list allows.
+    Returns (entries, (kind, index)): kind "go", "reset", "kernel" or None
+    (the transcript ended), index the line where parsing ended."""
+    entries = []
+    stop = (None, len(lines))
+    for j in range(i0, len(lines)):
+        l = lines[j]
+        if P.KERNEL.decode() in l:
+            stop = ("kernel", j)
+            break
+        if is_prompt(l):
+            if entries:
+                entries[-1]["closed"] = True
+            cmd = l[3:]
+            entries.append({"cmd": cmd, "out": [], "closed": False, "at": j})
+            if cmd in ("reset", go):
+                stop = ("reset" if cmd == "reset" else "go", j)
+                break
+        elif entries:
+            entries[-1]["out"].append(ESC_RE.sub("", l))
+    kept = []
+    for e in entries:
+        e["answer"] = "".join(l + "\n" for l in e["out"]).lstrip("\n") if e["closed"] else \
+            "\n".join(e["out"]).lstrip("\n")
+        if e["cmd"].strip() == "" and e["answer"].strip() == "":
+            continue
+        kept.append(e)
+    if stop[0] in ("go", "reset"):
+        kept = [e for e in kept if e["at"] != stop[1]]
+    return kept, stop
+
+
+def lease_check(data, name, size, crc):
+    """check: (rc, lines to print). The first line printed is what to type
+    next, alone: one of the plan's commands, `go 0x10000000`, `reset`, or
+    `none` (type nothing); a "# " line after it says why."""
+    lines = lease_lines(data)
+    ok = go_allowed(name, size)
+    cmds = commands(name, size)
+    go = cmds[-1]
+    i0 = next((j for j, l in enumerate(lines) if is_prompt(l)), None)
+    if i0 is None:
+        return 5, ["none", "# no U-Boot prompt in the transcript: nothing to type yet"]
+    entries, stop = lease_entries(lines, i0, go)
+    foreign = [e["cmd"] for e in entries if not ok(e["cmd"])]
+    done = stop[0] is not None
+    if foreign:
+        say = "reset" if not done and entries and entries[-1]["closed"] else "none"
+        return 4, [say, "# not in go_allowed, typed: %r: the session left the route" % foreign[0]]
+    if stop[0] == "kernel":
+        return 7, ["none", "# U-Boot left the prompt and started Linux: nothing may be typed"]
+    if stop[0] in ("go", "reset"):
+        return 5, ["none", "# %r was entered: nothing more is typed (judge the record)" % lines[stop[1]][3:]]
+    if entries and not entries[-1]["closed"]:
+        return 5, ["none", "# wait: no prompt after %r yet, its answer is not whole" % entries[-1]["cmd"]]
+    for k, e in enumerate(entries):
+        if k >= len(cmds) - 1 or e["cmd"] != cmds[k]:
+            return 8, ["reset", "# the transcript's command %d is %r, not the route's %r" % (
+                k + 1, e["cmd"], cmds[k] if k < len(cmds) - 1 else go)]
+        why = checks(name, size, crc)[k][1](e["answer"])
+        if why:
+            return 8, ["reset", "# %s: %s" % (e["cmd"], why)]
+    return 0, [cmds[len(entries)]]
+
+
+def lease_judge(data, rec, name, size, crc, probe, say=None):
+    """judge: the record and run's exit code from a transcript that runs from
+    the autoboot line to Linux's login or the end of capture."""
+    if say is None:
+        def say(msg):
+            print("prompt-go: " + msg, flush=True)
+    os.makedirs(rec, exist_ok=True)
+    data = data.replace(b"\r", b"").replace(b"\0", b"")
+    lines = lease_lines(data)
+    ok = go_allowed(name, size)
+    cmds = commands(name, size)
+    go = cmds[-1]
+    raw = os.path.join(rec, "uart.log")
+    with open(raw, "wb") as f:
+        f.write(LEASE_NOTE.encode() + b"\n" + data)
+    ans = open(os.path.join(rec, "answers.txt"), "w")
+
+    def answered(cmd, out):
+        ans.write("## %s\n%s" % (cmd, out if out.endswith("\n") or not out else out + "\n"))
+        ans.flush()
+
+    def login_after(j):
+        return any(P.LOGIN.decode() in l for l in lines[j:])
+
+    def hole():
+        with open(raw, "ab") as f:
+            n = f.tell()
+            f.write(b"\n#### prompt-go: the transcript ends without Linux's login (byte %d of uart.log): what the "
+                    b"board printed after this point is not in this record\n" % n)
+
+    def stop(code, why):
+        say("STOP (%d): %s" % (code, why))
+        return code
+
+    try:
+        a = next((j for j, l in enumerate(lines) if P.AUTOBOOT.decode() in l), None)
+        if a is None:
+            return stop(12, "no autoboot line in the transcript")
+        i0 = next((j for j in range(a, len(lines)) if is_prompt(lines[j]) or P.KERNEL.decode() in lines[j]), None)
+        if i0 is None:
+            return stop(5, "no U-Boot prompt after the autoboot line: the transcript ends early")
+        if not is_prompt(lines[i0]):
+            return stop(4, "no U-Boot prompt after the autoboot line, Linux booted: the autoboot was missed")
+        say("at the U-Boot prompt")
+        entries, (kind, at) = lease_entries(lines, i0, go)
+        for k, (cmd, check, _) in enumerate(checks(name, size, crc)):
+            if k >= len(entries):
+                if kind == "kernel":
+                    return stop(7, "U-Boot left the prompt and started Linux")
+                if kind is not None:
+                    return stop(5, "%r entered before %r: the transcript leaves the route" % (lines[at][3:], cmd))
+                return stop(5, "the transcript ends before %r was answered" % cmd)
+            e = entries[k]
+            if not ok(e["cmd"]):
+                return stop(5, "not in go_allowed, typed: %r: the transcript leaves the route" % e["cmd"])
+            if e["cmd"] != cmd:
+                return stop(5, "%r typed where the route has %r" % (e["cmd"], cmd))
+            if not e["closed"]:
+                if kind == "kernel":
+                    return stop(7, "U-Boot left the prompt during %r and started Linux" % cmd)
+                return stop(5, "no prompt after %r: the transcript ends early" % cmd)
+            answered(cmd, e["answer"])
+            why = check(e["answer"])
+            if why:
+                say("REFUSED before go: %s" % why)
+                if len(entries) > k + 1:
+                    return stop(5, "%r typed after the refusal, not reset" % entries[k + 1]["cmd"])
+                if kind != "reset":
+                    return stop(5, "reset was not entered after the refusal")
+                if not login_after(at + 1):
+                    hole()
+                    return stop(6, "reset entered after the refusal, no Linux login in the transcript")
+                say("STOP (8): refused before go, reset entered, Linux's login came back")
+                return 8
+            say("%s: as expected" % cmd)
+        if len(entries) > len(cmds) - 1:
+            return stop(5, "%r typed after the route's five commands" % entries[len(cmds) - 1]["cmd"])
+        if kind != "go":
+            if kind == "kernel":
+                return stop(7, "U-Boot left the prompt and started Linux")
+            if kind == "reset":
+                return stop(5, "reset entered with every answer as expected: no go")
+            return stop(5, "the transcript ends before %r" % go)
+        answered(go, "")
+        say("%s entered: nothing is written from here on" % go)
+        # run's image.log: from the go line's own line end on, to the login
+        img = lines[at + 1:]
+        cut = next((j for j, l in enumerate(img) if P.LOGIN.decode() in l), None)
+        back = cut is not None
+        if back:
+            img = img[:cut + 1] + [""]
+        text = "\n" + "\n".join(img)
+        log = os.path.join(rec, "image.log")
+        with open(log, "wb") as f:
+            f.write(text.encode("latin-1"))
+        if STARTED.decode() not in text:
+            if not back:
+                hole()
+            return stop(9, "U-Boot did not answer %s in the transcript; nothing more was written" % go)
+        vrc, vline = judge(probe, log, os.path.join(rec, "verdict.txt"))
+        vrc, vline = note_cause(log, os.path.join(rec, "verdict.txt"), vrc, vline)
+        note_return(log, os.path.join(rec, "verdict.txt"))
+        say("verdict: %s" % vline)
+        if not back:
+            hole()
+            return stop(10, "the image started, no Linux login in the transcript")
+        if vrc != 0:
+            return stop(11, "Linux's login came back, the verdict is not PASS (verdict.txt)")
+        say("done: the verdict is PASS and Linux's login came back")
+        return 0
+    finally:
+        ans.close()
+
+
+# --------------------------------------------------------------------------
 # Self-test: a made-up U-Boot and image on a pty.
 
 FIXTURE = os.path.join(HERE, "..", "kexec-zephyr", "testdata", "t6_hello-uboot-pass.uart")
@@ -484,6 +723,17 @@ def sample_lines(probe, how="ok"):
         if how == "nodone":
             own = [l for l in own if not l.startswith("deqp: done: ")]
     return boot + own
+
+
+def lease_transcript(uart):
+    """A run's uart.log as the lease route's transcript: from the line of
+    the first autoboot line on (all of it when there is none), CR and NUL
+    removed, run's own "####" lines dropped."""
+    t = uart.replace(b"\r", b"").replace(b"\0", b"")
+    a = t.find(P.AUTOBOOT)
+    if a >= 0:
+        t = t[t.rfind(b"\n", 0, a) + 1:]
+    return b"\n".join(l for l in t.split(b"\n") if not l.startswith(b"#### "))
 
 
 class FakeGo(P.FakeBoard):
@@ -846,6 +1096,106 @@ def self_test():
     rc, f, files = case()
     check(b"cause:" not in files.get("verdict.txt", b"cause:"), "cntfrq0: a good run has no cause line")
 
+    # 6i. The lease route's judge: a FakeBoard session through run, its
+    # uart.log turned into the plain transcript the lease's tools give (from
+    # the autoboot line on, CR and NUL removed, run's own "####" lines
+    # dropped), judged again: the same exit, answers.txt, image.log's
+    # verdict and verdict.txt.
+    def judged_lease(transcript, probe="t6_hello"):
+        with tempfile.TemporaryDirectory() as d:
+            out = sys.stdout
+            sys.stdout = open(os.devnull, "w")
+            try:
+                rc = lease_judge(transcript, d, name, size, crc, probe)
+            finally:
+                sys.stdout.close()
+                sys.stdout = out
+            return rc, {n: open(os.path.join(d, n), "rb").read() for n in os.listdir(d)}
+
+    for what, how, lines, probe, want in (
+            ("PASS", "ok", None, "t6_hello", 0),
+            ("FAIL", "ok", [l for l in image_lines() if not l.startswith("t6_hello: 5 s")], "t6_hello", 11),
+            ("CRC mismatch", "crc", None, "t6_hello", 8),
+            ("no '## Starting application'", "silent", None, "t6_hello", 9),
+            ("gl_test PASS", "ok", sample_lines("gl_test"), "gl_test", 0),
+            ("gl_test FAIL", "ok", sample_lines("gl_test", "fail1"), "gl_test", 11),
+            ("size differs", "size", None, "t6_hello", 8),
+            ("file missing", "missing", None, "t6_hello", 8),
+            ("magic differs", "magic", None, "t6_hello", 8),
+            ("refused, the stream stops", "missing-kstop", None, "t6_hello", 6),
+            ("the image ran, no login", "nologin", None, "t6_hello", 10),
+            ("prompt lost", "lost", None, "t6_hello", 5),
+            ("U-Boot left the prompt", "uboot-boots", None, "t6_hello", 7),
+            ("autoboot missed", "missed", None, "t6_hello", 4),
+            ("no autoboot line", "noautoboot", None, "t6_hello", 12)):
+        rc, f, files = case(how, lines=lines, probe=probe)
+        t = lease_transcript(files.get("uart.log", b""))
+        lrc, lf = judged_lease(t, probe)
+        same = all(lf.get(n) == files.get(n) for n in ("verdict.txt", "answers.txt"))
+        check(rc == want and lrc == rc and same,
+              "lease judge, %s: exit %d as run's %d, verdict.txt and answers.txt the same (want %d)" % (
+                  what, lrc, rc, want))
+        check(lf.get("uart.log", b"").startswith(LEASE_NOTE.encode() + b"\n") and "typed.log" not in lf,
+              "lease judge, %s: uart.log's first line names the lease route, no typed.log" % what)
+        if want in (0, 9, 10, 11):
+            img = files.get("image.log", b"").replace(b"\r", b"")
+            check(lf.get("image.log", b"").startswith(img[:img.find(b"\n", 1)]),
+                  "lease judge, %s: image.log starts as run's" % what)
+
+    # the fixture: a whole go session's transcript, judged PASS
+    def fixture(n):
+        with open(os.path.join(HERE, "testdata", "prompt-go", n), "rb") as f:
+            body = [l for l in f.read().split(b"\n") if not l.startswith(b"# ")]
+        return b"\n".join(body)
+
+    rc, lf = judged_lease(fixture("lease-judge-t6_hello-pass.txt"))
+    check(rc == 0 and lf.get("verdict.txt", b"").rstrip().endswith(b"VERDICT t6_hello PASS"),
+          "lease judge, fixture: exit 0, VERDICT t6_hello PASS (rc %d)" % rc)
+
+    # 6j. The lease route's check: the route's next command after each
+    # matched answer, go only after the five, reset on an answer that
+    # differs, 4 for a command not in go_allowed, none while an answer is
+    # not whole or after go.
+    route = fixture("lease-check-route.txt")
+    rl = route.decode().split("\n")
+    at = [i for i, l in enumerate(rl) if l.startswith("=> ") and l[3:]]
+    for k in range(6):
+        part = "\n".join(rl[:at[k]] + ["=> "]) if k < 5 else route.decode()
+        rc, out = lease_check(part.encode(), name, size, crc)
+        check(rc == 0 and out == [cmds[k]], "lease check, %d answers matched: prints %r (rc %d, %r)" % (
+            k, cmds[k], rc, out))
+    rc, out = lease_check(b"=> ", name, size, crc)
+    check(rc == 0 and out == [cmds[0]], "lease check, the bare prompt: the first command (%r)" % out)
+    for what, edit in (("filesize", ("filesize=2a5c0", "filesize=2a5c4")),
+                       ("bytes read", ("173504 bytes read", "172992 bytes read")),
+                       ("magic", ("644d5241", "12345678")),
+                       ("crc32", ("==> 1b2c3d4e", "==> 1b2c3d4f")),
+                       ("ext4size", ("=> printenv filesize", "** File not found **\n=> printenv filesize"))):
+        rc, out = lease_check(route.replace(edit[0].encode(), edit[1].encode(), 1), name, size, crc)
+        check(rc == 8 and out[0] == "reset" and len(out) == 2 and out[1].startswith("# "),
+              "lease check, %s differs: exit 8, reset and why (rc %d, %r)" % (what, rc, out))
+    rc, out = lease_check(fixture("lease-check-foreign.txt"), name, size, crc)
+    check(rc == 4 and "go" not in out[0], "lease check, a foreign command: exit 4, no go (rc %d, %r)" % (rc, out))
+    for what, t in (("out of order", "=> printenv filesize\nfilesize=2a5c0\n=> "),
+                    ("a bare Enter answered", "=> ext4size mmc 0:1 /boot/yakogl/%s\n=> \nfilesize=2a5c0\n=> " % name)):
+        rc, out = lease_check(t.encode(), name, size, crc)
+        check(rc in (4, 8) and out[0] != cmds[-1], "lease check, %s: no go (rc %d, %r)" % (what, rc, out))
+    rc, out = lease_check(route.rstrip(b"=> \n") + b"\n", name, size, crc)
+    check(rc == 5 and out[0] == "none", "lease check, the last answer not closed by a prompt: none (rc %d)" % rc)
+    rc, out = lease_check(route + b"\n=> go 0x10000000\n## Starting application at 0x10000000 ...\n", name, size, crc)
+    check(rc == 5 and out[0] == "none", "lease check, go entered: none (rc %d, %r)" % (rc, out))
+    rc, out = lease_check(b"no prompt here\n", name, size, crc)
+    check(rc == 5 and out[0] == "none", "lease check, no prompt: none (rc %d)" % rc)
+    err, sys.stderr = sys.stderr, open(os.devnull, "w")
+    try:
+        bad = [main(["x", "check", "/nonexistent", name, str(size), "%08x" % crc]),
+               main(["x", "check", os.devnull, "../x.bin", str(size), "%08x" % crc]),
+               main(["x", "judge", os.devnull, "/nonexistent", name, str(size), "%08x" % crc, "t6_nonesuch"])]
+    finally:
+        sys.stderr.close()
+        sys.stderr = err
+    check(bad == [2] * 3, "lease usage: exit 2 for each bad argument (%r)" % bad)
+
     # 7. What may be typed.
     ok = go_allowed(name, size)
     for c in cmds + ["reset"]:
@@ -895,6 +1245,30 @@ def main(argv):
             return 2
         print(plan(argv[2], int(argv[3]), int(argv[4], 16)))
         return 0
+    if len(argv) in (6, 8) and argv[1] in ("check", "judge"):
+        if argv[1] == "check" and len(argv) == 6:
+            tr, name, size, crc = argv[2:6]
+            probe = TYPES[0]
+        elif argv[1] == "judge" and len(argv) == 8:
+            tr, rec, name, size, crc, probe = argv[2:8]
+        else:
+            sys.stderr.write(__doc__)
+            return 2
+        why = args_ok(name, size, crc) or (None if probe in TYPES else "PROBE %r is not one prompt-go takes" % probe)
+        if not why:
+            try:
+                with open(tr, "rb") as f:
+                    data = f.read()
+            except OSError as e:
+                why = "TRANSCRIPT %r: %s" % (tr, e.strerror)
+        if why:
+            sys.stderr.write("prompt-go.py: %s\n" % why)
+            return 2
+        if argv[1] == "judge":
+            return lease_judge(data, rec, name, int(size), int(crc, 16), probe)
+        rc, out = lease_check(data, name, int(size), int(crc, 16))
+        print("\n".join(out))
+        return rc
     if len(argv) in (9, 10) and argv[1] == "run":
         tty, rec, name, size, crc, probe, wait = argv[2:9]
         back = argv[9] if len(argv) == 10 else None

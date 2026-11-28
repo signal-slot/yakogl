@@ -1,0 +1,8 @@
+# SYNTHETIC: made up, not read on a board. A check transcript for t6_hello.bin, SIZE 173504, CRC 1b2c3d4e
+# in which a command not in go_allowed was typed after two matched answers. Redacted: no serial#, MAC,
+# UUID, address or path of the farm. prompt-go.py check must exit 4 and never print go.
+=> ext4size mmc 0:1 /boot/yakogl/t6_hello.bin
+=> printenv filesize
+filesize=2a5c0
+=> setenv bootcmd go 0x10000000
+=> 

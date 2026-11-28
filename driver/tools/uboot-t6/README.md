@@ -369,6 +369,34 @@ Link address and window:
 `WINDOW_SIZE` and `prompt-go.py`'s `LOAD` hold the same values, and
 `driver/tools/kexec-zephyr/board_lock_selftest.sh` fails when one differs.
 
+### The lease console route (`check`, `judge`)
+
+On the farm the lease's console server holds the adapter's one client slot,
+so `prompt-go.sh` cannot open `T6_UART`: the agent types the route's
+commands through the lease's serial tools instead, and `prompt-go.py` keeps
+the go/no-go and the verdict, from the console's plain transcript (LF line
+ends; CR, NUL and escape sequences are dropped):
+
+```sh
+# before each command: what to type next (the first line printed, alone)
+python3 -I driver/tools/uboot-t6/prompt-go.py check <transcript> <image>.bin <size> <crc32-hex>
+# after Linux's login (or the end of capture): the record and run's exit code
+python3 -I driver/tools/uboot-t6/prompt-go.py judge <transcript> <record-dir> <image>.bin <size> <crc32-hex> <probe>
+```
+
+`check` prints the route's next command, `go 0x10000000` only after all
+five answers matched as `run` requires them, `reset` (an answer differed,
+exit 8; a command not in `go_allowed` at a prompt, exit 4) or `none` (type
+nothing: no prompt yet, an answer not closed by a prompt, `go` or `reset`
+already entered, exit 5; Linux started, exit 7). Type exactly the first
+line and nothing else. `judge` writes `answers.txt`, `image.log`,
+`verdict.txt` and `uart.log` (its first line names the lease route; there is
+no `typed.log`) and exits with `run`'s codes as far as the transcript shows
+them (the header of `prompt-go.py` lists them). Both are pinned by
+`prompt-go.py --self-test`: each `run` case's `uart.log`, turned into a
+transcript, judges to the same exit, `answers.txt` and `verdict.txt`, and
+the transcripts under `testdata/prompt-go/lease-*.txt` are checked as well.
+
 ### When the UART stream stops
 
 The network serial adapter on the debug UART can stop its stream to the
