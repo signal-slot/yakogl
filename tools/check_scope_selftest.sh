@@ -682,6 +682,8 @@ out=$(plan tests/es3_msaa_gl_mrt.rs)
 expect "msaa: es3_msaa_gl_mrt reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_mrt.rs\)$' "$out"
 out=$(plan tests/es3_msaa_gl_query.rs)
 expect "msaa: es3_msaa_gl_query reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_query.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_rbsamples.rs)
+expect "msaa: es3_msaa_gl_rbsamples reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_rbsamples.rs\)$' "$out"
 out=$(plan tests/es3_msaa_gl_rect.rs)
 expect "msaa: es3_msaa_gl_rect reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_rect.rs\)$' "$out"
 out=$(plan tests/es3_msaa_gl_srgb.rs)
