@@ -1,0 +1,5 @@
+00:00:10 [build] use-vbo=false: FPS: 210 FrameTime: 4.762 ms
+00:00:20 [texture] texture-filter=nearest: FPS: 180 FrameTime: 5.556 ms
+00:00:30 [shading] shading=phong: Set up failed
+00:00:40 glmark2: score 195
+00:00:41 render: GPU recoveries 0 (HWR counter 0)

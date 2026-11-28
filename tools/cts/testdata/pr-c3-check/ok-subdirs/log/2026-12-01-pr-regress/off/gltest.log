@@ -1,0 +1,5 @@
+00:00:01 gl_test: case 1 clear: PASS
+00:00:02 gl_test: case 2 tri: PASS
+00:00:03 gl_test: case 3 tex: FAIL (pixel 4,4)
+00:00:04 gl_test: case 4 blend: TIMEOUT
+00:00:05 render: GPU recoveries 1 (HWR counter 1)
