@@ -584,6 +584,81 @@ fn zero_texture(t: &mut GlTexture) {
     unsafe { core::ptr::write_bytes(t as *mut GlTexture, 0, 1) };
 }
 
+/// GL_TEXTURE_SRGB_DECODE_EXT of a texture (EXT_texture_sRGB_decode): true
+/// is SKIP_DECODE_EXT. Per context slot and texture slot, with the texture's
+/// `serial` it was set for: an entry of another serial (the slot was freed and
+/// reused) reads as the default, DECODE_EXT. A table here rather than a field
+/// of `GlTexture` keeps that struct and its C view (`struct gl_texture`) as
+/// they are.
+#[derive(Clone, Copy)]
+struct SrgbSkip {
+    serial: u32,
+    skip: bool,
+}
+static SRGB_SKIP: Global<[[SrgbSkip; MAX_TEXTURES]; MAX_CONTEXTS]> = Global::zeroed();
+
+fn srgb_skip_row(index: u8) -> &'static mut [SrgbSkip; MAX_TEXTURES] {
+    // SAFETY: single-threaded by contract; no other reference is live.
+    let rows = unsafe { SRGB_SKIP.get() };
+    &mut rows[index as usize % MAX_CONTEXTS]
+}
+
+/// Test knob: expose GL_EXT_texture_sRGB_decode on a build whose extension
+/// list does not name it (none does yet), so the state can be tested on the
+/// host. Not part of any shipped build.
+#[cfg(feature = "host-test")]
+pub static SRGB_DECODE_FORCED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Is GL_EXT_texture_sRGB_decode exposed: named in this build's extension
+/// list (the gate every extension-only parameter follows)?
+pub(super) fn srgb_decode_exposed() -> bool {
+    #[cfg(feature = "host-test")]
+    if SRGB_DECODE_FORCED.load(core::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    super::state::extension_listed("GL_EXT_texture_sRGB_decode")
+}
+
+/// GL_TEXTURE_SRGB_DECODE_EXT of texture slot `ti` of context `index` as the
+/// texture object holds it: GL_DECODE_EXT (the default) or GL_SKIP_DECODE_EXT.
+/// A bound sampler object overrides it ([`srgb_decode_for_unit`]).
+pub(super) fn srgb_decode_of(index: u8, t: &GlTexture, ti: usize) -> GLenum {
+    let skip = srgb_skip_row(index).get(ti).is_some_and(|e| e.serial == t.serial && e.skip);
+    if skip {
+        GL_SKIP_DECODE_EXT
+    } else {
+        GL_DECODE_EXT
+    }
+}
+
+/// The srgb_decode a draw uses for texture `t` (slot `ti`) on texture unit
+/// `unit` of context `index`: the bound sampler object's when one is bound
+/// (EXT_texture_sRGB_decode: the sampler's value overrides the texture's),
+/// else the texture's. GL_DECODE_EXT or GL_SKIP_DECODE_EXT; GL_DECODE_EXT on a
+/// build that does not expose the extension.
+pub(crate) fn srgb_decode_for_unit(index: u8, unit: usize, t: &GlTexture, ti: usize) -> GLenum {
+    if !srgb_decode_exposed() {
+        return GL_DECODE_EXT;
+    }
+    super::es3::sampler_srgb_decode(index, unit).unwrap_or_else(|| srgb_decode_of(index, t, ti))
+}
+
+/// The srgb_decode a draw uses for the GL_TEXTURE_2D bound on texture unit
+/// `unit` of the current context ([`srgb_decode_for_unit`]), for a back end's
+/// bind and for the host test; GL_DECODE_EXT with no context, no such unit or
+/// no texture bound.
+pub fn srgb_decode_bound_2d(unit: usize) -> GLenum {
+    let Some(c) = context::current() else { return GL_DECODE_EXT };
+    let Some(&name) = c.bound_texture_2d.get(unit) else { return GL_DECODE_EXT };
+    let ti = if name == 0 { default_slot(GL_TEXTURE_2D) } else { c.texture_ref(name).map(|_| name as usize) };
+    let Some(ti) = ti else { return GL_DECODE_EXT };
+    let (index, t) = (c.index, &c.objs_ref().textures[ti]);
+    if !t.used {
+        return GL_DECODE_EXT;
+    }
+    srgb_decode_for_unit(index, unit, t, ti)
+}
+
 /// A fresh texture object with the GL defaults.
 fn init_texture(t: &mut GlTexture) {
     zero_texture(t);
@@ -5248,6 +5323,7 @@ pub(super) fn valid_tex_param(pname: GLenum, param: GLint) -> bool {
                 | GL_LINEAR_MIPMAP_LINEAR
         ),
         GL_TEXTURE_MAG_FILTER => matches!(p, GL_NEAREST | GL_LINEAR),
+        GL_TEXTURE_SRGB_DECODE_EXT => matches!(p, GL_DECODE_EXT | GL_SKIP_DECODE_EXT),
         GL_TEXTURE_WRAP_S | GL_TEXTURE_WRAP_T => matches!(p, GL_REPEAT | GL_CLAMP_TO_EDGE | GL_MIRRORED_REPEAT),
         GL_TEXTURE_SWIZZLE_R | GL_TEXTURE_SWIZZLE_G | GL_TEXTURE_SWIZZLE_B | GL_TEXTURE_SWIZZLE_A => {
             matches!(p, GL_RED | GL_GREEN | GL_BLUE | GL_ALPHA | GL_ZERO | GL_ONE)
@@ -5272,6 +5348,10 @@ pub(super) fn valid_tex_param(pname: GLenum, param: GLint) -> bool {
 /// TEXTURE_MAG_FILTER. 6.1.3, GetTexParameter: "value must be one of the
 /// symbolic values in table 3.10."
 fn es3_only_tex_param(pname: GLenum) -> bool {
+    /* an extension's parameter follows the extension, not the version */
+    if pname == GL_TEXTURE_SRGB_DECODE_EXT {
+        return !srgb_decode_exposed();
+    }
     crate::REPORT_ES2
         && !matches!(pname, GL_TEXTURE_WRAP_S | GL_TEXTURE_WRAP_T | GL_TEXTURE_MIN_FILTER | GL_TEXTURE_MAG_FILTER)
 }
@@ -5328,6 +5408,12 @@ fn tex_parameter(c: &mut GlContext, target: GLenum, pname: GLenum, param: GLint,
         GL_TEXTURE_BASE_LEVEL => t.base_level = param,
         GL_TEXTURE_COMPARE_MODE => t.compare_mode = param as GLenum,
         GL_TEXTURE_COMPARE_FUNC => t.compare_func = param as GLenum,
+        GL_TEXTURE_SRGB_DECODE_EXT => {
+            let serial = t.serial;
+            if let Some(e) = srgb_skip_row(c.index).get_mut(ti) {
+                *e = SrgbSkip { serial, skip: param as GLenum == GL_SKIP_DECODE_EXT };
+            }
+        }
         GL_TEXTURE_SWIZZLE_R => t.swizzle[0] = param as u16,
         GL_TEXTURE_SWIZZLE_G => t.swizzle[1] = param as u16,
         GL_TEXTURE_SWIZZLE_B => t.swizzle[2] = param as u16,
@@ -5439,6 +5525,7 @@ fn get_tex_parameter(c: &mut GlContext, target: GLenum, pname: GLenum) -> Option
         GL_TEXTURE_MAX_LEVEL => t.max_level_set,
         GL_TEXTURE_COMPARE_MODE => t.compare_mode as GLint,
         GL_TEXTURE_COMPARE_FUNC => t.compare_func as GLint,
+        GL_TEXTURE_SRGB_DECODE_EXT => srgb_decode_of(c.index, t, ti) as GLint,
         GL_TEXTURE_SWIZZLE_R => t.swizzle[0] as GLint,
         GL_TEXTURE_SWIZZLE_G => t.swizzle[1] as GLint,
         GL_TEXTURE_SWIZZLE_B => t.swizzle[2] as GLint,

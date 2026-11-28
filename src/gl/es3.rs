@@ -72,6 +72,8 @@ struct Es3Sampler {
     compare_func: GLenum,
     min_lod: GLfloat,
     max_lod: GLfloat,
+    /// GL_TEXTURE_SRGB_DECODE_EXT is GL_SKIP_DECODE_EXT (EXT_texture_sRGB_decode).
+    srgb_skip: bool,
 }
 
 impl Es3Sampler {
@@ -87,6 +89,7 @@ impl Es3Sampler {
         compare_func: 0,
         min_lod: 0.0,
         max_lod: 0.0,
+        srgb_skip: false,
     };
 
     /// A name glGenSamplers just handed out: the ES 3.0 sampler-object
@@ -102,6 +105,7 @@ impl Es3Sampler {
         compare_func: GL_LEQUAL,
         min_lod: -1000.0,
         max_lod: 1000.0,
+        srgb_skip: false,
     };
 }
 
@@ -153,6 +157,16 @@ pub(super) fn sampler_lod(index: u8, unit: usize) -> Option<(GLfloat, GLfloat)> 
     let h = *bound_sampler(index).get(unit)? as usize;
     let s = samplers(index).get(h).filter(|s| h != 0 && s.n.used)?;
     Some((s.min_lod, s.max_lod))
+}
+
+/// GL_TEXTURE_SRGB_DECODE_EXT of the sampler object bound to texture unit
+/// `unit` of context `index`, which overrides the texture's (EXT_texture_
+/// sRGB_decode): GL_DECODE_EXT or GL_SKIP_DECODE_EXT; None when no sampler
+/// is bound.
+pub(super) fn sampler_srgb_decode(index: u8, unit: usize) -> Option<GLenum> {
+    let h = *bound_sampler(index).get(unit)? as usize;
+    let s = samplers(index).get(h).filter(|s| h != 0 && s.n.used)?;
+    Some(if s.srgb_skip { GL_SKIP_DECODE_EXT } else { GL_DECODE_EXT })
 }
 
 /// GL_SAMPLER_BINDING of the active texture unit, for glGetIntegerv.
@@ -882,6 +896,9 @@ fn sampler_set(s: &mut Es3Sampler, pname: GLenum, iv: GLint, fv: GLfloat, is_flo
         GL_TEXTURE_COMPARE_FUNC => s.compare_func = iv as GLenum,
         GL_TEXTURE_MIN_LOD => s.min_lod = if is_float { fv } else { iv as GLfloat },
         GL_TEXTURE_MAX_LOD => s.max_lod = if is_float { fv } else { iv as GLfloat },
+        GL_TEXTURE_SRGB_DECODE_EXT if super::texture::srgb_decode_exposed() => {
+            s.srgb_skip = iv as GLenum == GL_SKIP_DECODE_EXT
+        }
         _ => return false,
     }
     true
@@ -900,6 +917,9 @@ fn sampler_get(s: &Es3Sampler, pname: GLenum) -> Option<GLfloat> {
         GL_TEXTURE_COMPARE_FUNC => s.compare_func as GLfloat,
         GL_TEXTURE_MIN_LOD => s.min_lod,
         GL_TEXTURE_MAX_LOD => s.max_lod,
+        GL_TEXTURE_SRGB_DECODE_EXT if super::texture::srgb_decode_exposed() => {
+            (if s.srgb_skip { GL_SKIP_DECODE_EXT } else { GL_DECODE_EXT }) as GLfloat
+        }
         _ => return None,
     })
 }
