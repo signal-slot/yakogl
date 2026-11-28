@@ -495,6 +495,29 @@ PY
 python3 "$REPORT" --date 2026-11-10 "$w0" "$w1" "$wd/$(basename "${S[2]}")" 2>&1 | grep -q '1 shortfall entry no README line names (3)'
 expect "a shortfall no README line names still counts" $?
 
+# --names: opt-in, per slice and entry the verdict counts and the not-pass names; the default output is unchanged
+echo "== --names on the recorded 9bc82915 slices"
+if [ "${#REAL[@]}" = 3 ]; then
+	python3 "$REPORT" --date 2026-11-10 "${REAL[@]}" > "$work/nn.out" 2>&1
+	python3 "$REPORT" --date 2026-11-10 --names "${REAL[@]}" > "$work/nm.out" 2>&1
+	nl=$(grep -n '^--- --names' "$work/nm.out" | head -1 | cut -d: -f1)
+	[ -n "$nl" ]; expect "--names prints its block" $?
+	grep -q -- '--names' "$work/nn.out"; [ $? != 0 ]; expect "without --names there is no names block" $?
+	# everything outside the names block is what the default prints (the block sits before the anchors)
+	awk -v n="$nl" 'NR<n-1 {print}' "$work/nm.out" > "$work/nm.head"
+	head -c "$(wc -c < "$work/nm.head")" "$work/nn.out" | cmp -s - "$work/nm.head"
+	expect "the output before the names block is the default output" $?
+	grep -q '^  e2: begun 733, Pass 709, Fail 24, NotSupported 0, other 0, no result 0; not-pass 24, named 25' "$work/nm.out"
+	expect "e2 counts" $?
+	grep -q '^    dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1f$' "$work/nm.out"
+	expect "e2 names a not-pass case" $?
+	grep -q '^  e0: begun 298, Pass 298, Fail 0, NotSupported 0, other 0, no result 0; not-pass 0, named 0$' "$work/nm.out"
+	expect "a clean entry names nothing" $?
+	[ "$(grep -c '^tools/cts/log/.*:$' "$work/nm.out")" = 3 ]; expect "one heading per slice" $?
+else
+	bad "the three recorded 9bc82915 slices are not all present"
+fi
+
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
 if [ "$fails" = 0 ]; then echo "report selftest: OK"; exit 0; fi
