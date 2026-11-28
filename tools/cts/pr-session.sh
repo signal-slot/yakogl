@@ -52,7 +52,8 @@
 #   BOARD_UART (or RESOURCE_AM62P_CONSOLE_HOST:..._PORT)  the serial bridge
 #   ZEPHYR_WS, WEST_VENV, ZEPHYR_SDK_INSTALL_DIR, GLMARK2_SRC, PVR_FW_BLOB as
 #   tools/cts/board-stage.sh and tools/cts/deps-env.sh am62p set them.
-# The kept log has IPv4 addresses, MACs and the board's host name redacted as
+# The kept log has IPv4 addresses, MACs, the board's host names and the
+# Toradex banner's Serial# values (<serial>) redacted, the first three as
 # tools/board.sh does (192.0.2.n, 02:00:00:00:00:nn, <board-host>).
 #
 # Exit: 0 session ran and its verdict is done; 1 build or run failed or the
@@ -216,6 +217,15 @@ export BOARD_HOST=${BOARD_HOST:-${RESOURCE_AM62P_SSH:-}}
 [ -n "$BOARD_HOST" ] || die "no board: set BOARD_HOST or lease target:am62p (RESOURCE_AM62P_SSH)"
 if [ -z "${BOARD_UART:-}" ] && [ -n "${RESOURCE_AM62P_CONSOLE_HOST:-}" ] && [ -n "${RESOURCE_AM62P_CONSOLE_PORT:-}" ]; then
     BOARD_UART=$RESOURCE_AM62P_CONSOLE_HOST:$RESOURCE_AM62P_CONSOLE_PORT
+    # the lease names no protocol: an adapter that completes the RFC 2217
+    # handshake is read as rfc2217:// (board.sh's uart_rfc2217.py), else as a
+    # raw bridge. Busy is the lease's serial MCP holding it (tools/cts/README.md,
+    # "The console under a farm console lease"): no direct capture this turn.
+    python3 -I tools/uart_rfc2217.py probe "$BOARD_UART" 2> /dev/null
+    case $? in
+    0) BOARD_UART=rfc2217://$BOARD_UART ;;
+    4) die "the console adapter is busy: a serial MCP call of this turn holds it (tools/cts/README.md, feed bridge section); nothing was built" ;;
+    esac
 fi
 export BOARD_UART=${BOARD_UART:-}
 [ -n "$BOARD_UART" ] || die "no console: set BOARD_UART or lease target:am62p-console"
@@ -227,6 +237,9 @@ if [ "$GLM" = 1 ] && [ ! -f "${GLMARK2_SRC:-}/src/default-benchmarks.h" ]; then
 fi
 [ "$GLM" = 0 ] || glm_extra
 
+# the board's own host name (Torizon's carries the module's serial number,
+# verdin-am62p-<n>): the login prompts after each reset print it
+BHOSTNAME=$(ssh "$BOARD_HOST" -- hostname 2> /dev/null | tr -d '\r\n') || BHOSTNAME=
 mkdir -p "$OUT" "$BUILD" || die "cannot create $OUT"
 BUILD=$(cd "$BUILD" && pwd)
 rc=0
@@ -253,7 +266,11 @@ for i in "${!LABELS[@]}"; do
     CONSOLE=$(find_console "$BUILD/run-$l") || CONSOLE=
     if [ -n "$CONSOLE" ]; then
         cp "$CONSOLE" "$OUT/$l.log"
-        for s in "${BOARD_HOST#*@}" "${BOARD_UART%%:*}"; do
+        # the Toradex banner's module and carrier serial numbers ("Serial#: n",
+        # "..., Serial# n"), as tools/cts/imx95-redact-check.py's rule c
+        LC_ALL=C sed -i -E 's/\b(Serial#[ \t]*:?[ \t]*)[0-9A-Za-z]+/\1<serial>/g' "$OUT/$l.log"
+        for s in "$BHOSTNAME" "${BOARD_HOST#*@}" "${BOARD_UART#rfc2217://}"; do
+            s=${s%%:*}
             [ ${#s} -ge 6 ] || continue
             esc=$(printf '%s' "$s" | sed 's/[][\\.*^$/|(){}+?]/\\&/g')
             LC_ALL=C sed -i -E "s/$esc/<board-host>/g" "$OUT/$l.log"
