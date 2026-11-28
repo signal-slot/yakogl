@@ -436,10 +436,11 @@ check_v3d_shc() {
 # is validated by tools/vivante/mesa-etna-build.sh --check, which takes the
 # directory that holds mesa-26.2.1 (the tree's parent) and prints the tree it
 # found; that must be the tree named. Never a pass when unset or incomplete:
-# a `warn` gap line with the hint, like V3D_SHC (the rows are a named gap).
+# a `warn` gap line with the hint, like V3D_SHC (tools/check.sh's hwdb and
+# golden rows build the tree in a row of their own when it is missing).
 check_mesa_etna_tree() {
   local tree=${MESA_ETNA_TREE-} out hint
-  hint="build it with tools/vivante/mesa-etna-build.sh (tools/vivante/README.md, \"Building it\"), then export MESA_ETNA_TREE=<dir>/mesa-26.2.1 (tools/cts/deps-env.sh --present does); the ST hwdb, golden-stream and shader-table rows would gap"
+  hint="build it with tools/vivante/mesa-etna-build.sh (tools/vivante/README.md, \"Building it\"), then export MESA_ETNA_TREE=<dir>/mesa-26.2.1 (tools/cts/deps-env.sh --present does); without it tools/check.sh builds it in a row under the layout before the ST hwdb and golden-stream rows (about 8 minutes, once), and the shader-table check would gap"
   if [ -z "$tree" ]; then
     line warn MESA_ETNA_TREE "missing: unset: $hint"
     return

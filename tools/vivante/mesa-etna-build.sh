@@ -38,6 +38,8 @@
 #                         script's pins) makes the tree stale: --check says
 #                         so, and a build starts it again from the tarball.
 #
+# Environment: MESA_ETNA_JOBS, ninja's -j (a count; unset, every core).
+#
 # Needs: python3 (>= 3.10, with venv), meson, ninja, a C/C++ compiler,
 # pkg-config, bison, flex, patch, tar, xz, libdrm, expat, zlib and zstd
 # development files; curl or python3 for the downloads (network once).
@@ -97,6 +99,12 @@ while [ $# -gt 0 ]; do
 done
 if [ -z "$DIR" ]; then
   DIR="$("$ROOT/tools/cts/deps-env.sh" --layout)/mesa-etna-$MESA_VER"
+fi
+# MESA_ETNA_JOBS: ninja's -j for the builds (step 4); a count or unset.
+NINJA_J=()
+if [ -n "${MESA_ETNA_JOBS-}" ]; then
+  [[ $MESA_ETNA_JOBS =~ ^[1-9][0-9]*$ ]] || { echo "mesa-etna-build: MESA_ETNA_JOBS '$MESA_ETNA_JOBS' is not a count" >&2; exit 64; }
+  NINJA_J=(-j "$MESA_ETNA_JOBS")
 fi
 case $DIR in /*) ;; *) DIR="$PWD/$DIR" ;; esac
 TREE="$DIR/mesa-$MESA_VER"
@@ -212,10 +220,21 @@ if [ "$MODE" = build ]; then
     command -v "$c" >/dev/null 2>&1 || { echo "mesa-etna-build: $c is not on PATH" >&2; exit 1; }
   done
   mkdir -p "$DIR"
-  # One build at a time per directory.
+  # One build at a time per directory. A second caller (two gate runs on one
+  # host, tools/check.sh's build row) waits for the first, up to an hour,
+  # and then finds the tree the first one made.
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$DIR/.lock"
-    flock -n 9 || { echo "mesa-etna-build: another build holds $DIR/.lock" >&2; exit 1; }
+    if ! flock -n 9; then
+      echo "mesa-etna-build: another build holds $DIR/.lock; waiting for it (up to 1 h)"
+      flock -w 3600 9 || { echo "mesa-etna-build: $DIR/.lock is still held after 1 h" >&2; exit 1; }
+    fi
+    why=$(why_not_complete)
+    if [ -z "$why" ]; then
+      step "complete: $MARKER matches this checkout's inputs (made while this build waited); nothing to do"
+      echo "MESA_ETNA_TREE=$TREE"
+      exit 0
+    fi
   fi
   # The marker goes before anything else does: a build that stops halfway
   # leaves no marker, and the next one starts again.
@@ -273,13 +292,15 @@ run patch -d "$TREE" -p1 --batch --forward -i "$HERE/mesa-cs-golden.patch"
 
 # 4. The builds. The venv's python3 comes first on PATH, so Mesa's meson
 # (find_program python3.x / python3) runs its generators with it.
+# MESA_ETNA_JOBS (a count) is ninja's -j; unset, ninja picks its own (every
+# core). tools/check.sh sets it to its compiler slots.
 export PATH="$VENV/bin:$PATH"
 step "build-etnaviv: etna_shc (README.md, \"Set up once\")"
 run meson setup "$TREE/build-etnaviv" "$TREE" "${OPTS_SHC[@]}"
-run ninja -C "$TREE/build-etnaviv" src/gallium/drivers/etnaviv/etna_shc
+run ninja "${NINJA_J[@]+"${NINJA_J[@]}"}" -C "$TREE/build-etnaviv" src/gallium/drivers/etnaviv/etna_shc
 step "$GOLDEN_REL: libEGL, libGLESv2 and the drm-shim (README.md, \"Building it\")"
 run meson setup "$TREE/$GOLDEN_REL" "$TREE" "${OPTS_GOLDEN[@]}"
-run ninja -C "$TREE/$GOLDEN_REL"
+run ninja "${NINJA_J[@]+"${NINJA_J[@]}"}" -C "$TREE/$GOLDEN_REL"
 
 # 5. The marker, last.
 step "marker $MARKER"

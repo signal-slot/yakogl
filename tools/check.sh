@@ -3929,14 +3929,54 @@ if command -v python3 >/dev/null 2>&1; then
   # case 63, matattr), not a build error.
   step "tools   gl_test shader sources have table rows" python3 -I tools/vivante/check_gl_test_blobs.py
   # The STM32MP257F's GPU row (0x8000/0x6205, issues #7, #1281): the self-test
-  # of tools/vivante/gate_st.sh, which needs no Mesa tree. The script's own
-  # two checks (hwdb, golden) need a Mesa 26.2.1 tree with the etnaviv
-  # drm-shim build (MESA_ETNA_TREE), which the dependency layout
-  # (tools/cts/deps-env.sh) does not carry; as rows they would be a gap on
-  # every runner, so they are run by hand (tools/vivante/README.md) until the
-  # layout carries the tree.
+  # of tools/vivante/gate_st.sh, which needs no Mesa tree.
   scope vivante
   step "tools   tools/vivante/gate_st_selftest.sh (no Mesa tree)" selftest_row tools/vivante/gate_st_selftest.sh
+  # The script's own two checks, hwdb (the hwdb comparison against
+  # tools/vivante/testdata/hwdb-compare-st-6205.txt) and golden (cs_golden's
+  # stream on the GC7000UL and GCNANOULTRA31 shim rows), read a Mesa 26.2.1
+  # etnaviv tree, MESA_ETNA_TREE: the caller's, or the dependency layout's
+  # once tools/vivante/mesa-etna-build.sh made it there complete
+  # (deps-env.sh --present, above). Without one, a build row makes it first,
+  # as the v3d rows make their Mesa reference: mesa-etna-build.sh under the
+  # layout (from the Mesa tarball PCO_SHC's entry keeps in <layout>/downloads
+  # when it is there; five pinned Python sdists are fetched once), about 8
+  # minutes on 4 cores, once per machine, and a no-op while the tree's marker
+  # matches the checkout's inputs. Only a run whose diff reaches the Vivante
+  # scope pays for it. (Built in the gate workflow's environment step, it ran
+  # on every pull request, docs-only ones included, and pull request #16004's
+  # full run went past the job's 300 minutes.) Its ninja gets this run's
+  # compiler slots. The two checks wait for it in its lane. gate_st.sh's
+  # exit 2 (its one `gap:` line: a tree it finds incomplete, so also after a
+  # build that failed) is a gap, never ok; exit 1 is a mismatch, a failure.
+  # Its temporary files go under the gitignored build/.
+  gate_st_row() {
+    local tmp="$PWD/build/gate_st/$1" status=0
+    rm -rf "$tmp" && mkdir -p "$tmp" || return 1
+    TMPDIR="$tmp" MESA_ETNA_TREE="$2" tools/vivante/gate_st.sh "$1" || status=$?
+    rm -rf "$tmp"
+    [ "$status" -eq 2 ] && : > "$ROWS/$ROW_SEQ.gap"
+    return "$status"
+  }
+  gate_st_build() {
+    local layout tar=() jobs=()
+    layout=$(tools/cts/deps-env.sh --layout) || return 1
+    [ -f "$layout/downloads/mesa-26.2.1.tar.xz" ] && tar=(--tarball "$layout/downloads/mesa-26.2.1.tar.xz")
+    [ -n "${SLOTS-}" ] && jobs=(MESA_ETNA_JOBS="$SLOTS")
+    env "${jobs[@]+"${jobs[@]}"}" tools/vivante/mesa-etna-build.sh "${tar[@]+"${tar[@]}"}" "$layout/mesa-etna-26.2.1"
+  }
+  if [ -n "${MESA_ETNA_TREE-}" ]; then
+    gate_st_tree=$MESA_ETNA_TREE
+  else
+    gate_st_tree=$(tools/cts/deps-env.sh --layout)/mesa-etna-26.2.1/mesa-26.2.1
+    uses w:etna-mesa
+    step "build   vivante Mesa 26.2.1 etnaviv tree (tools/vivante/mesa-etna-build.sh)" gate_st_build
+  fi
+  for gate_st_sub in hwdb golden; do
+    uses r:etna-mesa
+    step "tools   tools/vivante/gate_st.sh $gate_st_sub (MESA_ETNA_TREE)" gate_st_row "$gate_st_sub" "$gate_st_tree"
+  done
+  unset gate_st_sub gate_st_tree
   # The source list's gl_test programs (tools/shaders/precompiled.list, apps
   # gl_test and gl_test_es100) are what gl_test.c links, read out of its text
   # by glsl2v3d.py's reader: a case that links a new program and a list that
