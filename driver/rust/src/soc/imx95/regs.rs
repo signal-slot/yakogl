@@ -1317,6 +1317,58 @@ pub mod display_seeris {
         pub const POLEN0_MASK: u32 = 0x4;
         pub const POLEN0_SHIFT: u32 = 2;
     }
+
+    pub const DISPIRQ0_LOCKSTATUS: u32 = 0x381004;
+    /// Fields of `DISPIRQ0_LOCKSTATUS`.
+    pub mod dispirq0_lockstatus {
+        pub const LOCKSTATUS_MASK: u32 = 0x1;
+        pub const LOCKSTATUS_SHIFT: u32 = 0;
+        pub const PRIVILEGESTATUS_MASK: u32 = 0x10;
+        pub const PRIVILEGESTATUS_SHIFT: u32 = 4;
+        /// 0b01010110010100011111011101100011..Decrements the unlock counter. When the counter value is null, lock protection is active. Reset counter value is 1.
+        /// 0b01101001000111011011100100110110..Increments the unlock counter. Max allowed value is 15.
+        /// 0b10101110111010010101110011011100..Enables privilege protection. Disabled after reset.
+        /// 0b10110101111000100100011001101110..Disables privilege protection.
+        /// 0b11111011111010001011000111100110..Freezes current protection status. Writing keys to this register has no more effect until reset.
+        pub const FREEZESTATUS_MASK: u32 = 0x100;
+        pub const FREEZESTATUS_SHIFT: u32 = 8;
+    }
+
+    pub const DISPIRQ0_INTERRUPTENABLE0: u32 = 0x381008;
+    /// Fields of `DISPIRQ0_INTERRUPTENABLE0`.
+    pub mod dispirq0_interruptenable0 {
+        /// 0b01010110010100011111011101100011..Decrements the unlock counter. When the counter value is null, lock protection is active. Reset counter value is 1.
+        /// 0b01101001000111011011100100110110..Increments the unlock counter. Max allowed value is 15.
+        /// 0b10101110111010010101110011011100..Enables privilege protection. Disabled after reset.
+        /// 0b10110101111000100100011001101110..Disables privilege protection.
+        /// 0b11111011111010001011000111100110..Freezes current protection status. Writing keys to this register has no more effect until reset.
+        pub const INTERRUPTENABLE0_MASK: u32 = 0xffffffff;
+        pub const INTERRUPTENABLE0_SHIFT: u32 = 0;
+    }
+
+    pub const DISPIRQ0_INTERRUPTCLEAR0: u32 = 0x381020;
+    /// Fields of `DISPIRQ0_INTERRUPTCLEAR0`.
+    pub mod dispirq0_interruptclear0 {
+        /// 0b01010110010100011111011101100011..Decrements the unlock counter. When the counter value is null, lock protection is active. Reset counter value is 1.
+        /// 0b01101001000111011011100100110110..Increments the unlock counter. Max allowed value is 15.
+        /// 0b10101110111010010101110011011100..Enables privilege protection. Disabled after reset.
+        /// 0b10110101111000100100011001101110..Disables privilege protection.
+        /// 0b11111011111010001011000111100110..Freezes current protection status. Writing keys to this register has no more effect until reset.
+        pub const INTERRUPTCLEAR0_MASK: u32 = 0xffffffff;
+        pub const INTERRUPTCLEAR0_SHIFT: u32 = 0;
+    }
+
+    pub const DISPIRQ0_INTERRUPTSTATUS0: u32 = 0x38102c;
+    /// Fields of `DISPIRQ0_INTERRUPTSTATUS0`.
+    pub mod dispirq0_interruptstatus0 {
+        /// 0b01010110010100011111011101100011..Decrements the unlock counter. When the counter value is null, lock protection is active. Reset counter value is 1.
+        /// 0b01101001000111011011100100110110..Increments the unlock counter. Max allowed value is 15.
+        /// 0b10101110111010010101110011011100..Enables privilege protection. Disabled after reset.
+        /// 0b10110101111000100100011001101110..Disables privilege protection.
+        /// 0b11111011111010001011000111100110..Freezes current protection status. Writing keys to this register has no more effect until reset.
+        pub const INTERRUPTSTATUS0_MASK: u32 = 0xffffffff;
+        pub const INTERRUPTSTATUS0_SHIFT: u32 = 0;
+    }
 }
 
 /// `DISPLAY_BLK_CTRL_DISPLAYMIX_Type` (PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h): offsets from the block's base address.

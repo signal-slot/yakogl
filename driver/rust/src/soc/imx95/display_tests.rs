@@ -549,10 +549,168 @@ fn counter_reads_come_first_and_last_in_the_logged_order() {
     let m = Fg::new(true, Some(3));
     let w = dpu::wait_stopped(&m, 0x4b00_0000, 1_000_000, &mut |_| {}).unwrap();
     let log = m.log.borrow();
-    // FGTIMESTAMP, then per poll FGENABLE, FGENSTS, FGCHSTAT, then FGTIMESTAMP
+    // FGTIMESTAMP, then per poll FGENABLE, FGENSTS, FGCHSTAT, then
+    // FGTIMESTAMP and the raw DISPIRQ0_INTERRUPTSTATUS0
     assert_eq!(log.first(), Some(&0x2b_0098));
-    assert_eq!(log.last(), Some(&0x2b_0098));
+    assert_eq!(&log[log.len() - 2..], &[0x2b_0098, 0x38_102c]);
     assert_eq!(log.iter().filter(|&&o| o == 0x2b_0098).count(), 2);
     assert_eq!((w.polls, w.waited_us), (3, 2 * dpu::POLL_STEP_US));
     assert_eq!((w.frame_start(), w.frame_end(), w.frames()), (8, 9, 1));
+}
+
+/// Display engine 0's interrupt block and FrameGen0 for
+/// [`dpu::stop_and_wait`]: SeqComplete0 (bit 20) sets in
+/// `DISPIRQ0_INTERRUPTSTATUS0` (0x38102C) on the `seq_at`-th read after
+/// `FGENABLE` = 0 (never when `None`) and clears through
+/// `DISPIRQ0_INTERRUPTCLEAR0` (0x381020); the common-control
+/// `IRQ_INTERRUPTSTATUS0` (0x102C) reads the board's 0x000d8018 with bit 20
+/// set too, so a wait on the wrong word ends at once. `FGTIMESTAMP` moves a
+/// frame per read when `moving`. Every access is logged in order.
+struct Seq {
+    seq_at: Option<u32>,
+    moving: bool,
+    fg_off: std::cell::Cell<bool>,
+    reads: std::cell::Cell<u32>,
+    set: std::cell::Cell<bool>,
+    ts: std::cell::Cell<u32>,
+    log: RefCell<Vec<Access>>,
+}
+
+impl Seq {
+    fn new(seq_at: Option<u32>, moving: bool) -> Seq {
+        Seq {
+            seq_at,
+            moving,
+            fg_off: Default::default(),
+            reads: Default::default(),
+            set: Default::default(),
+            ts: std::cell::Cell::new(40 << 14 | 321),
+            log: RefCell::new(vec![]),
+        }
+    }
+}
+
+const SEQ: u32 = 1 << 20;
+
+impl crate::mmio::Mmio for Seq {
+    fn read32(&self, addr: usize) -> u32 {
+        let off = (addr - dpu::DPU_BASE) as u32;
+        let v = match off {
+            0x38_102c => {
+                if self.fg_off.get() {
+                    let n = self.reads.get() + 1;
+                    self.reads.set(n);
+                    if self.seq_at.is_some_and(|a| n >= a) {
+                        self.set.set(true);
+                    }
+                }
+                0x40 | if self.set.get() { SEQ } else { 0 }
+            }
+            0x102c => 0x000d_8018 | SEQ,
+            0x38_1004 => 0x1,
+            0x2b_0094 => 1,
+            0x2b_0098 => {
+                if self.moving {
+                    self.ts.set(self.ts.get() + (1 << 14) + 7);
+                }
+                self.ts.get()
+            }
+            _ => 0,
+        };
+        self.log.borrow_mut().push(Access::R("dpu", off, v));
+        v
+    }
+    fn write32(&self, addr: usize, v: u32) {
+        let off = (addr - dpu::DPU_BASE) as u32;
+        self.log.borrow_mut().push(Access::W("dpu", off, v));
+        if off == 0x2b_008c && v & 1 == 0 {
+            self.fg_off.set(true);
+        }
+        if off == 0x38_1020 && v & SEQ != 0 {
+            self.set.set(false);
+        }
+    }
+    fn read8(&self, _: usize) -> u8 {
+        0
+    }
+    fn write8(&self, _: usize, _: u8) {}
+}
+
+/// The stop waits on SeqComplete0 where NXP's Linux driver takes it
+/// (`DISPIRQ0_INTERRUPTSTATUS0` bit 20, `dpu95-core.c` `dpu_base +
+/// 0x381000`), in Linux's order: stale bit cleared, bit enabled, `FGENABLE`
+/// = 0 with no `FGSLR` token, the frame counter, the polls, the counter
+/// again, the bit cleared and masked. Neither the common-control word nor
+/// FGENSTS is what it waits on.
+#[test]
+fn the_stop_waits_for_seq_complete0_in_dispirq0() {
+    assert_eq!((dpu::SEQ_COMPLETE0, dpu::SEQ_COMPLETE_BUDGET_US), (SEQ, 1_000_000));
+    let m = Seq::new(Some(4), true);
+    let mut steps = vec![];
+    let w = dpu::stop_and_wait(&m, dpu::DPU_BASE, dpu::SEQ_COMPLETE_BUDGET_US, &mut |us| steps.push(us)).unwrap();
+    assert_eq!((w.waited_us, w.polls, steps), (3 * dpu::POLL_STEP_US, 4, vec![dpu::POLL_STEP_US; 3]));
+    assert_eq!(w.irq, 0x40 | SEQ);
+    let log = m.log.borrow();
+    let poll = Access::R("dpu", 0x38_102c, 0x40);
+    let seen = Access::R("dpu", 0x38_102c, 0x40 | SEQ);
+    assert_eq!(
+        *log,
+        vec![
+            Access::W("dpu", 0x38_1020, SEQ),
+            Access::W("dpu", 0x38_1008, SEQ),
+            Access::W("dpu", 0x2b_008c, 0),
+            Access::R("dpu", 0x2b_0098, w.ts_start),
+            poll,
+            poll,
+            poll,
+            seen,
+            Access::R("dpu", 0x2b_0098, w.ts_end),
+            Access::W("dpu", 0x38_1020, SEQ),
+            Access::W("dpu", 0x38_1008, 0),
+        ]
+    );
+    assert!(!log.iter().any(|a| matches!(a, Access::W(_, 0x2b_0090, _) | Access::R(_, 0x102c | 0x2b_0094, _))));
+}
+
+/// A wait that runs out: 1 s in poll steps, the enable masked again, and the
+/// error carries the frame counter and `FGTIMESTAMP` (frame and line index)
+/// at both reads, the raw DISPIRQ0 status, the common-control word and the
+/// lock status, with the frozen/moving verdict.
+#[test]
+fn a_stop_that_never_completes_reports_counter_timestamps_and_irq_status() {
+    for moving in [false, true] {
+        let m = Seq::new(None, moving);
+        let mut waited = 0;
+        let t = dpu::stop_and_wait(&m, dpu::DPU_BASE, dpu::SEQ_COMPLETE_BUDGET_US, &mut |us| waited += us).unwrap_err();
+        let w = t.wait();
+        assert_eq!((w.waited_us, w.polls, waited), (1_000_000, 10_001, 1_000_000));
+        assert_eq!((w.irq, t.comctrl, t.lockstatus), (0x40, 0x000d_8018 | SEQ, 0x1));
+        assert_eq!((t.fg.fgensts, t.fg.stop), (1, Some(w)));
+        // the moving counter advances a frame and 7 lines per read, from
+        // the first
+        if moving {
+            assert_eq!((w.frame_start(), w.line_start()), (41, 328));
+            assert_eq!((w.frame_end(), w.line_end(), w.frames()), (42, 335, 1));
+            assert!(!w.frozen());
+            assert_eq!(w.verdict(), "moving: FrameGen0 still runs frames");
+        } else {
+            assert_eq!((w.frame_start(), w.line_start()), (40, 321));
+            assert_eq!((w.ts_end, w.frames()), (40 << 14 | 321, 0));
+            assert!(w.frozen());
+            assert_eq!(w.verdict(), "frozen: the pixel clock is dead");
+        }
+        let log = m.log.borrow();
+        assert_eq!(log.iter().filter(|a| **a == Access::W("dpu", 0x38_1008, 0)).count(), 1);
+        // no clear of a bit that never came
+        assert_eq!(log.iter().filter(|a| matches!(a, Access::W("dpu", 0x38_1020, _))).count(), 1);
+    }
+}
+
+/// [`dpu::wait_stopped`] also reads the raw DISPIRQ0 status when it ends.
+#[test]
+fn the_fgensts_wait_reads_the_dispirq0_status_at_the_end() {
+    let m = Seq::new(None, false);
+    let st = dpu::wait_stopped(&m, dpu::DPU_BASE, 200, &mut |_| {}).unwrap_err();
+    assert_eq!(st.stop.unwrap().irq, 0x40);
+    assert_eq!(m.log.borrow().last(), Some(&Access::R("dpu", 0x38_102c, 0x40)));
 }

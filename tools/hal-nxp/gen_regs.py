@@ -118,7 +118,8 @@ PINNED = {
 # plane of the DPU ("Seeris") to display stream 0 -- FetchLayer0's sublayer 0
 # over ConstFrame0 in LayerBlend1, ExtDst0, DomainBlend0, FrameGen0, the
 # polarity of the stream (Dither0's configuration block), the Signature0 CRC
-# window 0, the domain mask and interrupt status of ExtDst0 -- and the display
+# window 0, the domain mask and interrupt status of ExtDst0, display engine 0's
+# interrupt words (FrameGen0's SeqComplete0) -- and the display
 # block control (engine clock select, interleaver mode, pixel link) and the
 # pixel interleaver. The Seeris header is one typedef of 2,122 registers;
 # only these are kept.
@@ -154,6 +155,11 @@ IMX95_BLOCKS = {
         "DISENG_SIG0_UPPERLEFT_WINDOW0", "DISENG_SIG0_LOWERRIGHT_WINDOW0",
         "DISENG_SIG0_CRC_R_WINDOW0", "DISENG_SIG0_CRC_G_WINDOW0", "DISENG_SIG0_CRC_B_WINDOW0",
         "DISENG_DITHER0CFG_POLARITYCTRL0",
+        # display engine 0's interrupt block (DPU + 0x381000): FrameGen0's
+        # SeqComplete0 at its disable, as NXP's Linux dpu95 driver waits for
+        # it (dpu95-core.c disp_irq0_reg)
+        "DISPIRQ0_LOCKSTATUS", "DISPIRQ0_INTERRUPTENABLE0", "DISPIRQ0_INTERRUPTCLEAR0",
+        "DISPIRQ0_INTERRUPTSTATUS0",
     ],
     "DISPLAY_BLK_CTRL_DISPLAYMIX": ["DISPLAY_ENGINES_CLOCK_CONTROL", "PIXEL_INTERLEAVER_CONTROL", "PIXEL_LINK_CTRL"],
     "DISPLAY_INTERLEAVER": None,

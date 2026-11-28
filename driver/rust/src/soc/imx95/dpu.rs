@@ -112,6 +112,24 @@ pub const ADDR_BITS: u32 = 40;
 /// The poll step of the waits, µs.
 pub const POLL_STEP_US: u32 = 100;
 
+/// FrameGen0's sequence complete, display stream 0's `DisEngCfg` "sequence
+/// complete 0": bit 20 of display engine 0's interrupt block
+/// (`DISPIRQ0_INTERRUPTSTATUS0`, DPU + 0x38102C; cleared through
+/// `DISPIRQ0_INTERRUPTCLEAR0`, DPU + 0x381020). It sets when FrameGen0 has
+/// finished the frame it was running after `FGENABLE` is cleared. The bit
+/// is NXP's Linux `dpu95.h` `DPU95_IRQ_DISENGCFG_SEQCOMPLETE0` = 20 and
+/// hal_nxp's BSD-3 `fsl_dpu.h` `kDPU_Group0DiSengcfgSeqComplete0Interrupt`
+/// = `1U << 20U`; the block is the one Linux takes it from (`dpu95-core.c`:
+/// `disp_irq0_reg = dpu_base + 0x381000`, `dpu95_disp_irq0_handle`). The
+/// common-control copy at DPU + 0x102C (`IRQ_INTERRUPTSTATUS0`, which
+/// [`wait_flip`] polls for ExtDst0's bit 3) never showed it on the board
+/// (record 20261128-0030-triangle-3dbc4ac9: 0x000d8018 after 1 s).
+pub const SEQ_COMPLETE0: u32 = 1 << 20;
+/// How long [`stop_and_wait`] waits for [`SEQ_COMPLETE0`]: Linux's 1 s
+/// (`DPU95_CRTC_WAIT_FOR_COMPLETION_TIMEOUT`, `HZ`), in [`POLL_STEP_US`]
+/// steps.
+pub const SEQ_COMPLETE_BUDGET_US: u32 = 1_000_000;
+
 /// The scan-out buffer: XRGB8888, the mode's size, `stride` bytes a line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Framebuffer {
@@ -537,17 +555,19 @@ pub struct FgStatus {
     pub stop: Option<StopWait>,
 }
 
-/// A wait for FrameGen0 to stop ([`wait_stopped`]): the time waited, the
-/// polls and `FGTIMESTAMP` (frame index in bits 31:14, line index in 13:0)
-/// read when the wait began and when it ended. A frame index that did not
-/// move over the wait says the pixel clock is dead; one that moved says the
-/// stop was slow.
+/// A wait for FrameGen0 to stop ([`stop_and_wait`], [`wait_stopped`]): the
+/// time waited, the polls, `FGTIMESTAMP` (frame index in bits 31:14, line
+/// index in 13:0) read when the wait began and when it ended, and display
+/// engine 0's raw `DISPIRQ0_INTERRUPTSTATUS0` at the end. A timestamp that
+/// did not move over the wait says the pixel clock is dead ([`Self::frozen`]);
+/// one that moved says FrameGen0 still ran frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StopWait {
     pub waited_us: u32,
     pub polls: u32,
     pub ts_start: u32,
     pub ts_end: u32,
+    pub irq: u32,
 }
 
 impl StopWait {
@@ -556,6 +576,25 @@ impl StopWait {
     }
     pub const fn frame_end(&self) -> u32 {
         self.ts_end >> r::diseng_framegen0_fgtimestamp::FRAMEINDEX_SHIFT
+    }
+    /// The line index (bits 13:0) at the first and the last read.
+    pub const fn line_start(&self) -> u32 {
+        self.ts_start & r::diseng_framegen0_fgtimestamp::LINEINDEX_MASK
+    }
+    pub const fn line_end(&self) -> u32 {
+        self.ts_end & r::diseng_framegen0_fgtimestamp::LINEINDEX_MASK
+    }
+    /// Neither the frame nor the line index moved over the wait.
+    pub const fn frozen(&self) -> bool {
+        self.ts_start == self.ts_end
+    }
+    /// The verdict the console prints after a failed wait.
+    pub const fn verdict(&self) -> &'static str {
+        if self.frozen() {
+            "frozen: the pixel clock is dead"
+        } else {
+            "moving: FrameGen0 still runs frames"
+        }
     }
     /// Frames counted between the two reads (the counter is 18 bits).
     pub const fn frames(&self) -> u32 {
@@ -624,12 +663,90 @@ pub fn wait_stopped(
         polls += 1;
         let done = !s.running();
         if done || waited >= budget_us {
-            let w = StopWait { waited_us: waited, polls, ts_start, ts_end: fg_timestamp(m, base) };
+            let ts_end = fg_timestamp(m, base);
+            let w =
+                StopWait { waited_us: waited, polls, ts_start, ts_end, irq: rd(m, base, r::DISPIRQ0_INTERRUPTSTATUS0) };
             if done {
                 return Ok(w);
             }
             s.stop = Some(w);
             return Err(s);
+        }
+        delay_us(POLL_STEP_US);
+        waited += POLL_STEP_US;
+    }
+}
+
+/// [`stop_and_wait`] ran out of its budget: FrameGen0's state at the end
+/// with [`FgStatus::stop`] set (the frame counter, `FGTIMESTAMP` and
+/// `DISPIRQ0_INTERRUPTSTATUS0`), the common-control `IRQ_INTERRUPTSTATUS0`
+/// and `DISPIRQ0_LOCKSTATUS`, both read once for the record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SeqTimeout {
+    pub fg: FgStatus,
+    pub comctrl: u32,
+    pub lockstatus: u32,
+}
+
+impl SeqTimeout {
+    /// The wait (always set by [`stop_and_wait`]).
+    pub fn wait(&self) -> StopWait {
+        self.fg.stop.unwrap_or(StopWait { waited_us: 0, polls: 0, ts_start: 0, ts_end: 0, irq: 0 })
+    }
+}
+
+/// FrameGen0 stopped as NXP's Linux driver stops it (`dpu95-crtc.c`
+/// `dpu95_crtc_disable`; upstream `dc-crtc.c` `dc_crtc_atomic_disable` has
+/// the same steps):
+/// 1. `enable_irq(dec_seq_complete_irq)`: a stale [`SEQ_COMPLETE0`] cleared
+///    in `DISPIRQ0_INTERRUPTCLEAR0`, the bit enabled in
+///    `DISPIRQ0_INTERRUPTENABLE0` (nothing else of ours enables events in
+///    that block, so the word is written, not read back);
+/// 2. `dpu95_fg_disable`: `FGENABLE` = 0 and nothing else: no `FGSLR`
+///    shadow token (Linux sends it only in `atomic_flush`) and no FGENSTS
+///    poll;
+/// 3. `DPU95_CRTC_WAIT_FOR_COMPLETION_TIMEOUT`: `DISPIRQ0_INTERRUPTSTATUS0`
+///    polled every [`POLL_STEP_US`] until bit 20 sets, up to `budget_us`
+///    (Linux: 1 s, [`SEQ_COMPLETE_BUDGET_US`]), then cleared;
+/// 4. `disable_irq`: the enable word 0 again, on the timeout path too.
+///
+/// `FGTIMESTAMP` is read after the disable, before the first poll, and when
+/// the wait ends, so a timeout tells a frozen frame counter (no pixel clock)
+/// from a moving one (FrameGen0 ignoring the disable). The LDB is not this
+/// function's: the caller gates it only after this returns.
+pub fn stop_and_wait(
+    m: &impl Mmio,
+    base: usize,
+    budget_us: u32,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<StopWait, SeqTimeout> {
+    w(m, base, r::DISPIRQ0_INTERRUPTCLEAR0, SEQ_COMPLETE0);
+    w(m, base, r::DISPIRQ0_INTERRUPTENABLE0, SEQ_COMPLETE0);
+    w(m, base, r::DISENG_FRAMEGEN0_FGENABLE, 0);
+    let ts_start = fg_timestamp(m, base);
+    let mut waited = 0;
+    let mut polls = 0;
+    loop {
+        let irq = rd(m, base, r::DISPIRQ0_INTERRUPTSTATUS0);
+        polls += 1;
+        let done = irq & SEQ_COMPLETE0 != 0;
+        if done || waited >= budget_us {
+            let ts_end = fg_timestamp(m, base);
+            let stop = StopWait { waited_us: waited, polls, ts_start, ts_end, irq };
+            if done {
+                w(m, base, r::DISPIRQ0_INTERRUPTCLEAR0, SEQ_COMPLETE0);
+            }
+            w(m, base, r::DISPIRQ0_INTERRUPTENABLE0, 0);
+            if done {
+                return Ok(stop);
+            }
+            let mut fg = fg_status(m, base);
+            fg.stop = Some(stop);
+            return Err(SeqTimeout {
+                fg,
+                comctrl: rd(m, base, r::IRQ_INTERRUPTSTATUS0),
+                lockstatus: rd(m, base, r::DISPIRQ0_LOCKSTATUS),
+            });
         }
         delay_us(POLL_STEP_US);
         waited += POLL_STEP_US;
