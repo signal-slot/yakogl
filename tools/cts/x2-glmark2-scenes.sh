@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 #   tools/cts/x2-glmark2-scenes.sh [--dry-run] [--commit <rev>] [--conf KEY=VAL]... <outdir> <scene>...
+#   tools/cts/x2-glmark2-scenes.sh --collect <record dir | tree of them>...
 #
 # Per-scene glmark2 PERF runs on the Armadillo-X2 (kexec-dev, a development
 # run) in one command. For each scene: one glmark2 image for
@@ -21,6 +22,19 @@
 # The table's commit column then reads <sha8>+tiled_rt (=VAL when VAL is not
 # y), and the build and record directories of a scene get a -tiled_rt suffix,
 # so an off and an on run share one <outdir>.
+#
+# --collect <dir>...: no build, no jump, no board, no ssh. Reads the record
+# directories of earlier jumps (records/x2/<YYYYMMDD-HHMM>-<name>-<sha8>/, or
+# a directory holding some, down to three levels; INDEX.txt names a record)
+# and prints the same table, one row a record (scene from the run name
+# <scene>-nosel / <scene>-p<N>, commit '-', selector from the name, the
+# verdict line of INDEX.txt, the record words, the decoded page, ms/frame),
+# then one line a record: '<name> wdog: gc_wdog_arm: armed' when the record's
+# console.txt shows the marker, else '<name> wdog: MISSING' (exit 3). A
+# directory without INDEX.txt is exit 2. Use it in the turn after the jump: a
+# task machine's ssh key is dropped by the kexec-dev reboot, so board.sh could
+# not read that record in the jump's own turn. Needs only X2SC_YAKOGL_TOOLS
+# (or YAKOGL_TOOLS, or cargo) for the decode.
 #
 # ms/frame is page 0's v1 (the frame, t2 - t0, in us) / 1000; '-' elsewhere.
 # These are X2 development numbers: they go into commit messages, docs/notes/
@@ -67,7 +81,7 @@ MARKER='gc_wdog_arm: armed'
 
 die() { echo "x2-glmark2-scenes: $1" >&2; exit "${2:-2}"; }
 
-DRY=0 COMMIT=HEAD
+DRY=0 COMMIT=HEAD COLLECT=0
 CONFS=() TAG= DSUF=
 CONF_ALLOW=(CONFIG_GLMARK2_GC_TILED_RT)
 while [ $# -gt 0 ]; do
@@ -89,12 +103,71 @@ while [ $# -gt 0 ]; do
         TAG=$TAG+$ctag
         DSUF=$DSUF-${ctag//=/_}
         shift 2 ;;
-    -h | --help) sed -n '5,58p' "$0"; exit 0 ;;
+    --collect) COLLECT=1; shift ;;
+    -h | --help) sed -n '5,70p' "$0"; exit 0 ;;
     --) shift; break ;;
     -*) die "unknown option $1" ;;
     *) break ;;
     esac
 done
+if [ "$COLLECT" = 1 ]; then
+    [ $# -ge 1 ] || die "usage: x2-glmark2-scenes.sh --collect <record dir>..."
+    cbin=${X2SC_YAKOGL_TOOLS:-${YAKOGL_TOOLS:-}}
+    if [ -z "$cbin" ]; then
+        (cd "$REPO" && cargo build -q -p yakogl-tools) >&2 || die "cannot build yakogl-tools"
+        cbin=$(cd "$REPO" && cargo metadata --no-deps --format-version 1 2> /dev/null |
+            sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')/debug/yakogl-tools
+    fi
+    [ -x "$cbin" ] || die "no yakogl-tools binary at $cbin"
+    cdirs=()
+    for a in "$@"; do
+        [ -d "$a" ] || die "--collect: no directory $a"
+        if [ -f "$a/INDEX.txt" ]; then cdirs+=("${a%/}"); continue; fi
+        found=0
+        while IFS= read -r f; do cdirs+=("${f%/INDEX.txt}"); found=1; done < <(find "$a" -maxdepth 3 -name INDEX.txt | sort)
+        [ "$found" = 1 ] || die "--collect: no INDEX.txt in or under $a"
+    done
+    crows=() cwd=() cmiss=0
+    for d in "${cdirs[@]}"; do
+        cname=$(sed -n 's/^name: //p' "$d/INDEX.txt" | head -1)
+        cline=$(sed -n 's/^verdict: //p' "$d/INDEX.txt" | head -1)
+        [ -n "$cname" ] || cname=$(basename "$d")
+        cscene=${cname%-nosel}
+        csel=none
+        if [ "$cscene" = "$cname" ] && [[ $cname =~ ^(.*)-p([0-9]+)$ ]]; then
+            cscene=${BASH_REMATCH[1]}
+            csel=$(printf '0x%x' $((0x1000 + BASH_REMATCH[2])))
+        fi
+        crec=$(sed -n 's/.* record=\([^ ]*\).*/\1/p' <<< "$cline")
+        cwords=- cdec=- cms=-
+        if [ -n "$crec" ] && [ "$crec" != absent ]; then
+            cwords=${crec//,/ }
+            # shellcheck disable=SC2086  # three hex words
+            cdec=$("$cbin" record --words 3 ${cwords//0x/} 2> /dev/null | tr '\n' ' ' | sed 's/ *$//')
+            [ -n "$cdec" ] || cdec=-
+            if [[ $cdec =~ page\ ([0-9]+):\ ([0-9]+)\ ([0-9]+)\ ([0-9]+)\ ([0-9]+) ]]; then
+                cdec="page ${BASH_REMATCH[1]}: v0=${BASH_REMATCH[2]} v1=${BASH_REMATCH[3]} v2=${BASH_REMATCH[4]} v3=${BASH_REMATCH[5]}"
+                if [ "${BASH_REMATCH[1]}" = 0 ] && [ "$csel" != none ]; then
+                    cv1=${BASH_REMATCH[3]}
+                    cms=$(printf '%d.%03d' $((cv1 / 1000)) $((cv1 % 1000)))
+                fi
+            fi
+        fi
+        crows+=("$(printf '%s\t' "$cscene" - "$csel" "${cline:-no verdict line}" "$cwords" "$cdec" "$cms")")
+        if grep -aqF "$MARKER" "$d/console.txt" 2> /dev/null; then
+            cwd+=("$cname wdog: $MARKER")
+        else
+            cwd+=("$cname wdog: MISSING")
+            cmiss=1
+        fi
+    done
+    printf 'scene\tcommit\tselector\tverdict line\trecord words\tdecoded\tms/frame\n'
+    printf '%s\n' "${crows[@]}" | sed 's/\t$//'
+    printf '%s\n' "${cwd[@]}"
+    [ "$cmiss" = 0 ] && exit 0
+    echo "x2-glmark2-scenes: a record has no '$MARKER' (collected, not trusted)" >&2
+    exit 3
+fi
 [ $# -ge 2 ] || die "usage: x2-glmark2-scenes.sh [--dry-run] [--commit <rev>] [--conf KEY=VAL]... <outdir> <scene>..."
 OUT=$1
 shift
