@@ -24,13 +24,12 @@
 //! - the control, a power-of-two 1024x512 texture: GL_NO_ERROR, complete, the
 //!   full chain of 11 levels (floor(log2(1024)) + 1) and the trilinear mip
 //!   filter reach the Mali, which takes the draw;
-//! - the NPOT 1600x1200 texture as it is today: no GL error, complete, the
-//!   draw is taken, and the Mali is given level 0 alone with no mip filter
-//!   (a picture difference only: no error anywhere);
-//! - `#[ignore]`d, what panfrost does: the chain of 1600x1200 runs down to
+//! - the NPOT 1600x1200 texture: no GL error, complete, the draw is taken,
+//!   and the chain of 1600x1200 runs down to
 //!   1x1 by the floor rule, 11 levels (1600, 800, 400, 200, 100, 50, 25, 12,
-//!   6, 3, 1 wide), so the Mali's binding must carry 11 levels and the
-//!   trilinear mip filter.
+//!   6, 3, 1 wide): the Mali's binding carries 11 levels and the trilinear
+//!   mip filter (fixed with docs/notes/mali-npot-mip.md; `tests/mali_npot_mip.rs`
+//!   checks the descriptor).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_npot_mip_gl
@@ -321,26 +320,9 @@ fn a_pot_texture_gets_the_full_chain() {
     unsafe { glDeleteTextures(1, &tex) };
 }
 
-/// refract's 1600x1200 as the Mali gets it today: nothing is refused or
-/// raised, the texture is complete, and the Mali samples level 0 alone.
+/// What panfrost does (and the Mali back end now): the whole chain of the
+/// NPOT image, down to 1x1.
 #[test]
-fn an_npot_texture_is_complete_and_drawn_with_level_0_only_today() {
-    let _g = context();
-    program();
-    let (tex, e) = mipmapped(1600, 1200);
-    assert_eq!(e, GL_NO_ERROR, "glGenerateMipmap raises nothing (ES 3.0 / OES_texture_npot)");
-    let (e, s) = draw();
-    assert_eq!(e, GL_NO_ERROR, "the draw raises nothing");
-    assert_eq!((s.type_, s.width, s.incomplete), (GLES_TEXTYPE_2D, 1600, 0), "complete");
-    assert_eq!(s.mali, -ENODEV, "the Mali takes the draw");
-    assert_eq!((s.mip_levels, s.mip_filter), (1, 0), "D-NPOTMIP today: level 0 alone, no mip filter");
-    // SAFETY: a name this test made.
-    unsafe { glDeleteTextures(1, &tex) };
-}
-
-/// What panfrost does: the whole chain of the NPOT image, down to 1x1.
-#[test]
-#[ignore = "D-NPOTMIP: the GL core lays no NPOT chain out for the Mali (npot_mip_chains, src/gl/texture.rs:1308, false for mip_level_align != 0) and the Mali refuses one it was given (NOT_BUILT_TEXTURE_NPOT_CHAIN, src/mali/backend.rs:2337), so refract's 1600x1200 keeps one level"]
 fn an_npot_texture_gets_the_full_chain_as_panfrost_builds_it() {
     let _g = context();
     program();
