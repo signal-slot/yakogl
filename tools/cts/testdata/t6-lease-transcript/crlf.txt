@@ -1,0 +1,6 @@
+noise before\x00\xff\x0d
+DDR 1.2\x0d
+Hit any key to stop autoboot:  0 \x0d
+=> md.l 0xfd8d814c 1\x0d
+fd8d814c: 0000fff9\xff  ....\x0d
+=> \x0d

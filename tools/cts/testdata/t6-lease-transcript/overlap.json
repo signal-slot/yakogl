@@ -1,0 +1,1 @@
+{"text": "fd8d814c: 0000fff9\u0000\\xff  ....\r\n=> md.l 0xfd8d810c 1\r\nfd8d810c: 00000000  ....\r\n=> boot-done\r\n=> ", "offset": 60, "next_offset": 153, "truncated": false}

@@ -1,0 +1,1 @@
+{"text": "boot noise\r\nHit any key to stop autoboot:  0 \r\n=> md.l 0xfd8d814c 1\r\n", "offset": 0, "next_offset": 69, "truncated": false}
