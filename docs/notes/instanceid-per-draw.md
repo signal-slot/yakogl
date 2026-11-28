@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # gl_InstanceID per draw on the PowerVR and the GC7000UL (design note)
 
-**Status (2026-10-14): investigation only, host-checked at `e0eb883d`. No
+**Status (2026-10-14): investigation only, host-checked on 2026-10-14 (before the 2026-10-27 history restart; that commit is not on main). No
 source was changed.** Plan #144 item `instanceid-design`, a follow-up to
 `es3-instanced` (`6730b25` and its hand-over note,
 `tests/es3_instanced.rs`).
@@ -431,7 +431,7 @@ same up to the compile. Then:
     std::println!("SCRATCH viv: refused draws {}", gc_refused_draws().wrapping_sub(base));
 ```
 
-Commands and output at `e0eb883d` (x86_64 host, nightly toolchain):
+Commands and output on 2026-10-14 (x86_64 host, nightly toolchain):
 
 ```text
 $ cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --lib scratch_instanceid_mixed -- --nocapture
@@ -548,7 +548,7 @@ Expected verdicts:
 
 | Build | AM62P, 6 mixed.{2,4,20} | i.MX8MP, 6 mixed.{2,4,20} | the 39 others (both) |
 |---|---|---|---|
-| today (`e0eb883d`) | Fail. Each case logs `yakogl/pvr: draw refused: an instance drawn on its own ...` once per boot. | Fail (predicted; no GLES3 board run of this group yet). The image is wrong, with no refusal and `gc_refused_draws` unchanged. | Pass (AM62P measured, `docs/es3-cts-failures.md` Appendix A). i.MX8MP not measured. |
+| today (2026-10-14 state) | Fail. Each case logs `yakogl/pvr: draw refused: an instance drawn on its own ...` once per boot. | Fail (predicted; no GLES3 board run of this group yet). The image is wrong, with no refusal and `gc_refused_draws` unchanged. | Pass (AM62P measured, `docs/es3-cts-failures.md` Appendix A). i.MX8MP not measured. |
 | PowerVR P1 | **Pass** | (unchanged) | Pass |
 | PowerVR P1 + P3 (`4f4310a6`, build with `pvr-instance-divisor`; without it the P1 row applies) | **Pass**, one draw per case (expected, unmeasured: no AM62P run yet) | (unchanged) | Pass. The `attrib_divisor` cases (divisor 3/2/1) now use the PDS divide: a failure there points at P3's multiplier/shift. |
 | GC7000UL V0 only | (unchanged) | Fail, now refused and counted (`gc_refused_draws` > 0) | Pass |
