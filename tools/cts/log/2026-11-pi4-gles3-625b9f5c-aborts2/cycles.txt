@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Pi 4 dEQP-GLES3 at 625b9f5c, 2026-11-27, the sixteen tryboot cycles of the aborts2 record: image sha256, Linux boot id before the reboot, reboot time, seconds to Linux, clean-up, the board.sh pi4 tally verdict line, run, jobs and end lines (README.md)
+# Pi 4 dEQP-GLES3 at 625b9f5c, 2026-11-27/28, the 44 tryboot cycles of the aborts2 record, in run order (board1, board-rest-s, board-rest-tt): image sha256, Linux boot id before the reboot ('-': kept only in the gitignored board record), reboot time, seconds to Linux, clean-up, the board.sh pi4 tally verdict line, run, jobs and end lines (README.md)
 == cycles
 S03a3a sha256=9bd9c952adead67c5eb69208d48dbb345967275a2a10b0458d11dd5610d50648 boot_before=d8c810bf-f35d-4ff4-9b4f-8caedf79df97 t_reboot=1795755629 back_after=303s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
    board.sh pi4 S03a3a rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=303s
@@ -82,3 +82,143 @@ S03a7b sha256=2795f7d9284654e46f33ec8a5dab0bcf59a21d89989d67108de40877201f4b69 b
    102 cases in 64535 ms, record at 64 s after boot, reset at ~250 s
    slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
    v3d_deqp: build 625b9f5c DONE: 102 cases, P 84 F 18 R 0 N 0 other 0
+S03a1 sha256=91530b696f4bfa27c840639e225ad2ee08f7574d0888b0cd442578b660a0673e boot_before=133446e4-9db2-4a74-8767-825f9a18a0a6 t_reboot=1795812810 back_after=301s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 S03a1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=301s
+   1 cases in 275 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+S03a2a sha256=e99769445d1d26948c3b4470239d3ac81ec586adb1c1851c0282f91f16c7861b boot_before=033ab78e-1405-45f5-b6d5-df7a03babbd7 t_reboot=1795813172 back_after=298s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 S03a2a rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=298s
+   94 cases in 39931 ms, record at 40 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 94 cases, P 94 F 0 R 0 N 0 other 0
+S03a2b sha256=e0b1546c2ee21dc72c2e7ce4777c2ca308e5c1c2eff8defdcf49c63b6de37b7f boot_before=5009fcee-4d52-411d-9773-70abf3362ecf t_reboot=1795813485 back_after=301s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 S03a2b rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=301s
+   168 cases in 88336 ms, record at 88 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 168 cases, P 168 F 0 R 0 N 0 other 0
+T05ca sha256=e5235be4c6b79824111b43ca88c379db543a6d3f03e27a86063c338d533d9241 boot_before=- t_reboot=1795819120 back_after=301s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T05ca rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=301s
+   1 cases in 224 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+T05cb sha256=5e9ebb7a5a38af1e8c85281d40b67b0e271d6b882984b9d6bcdf17ce3b55cc8d boot_before=- t_reboot=1795819474 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T05cb rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 219 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+T05cc sha256=bf4ba4a0d6fd483a35a2b0d1a2cf94966ae8c8244d13f712b108cc2dc2654325 boot_before=- t_reboot=1795819814 back_after=300s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T05cc rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=300s
+   1 cases in 222 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+T17a1 sha256=f4ebd1d5924b349b3904beb1c3c90cbe482792e5183bb79a267904661a91bc09 boot_before=- t_reboot=1795820139 back_after=307s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T17a1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=307s
+   1 cases in 225 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+T17aa sha256=a1ed030b2b8fd1296fe69a701f66e13fcb646a74d06a1d5faac0d4a9b1e57de1 boot_before=- t_reboot=1795820468 back_after=297s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T17aa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=297s
+   1 cases in 199 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+T17aaa sha256=4c836e72d9d3f6c7092029ed1f7154df1942e4b43267a02def8239b793b63529 boot_before=- t_reboot=1795820796 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T17aaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 199 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+T17aaaa sha256=f1bfbfb7350f29601985beffef0336b28f9e092e5d2d688bf785f7ceb493fc75 boot_before=- t_reboot=1795821137 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 T17aaaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   68 cases in 5969 ms, record at 6 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 68 cases, P 68 F 0 R 0 N 0 other 0
+TF1a1 sha256=534052ee8d76cfd357d8256ef63f9a80c8c3d1d7fe22900fd3bd012c4c319428 boot_before=- t_reboot=1795821471 back_after=300s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1a1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=300s
+   1 cases in 197 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF1aa sha256=741862ac8c87cf87a0e1e8a6ef436094280ef6b13ce7c7bdf05bb11217bdfa52 boot_before=- t_reboot=1795821793 back_after=299s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1aa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=299s
+   2 cases in 270 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 2 cases, P 2 F 0 R 0 N 0 other 0
+TF1aaa sha256=c136a0ab7c1ea67107c0e4a673b348c3490f739a94cfe7c3f82cac807cc1f752 boot_before=- t_reboot=1795822114 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1aaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 205 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF1aaaa sha256=b027419c94df6b9414e7c76c4e3848095ec2f0c58429acefd4aee8d37c99ee2d boot_before=- t_reboot=1795822644 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1aaaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   177 cases in 12113 ms, record at 12 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 177 cases, P 177 F 0 R 0 N 0 other 0
+TF1b1 sha256=6528981f4e49dc0dc4481591ce4fd44d45255f89a8bc9db1deb8196215bf9e30 boot_before=- t_reboot=1795822985 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1b1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 196 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF1ba sha256=b2e4f881b7c72ad28769c3c7be590eedde93e38eb4c04280ce9ad3c10ffe9b10 boot_before=- t_reboot=1795823337 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1ba rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   2 cases in 268 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 2 cases, P 2 F 0 R 0 N 0 other 0
+TF1baa sha256=1a462ce3a2aaeaaba8843d83c67716455bca3f44af8c590d489ded278e0a9624 boot_before=- t_reboot=1795823668 back_after=307s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1baa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=307s
+   1 cases in 204 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF1baaa sha256=c7ca2cb64b51c637cca640706b3a2c985567d32f6c0ffc114f41598b5cfca04b boot_before=- t_reboot=1795824000 back_after=297s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF1baaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=297s
+   177 cases in 11233 ms, record at 11 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 177 cases, P 177 F 0 R 0 N 0 other 0
+TF2a1 sha256=fa45c980328b4d8788da8049b9ad0513caecf27057b82cd648fbfc480a6f2b02 boot_before=- t_reboot=1795824324 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2a1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 198 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF2aa sha256=22531d0f25a47bcd28befa1ca3b504837c394f06fd09482bb58b393f4fbe7e6f boot_before=- t_reboot=1795824658 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2aa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   21 cases in 1469 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 21 cases, P 21 F 0 R 0 N 0 other 0
+TF2aaa sha256=cd9995295843bff89741500be73961fa00aaca9ab873333f79d2716c8192b6ba boot_before=- t_reboot=1795824989 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2aaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   21 cases in 1473 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 21 cases, P 21 F 0 R 0 N 0 other 0
+TF2aaaa sha256=ef04faccf9a774ec609278367d3f81dc725203b5debe2a386b3122b47a7366fc boot_before=- t_reboot=1795825321 back_after=311s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2aaaa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=311s
+   114 cases in 7345 ms, record at 7 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 114 cases, P 114 F 0 R 0 N 0 other 0
+TF2b1 sha256=cc08d608bbbec9926db880dea805f1608378852d3aee03368f1644b09ecc70c1 boot_before=- t_reboot=1795825659 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2b1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 198 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF2ba sha256=feed2637ca884e578a5b1dffe76280b9c35a72e8fd4c3217fb61d0f1409fe95a boot_before=- t_reboot=1795825991 back_after=300s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2ba rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=300s
+   21 cases in 1440 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 21 cases, P 21 F 0 R 0 N 0 other 0
+TF2baa sha256=70a21a20afa6dc48e3089f9a4f33fd347d145fc1d4ef32241e662156e43ec8d1 boot_before=- t_reboot=1795826325 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2baa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   156 cases in 9459 ms, record at 9 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 156 cases, P 156 F 0 R 0 N 0 other 0
+TF2c1 sha256=f2b687c1eba1f4d8cdb52f0cf229a7e5fcec3e988dcacb2bf426eb07d761a607 boot_before=- t_reboot=1795826664 back_after=308s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2c1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=308s
+   1 cases in 199 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+TF2ca sha256=c36692afdf2b145f2f6ca754edc95760e54910fa5ba970f97005cf2cd1a96f51 boot_before=- t_reboot=1795826998 back_after=307s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2ca rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=307s
+   6 cases in 567 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 6 cases, P 6 F 0 R 0 N 0 other 0
+TF2caa sha256=7e737162f78928e5da3512700f493db03ff2e90462e15f41a5c20cb6c615996e boot_before=- t_reboot=1795827332 back_after=309s cleanup=staged image removed, stock tryboot.txt put back (cp -p, cmp equal, sha256 read back)
+   board.sh pi4 TF2caa rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=309s
+   53 cases in 3839 ms, record at 3 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 625b9f5c DONE, all passed: 53 cases, P 53 F 0 R 0 N 0 other 0
