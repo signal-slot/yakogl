@@ -6,7 +6,7 @@
 # left as found: preflight, /boot + U-Boot env + module snapshots around the
 # runner, the comparison, an ssh-reachability line and the tally.
 #
-#   BOARD_HOST=<user@t6> tools/cts/mali-glmark2-session.sh [--dry-run] [--dev] \
+#   BOARD_HOST=<user@t6> tools/cts/mali-glmark2-session.sh [--dry-run] [--dev] [--es3] \
 #       [--scenes <file|list>] [--timeout <s>] <builddir> <outdir>
 #   tools/cts/mali-glmark2-session.sh --dry-run [runner options] [<builddir> <outdir>]
 #
@@ -26,6 +26,17 @@
 #      tally-results-row.txt, tally-status-row.txt, tally-picture-lines.txt and
 #      tally-causes.txt under <outdir>.
 # A last line "mali-glmark2-session: exit N (<meaning>)" names the result.
+#
+# The GL report. glmark2-es2 runs against the pair's OpenGL ES 2.0 report (what
+# panfrost gives an ES 2.0 client: under ES 3.0 the unsized GL_DEPTH_COMPONENT
+# depth texture of shadow is incomplete). The build's BUILD-INFO says which one
+# the pair has (gl_report=es2|es3, tools/cts/mali-glmark2-build.sh; --es3 there
+# keeps ES 3.0). The session expects es2 and stops with exit 5, before the
+# board is touched, on a build that says es3; --es3 here expects es3 instead.
+# A build whose BUILD-INFO has no gl_report= is recorded as "unknown". The
+# choice is written to <outdir>/env.txt (gl_report=, gl_report_expected=, commit=
+# of the build) beside the run directory, for the tally's and RESULTS.md's
+# citation; the tally reads <outdir>/run only and is not changed.
 #
 # --dry-run prints the plan and touches nothing: no ssh, no scp, no
 # BOARD_HOST, nothing written; <builddir> and <outdir> are optional then.
@@ -67,11 +78,12 @@ usage() {
   exit 2
 }
 
-dry=0 ropts=() pos=()
+dry=0 es3=0 ropts=() pos=()
 while [ $# -gt 0 ]; do
   case $1 in
     --dry-run) dry=1; shift ;;
     --dev) ropts+=("$1"); shift ;;
+    --es3) es3=1; shift ;;
     --scenes | --timeout)
       [ $# -ge 2 ] || { echo "$me: $1 needs a value" >&2; usage; }
       ropts+=("$1" "$2"); shift 2 ;;
@@ -85,9 +97,19 @@ done
 build=${pos[0]-} out=${pos[1]-}
 if [ "$dry" = 0 ] && { [ -z "$build" ] || [ -z "$out" ]; }; then usage; fi
 
+want=es2
+[ "$es3" = 0 ] || want=es3
+# the build's report, from its BUILD-INFO (unknown: no BUILD-INFO or no line)
+have=unknown
+if [ -n "$build" ] && [ -f "$build/BUILD-INFO" ]; then
+  have=$(sed -n 's/^gl_report=//p' "$build/BUILD-INFO" | head -1)
+  : "${have:=unknown}"
+fi
+
 if [ "$dry" = 1 ]; then
   b=${build:-<builddir>} o=${out:-<outdir>}
   echo "$me: dry run, no ssh, nothing written; the session would run, in order:"
+  echo "+ 0. GL report: expected $want (default es2; --es3 keeps ES 3.0), build says $have; a mismatch stops with exit 5; <outdir>/env.txt records it"
   echo "+ 1. BOARD_HOST=\$BOARD_HOST $PREFLIGHT --build $b"
   echo "+ 2. $STATE snapshot \$BOARD_HOST $o/state-before.txt"
   echo "+ 3. $RUN ${ropts[*]-} $b $o/run"
@@ -112,7 +134,22 @@ mkdir -p "$out" || exit 2
 out=$(cd "$out" && pwd)
 export RAW_DIR=${RAW_DIR:-$REPO/build/mali-glmark2-session/$(basename "$out")}
 
+case $have in
+  "$want" | unknown) ;;
+  *)
+    echo "$me: the build's pair reports $have but the session expects $want (--es3 expects es3): not starting; nothing was run on the board" >&2
+    echo "$me: exit 5 (stopped before the runner)"
+    exit 5 ;;
+esac
+{
+  echo "# tools/cts/mali-glmark2-session.sh: the GL report glmark2-es2 ran against"
+  echo "gl_report=$have"
+  echo "gl_report_expected=$want"
+  echo "build_commit=$(sed -n 's/^commit=//p' "$build/BUILD-INFO" 2> /dev/null | head -1)"
+} > "$out/env.txt"
+
 echo "$me: session into $out, board from BOARD_HOST (not printed)"
+echo "$me: GL report: $have (expected $want)"
 
 # The runner's redactor (home and UART paths, user@host, addresses, the board's
 # words) over the files this wrapper writes itself, in place. The tally-*.txt
