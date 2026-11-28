@@ -1066,6 +1066,14 @@ pub struct FsPrecision {
     ///
     /// [`mixed`]: FsPrecision::mixed
     pub highp_locals: [u64; 4],
+    /// A mediump ES 1.00 shader declares a global `const` float highp:
+    /// not [`mixed`] yet, for the walk keeps one whose every highp
+    /// operation is a tree of highp constants GLSL folds at fp32
+    /// (deqp_vsconst_fsdiv_highp_mat2's `const highp mat2 in0 / in1`,
+    /// nir_fs.rs `highp_consts_fold`) and marks any other mixed.
+    ///
+    /// [`mixed`]: FsPrecision::mixed
+    pub highp_consts: bool,
     /// The vertex shader's constant varying lanes Mesa's link propagates
     /// into this shader, at this shader's varying locations
     /// ([`link::FsConsts`]; none for a shader compiled alone).
@@ -1219,6 +1227,18 @@ impl FsPrecision {
                 {
                     f.highp_locals[nhighp] = name_hash(name);
                     nhighp += 1;
+                    false
+                }
+                /* a global highp `const` of a mediump ES 1.00 shader: the
+                 * walk's to judge ([`FsPrecision::highp_consts`]) */
+                Decl::Var { storage: StorageQualifier::Const, ty, .. }
+                    if float(&ty.base)
+                        && ty.precision == Precision::High
+                        && !highp
+                        && pre.version < 300
+                        && ast.top.contains(&DeclId(i as u32)) =>
+                {
+                    f.highp_consts = true;
                     false
                 }
                 Decl::Var { storage: StorageQualifier::None | StorageQualifier::Const, ty, .. } => {
