@@ -515,7 +515,7 @@ impl crate::mmio::Mmio for Fg {
             0x2b_0094 => {
                 let n = self.ensts.get() + 1;
                 self.ensts.set(n);
-                u32::from(self.stop_at_poll.map_or(true, |p| n < p))
+                u32::from(self.stop_at_poll.is_none_or(|p| n < p))
             }
             0x2b_0098 => {
                 if self.moving {
