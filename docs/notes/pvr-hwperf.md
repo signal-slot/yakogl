@@ -235,6 +235,15 @@ holds a whole case 216 run (a). A long capture (glmark2) would need a
 non-temporal 32-bit store of `RIdx` with no flush of the line, or the
 firmware's view through route 2; that is for later.
 
+Correction (item pvr-hwperf-ridx): the CPU view is not cached on the AM62P.
+`pvr_fw_boot` maps the whole carveout Normal non-cacheable
+(`K_MEM_ARM_NORMAL_NC`, `driver/src/pvr_fw_boot.c`, the comment above the
+`k_mem_map_phys_bare` call; `pvr-tail-cacheable.md`, "How the carve-out is
+mapped"); the `ccb.rs` comment above is older than that map. The
+`flush`/`invd` calls stay for a cached fallback that the PowerVR build does
+not use. Through the NC map a 32-bit volatile store writes those four bytes
+and no others, so `RIdx` is written back safely: see "The read index" below.
+
 ## (d) Diff sketch
 
 Off by default; with the knob off, the init words and every code path are
@@ -341,7 +350,9 @@ kicks is wrong.
 - **The clock.** Raw `CR_TIMER` against the firmware converting, and
   `CR_TIMER` against `SOC_TIMER` (b): the first-run check decides it before
   any number is read.
-- **Our cache and the shared line.** (c): no `RIdx` write during a capture.
+- **Our cache and the shared line.** (c): `RIdx` is written by one 32-bit
+  store through the Normal-NC map, with no clean of the line; the HWPerf knob
+  does not build without that map (the read index, below).
 
 ## Not done here
 
@@ -365,8 +376,9 @@ The enable half of (d) is in, off by default, route 1; no board run yet.
   last object) in the runtime HWPerf configuration. The new offsets are
   `fwif.rs` pins.
 - The drain: `hwperf::drain(k, from, out)` finds the buffer through the OS
-  init, reads `[from, WIdx)` (two ranges past a wrap mark), never writes
-  `RIdx`. `pvr_fw_hwperf_drain()` (C, under the Kconfig) prints the
+  init, reads `[from, WIdx)` (two ranges past a wrap mark), then writes
+  `RIdx` = `WIdx` (the read index, below). `pvr_fw_hwperf_drain()` (C,
+  under the Kconfig) prints the
   record lines and keeps `WIdx` as the next `from`, so a call before a
   scene and one after it give that scene's figures:
 
@@ -385,3 +397,49 @@ pvr-hwperf lane=3d tasks=<n> gpu_ticks=<t> gpu_ns=<ns> k2s_n=<n> k2s_ticks=<t> k
 
 Left: a caller (gl_test case 216 or the glmark2 sample), the
 `ui32ExtJobRef` write in `render.rs`, and the board run.
+
+## The read index (item pvr-hwperf-ridx, plan #329)
+
+Before this item the drain never wrote `ui32HWPerfRIdx`. With `RIdx` at 0
+the firmware filled the 1 MiB buffer once and then counted every later
+packet in `fw_drops`: a whole glmark2 run could not be captured, only a
+first stretch the size of the buffer.
+
+Now `hwperf::drain` ends with `store_ridx`: a full barrier (the packet
+reads are done before the firmware may overwrite them), one 32-bit volatile
+store of the write index reached into `RIdx` (`wr32`, the route the
+FWCCB's `read_offset` takes), a second barrier, and no `flush` or `invd` of
+the line. The store is safe against the firmware's `WIdx` and `WrapCount`
+in the same line because the CPU view is Normal non-cacheable (the
+correction in (c)): the store writes four bytes to memory and nothing else,
+and no line of ours exists to be written back. A cached view would make any
+CPU store unsafe (an eviction writes the whole line back), which no cache
+operation of ours can avoid. So `pvr_fw_boot.c` refuses to build
+`CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF` without `K_MEM_ARM_NORMAL_NC` (an
+`#error` beside `pvr_fw_hwperf_drain`). A write index past the buffer
+leaves `RIdx` as it is. With HWPerf off (`FWINIT_HWPERF` clear, a size of 0)
+the drain returns before any read or write, and with the Kconfig off nothing
+calls it.
+
+Do long runs still drop packets? **Not when the caller drains often enough;
+otherwise they do.** The firmware drops a packet only when the packets since
+the last drain would reach `RIdx`, that is when one stretch between two
+drains holds about 1 MiB of packets (about 12 000 packets of 88 bytes).
+A scene drained before and after (the C caller's pattern) must stay under
+that. A whole glmark2 run in one stretch still drops. `fw_drops` in the
+record line counts the drops, and `dropped` counts the ordinal gaps seen.
+The firmware reads `RIdx` from memory on its own: it needs no doorbell or
+KCCB command. With `YAKOGL_DRV_GPU_PVR_FW_UNCACHED` off it reads `RIdx`
+through its cached window and may see an older value: then it sees less free
+space and drops sooner, but never overwrites unread packets. Measured on
+the host only; no board run yet.
+
+Host tests (`driver/rust/src/gpu/pvr/hwperf.rs`, over a fake heap whose
+producer writes, wraps and drops as (c) says):
+`drain_writes_read_index_back` (after a drain `RIdx` = the `WIdx` reached,
+`WIdx` and `DropCount` untouched, no flush, two fences);
+`wrapped_buffer_drains_in_order_without_loss` (60 stretches over a
+4 088-byte buffer with the wrap mark below its end, at least 10 wraps; every
+task comes out once and in order, `fw_drops` 0; the same producer without
+the read index drops); `hwperf_off_writes_nothing`. The drain test in
+`fwinit.rs` now expects `RIdx` at the write index.
