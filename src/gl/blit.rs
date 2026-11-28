@@ -78,8 +78,9 @@ use super::framebuffer::{
 use super::types::*;
 use crate::backend::{
     self, gles_surf_bytes_per_pixel, gles_surf_int_layout, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB10_A2,
-    GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_R16F,
-    GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
+    GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA32F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888,
+    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA32F,
+    GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -181,6 +182,9 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
                 GLES_TEXFMT_RGBA16F => GLES_SURF_RGBA16F,
                 GLES_TEXFMT_R16F => GLES_SURF_R16F,
                 GLES_TEXFMT_R32F => GLES_SURF_R32F,
+                /* four floats a texel, where RGBA32F is its own class
+                 * (RG32F is held in it too, its blue and alpha absent) */
+                GLES_TEXFMT_RGBA32F => GLES_SURF_RGBA32F,
                 GLES_TEXFMT_SRGB8_A8 => GLES_SURF_SRGB8_A8,
                 /* the class of the 10/10/10/2 word, where GL_RGB10_A2 is its
                  * own surface (`framebuffer::rgb10a2_texture_surface`); a
@@ -627,6 +631,9 @@ fn decode_float(img: &Image, raw: &[u8; 16]) -> [f32; 4] {
         GLES_SURF_RGBA16F => [half(0), half(2), half(4), half(6)],
         GLES_SURF_R16F => [half(0), 0.0, 0.0, 1.0],
         GLES_SURF_R32F => [f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]), 0.0, 0.0, 1.0],
+        GLES_SURF_RGBA32F => core::array::from_fn(|ch| {
+            f32::from_le_bytes([raw[4 * ch], raw[4 * ch + 1], raw[4 * ch + 2], raw[4 * ch + 3]])
+        }),
         GLES_SURF_RGB10_A2 => {
             let w = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
             let c = |s: u32, max: f32| ((w >> s) & if max > 3.0 { 0x3ff } else { 3 }) as f32 / max;
@@ -689,6 +696,11 @@ fn encode_float(img: &Image, mut v: [f32; 4], raw: &mut [u8; 16]) {
         }
         GLES_SURF_R16F => half(raw, 0, v[0]),
         GLES_SURF_R32F => raw[..4].copy_from_slice(&v[0].to_le_bytes()),
+        GLES_SURF_RGBA32F => {
+            for (ch, &x) in v.iter().enumerate() {
+                raw[4 * ch..4 * ch + 4].copy_from_slice(&x.to_le_bytes());
+            }
+        }
         GLES_SURF_RGB10_A2 => {
             /* round(clamp(v) * (2^b - 1)); NaN clamps through and casts to 0 */
             let q = |x: f32, max: f32| (x.clamp(0.0, 1.0) * max + 0.5) as u32;

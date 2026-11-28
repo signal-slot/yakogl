@@ -1513,6 +1513,16 @@ fn current_blend_key(c: &GlContext) -> u32 {
         let mask = if off != 0 && disabled_channels(c) != 0xf { shc_blend_key_mask_off(off) } else { 0 };
         return shc_blend_key_int_rt(rt) | mask;
     }
+    /* GL_RGBA32F: four 32-bit lanes, the RGBA32UI variant, whose 32-bit
+     * channels are copied as they are, so the floats land unconverted (the
+     * PowerVR's `RGBA32F_LANES`; the one GPU that asks for a key here). A
+     * blended draw into it was refused before (`blends_a_32f_draw_buffer`);
+     * a colour mask keeps the masked lanes as for an integer target. */
+    if fmt == GLES_SURF_RGBA32F {
+        let rt = ShcIntRt { channels: 4, bits: 32, signed: false };
+        let mask = if off != 0 && off != 0xf { shc_blend_key_mask_off(off) } else { 0 };
+        return shc_blend_key_int_rt(rt) | mask;
+    }
 
     if c.blend && !gles_surf_is_integer(fmt) {
         key = shc_blend_key(

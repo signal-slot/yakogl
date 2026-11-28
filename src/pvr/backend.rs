@@ -1122,12 +1122,46 @@ fn pbe_int_packmode(l: GlesIntLayout) -> csb::ROGUE_PBESTATE_PACKMODE {
 /// writes), two for RGBA16F's four halves and for an sRGB target's (its
 /// linear F16 accumulation), one for every other.
 pub fn surf_out_dwords(fmt: u8) -> u32 {
-    match gles_surf_int_layout(fmt) {
+    match raw_layout(fmt) {
         Some(l) => crate::shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed }.dwords(),
         None if fmt == GLES_SURF_RGBA16F || unorm_halves(fmt) => 2,
         None => 1,
     }
 }
+
+/// GL_RGBA32F's pixel as the PowerVR draws it: four 32-bit lanes moved as
+/// bits, RGBA32UI's layout (`ShcIntRt` 4 x 32, one output register a
+/// channel). The online compiler's integer pack copies a 32-bit channel as
+/// it is (`powervr::chain::insert_int_channels`), so a float output lands
+/// in its register unconverted, and the clear's raw dwords are the floats'
+/// bits ([`pack_clear_int`]). Mesa stores the format the same way: a
+/// 32-bit component is an 8-per-channel source (pvr_arch_job_common.c:
+/// 50-52) in pack mode F32F32F32F32 (pvr_arch_formats.c:257). Never
+/// blended: the GL core refuses a blended draw into a 32-bit float buffer
+/// (EXT_color_buffer_float without GL_EXT_float_blend).
+pub const RGBA32F_LANES: GlesIntLayout = GlesIntLayout { channels: 4, bits: 32, signed: false };
+
+/// The raw lanes a surface's colour is drawn, cleared and loaded in: an
+/// integer surface's layout, and [`RGBA32F_LANES`] for RGBA32F; `None` for
+/// every other surface.
+pub const fn raw_layout(fmt: u8) -> Option<GlesIntLayout> {
+    if fmt == GLES_SURF_RGBA32F {
+        return Some(RGBA32F_LANES);
+    }
+    gles_surf_int_layout(fmt)
+}
+
+/// Is the surface's colour raw lanes ([`raw_layout`]): an integer surface
+/// or RGBA32F?
+pub const fn raw_lanes(fmt: u8) -> bool {
+    raw_layout(fmt).is_some()
+}
+
+/// A draw or clear of several colour attachments one of which is RGBA32F:
+/// its four output registers ([`RGBA32F_LANES`]) leave none for another
+/// attachment, and the tile-buffer spill is not built for it.
+pub const REFUSE_RGBA32F_MRT: &str =
+    "yakogl/pvr: draw refused: an RGBA32F colour attachment beside another (not built)";
 
 /// Is the surface unsigned normalised but accumulated as four halves in two
 /// output dwords: the sRGB target (its linear colour, gamma-encoded by the
@@ -1187,7 +1221,9 @@ fn pixel_class(fmt: u8) -> u32 {
 /// normalised.
 pub fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 2] {
     let float = gles_surf_is_float(fmt);
-    let int = gles_surf_int_layout(fmt);
+    /* RGBA32F is raw lanes as an integer target is: 8 per channel, not
+     * normalised, its own pack mode below ([`RGBA32F_LANES`]) */
+    let int = raw_layout(fmt);
     /* An sRGB target: F16 source (pvr_arch_pbe_get_src_format_and_gamma,
      * pvr_arch_job_common.c:56-60), normalised, packed U8U8U8U8 (Mesa's
      * FORMAT(R8G8B8A8_SRGB, U8U8U8U8, F16), pvr_arch_formats.c:213); the
@@ -1197,6 +1233,7 @@ pub fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u
      * FORMAT(R10G10B10A2_UNORM, A2R10B10G10, F16), pvr_arch_formats.c:223). */
     let halves = unorm_halves(fmt);
     let packmode = match (fmt, int) {
+        (GLES_SURF_RGBA32F, _) => csb::ROGUE_PBESTATE_PACKMODE_F32F32F32F32,
         (_, Some(l)) => pbe_int_packmode(l),
         (GLES_SURF_RGB10_A2, _) => csb::ROGUE_PBESTATE_PACKMODE_A2R10B10G10,
         (GLES_SURF_RGBA16F, _) => csb::ROGUE_PBESTATE_PACKMODE_F16F16F16F16,
@@ -2474,7 +2511,7 @@ const FBLOAD_ROWS: [usize; 7] = [
 /// as [`record_frame_quad`] picks it for attachment 0: an integer target's
 /// layout, else its float class (0 for the RGBA8 one).
 fn fbload_row(fmt: u8) -> usize {
-    if gles_surf_is_integer(fmt) {
+    if raw_lanes(fmt) {
         4 + fbload_int_index(surf_out_dwords(fmt))
     } else {
         pixel_class(fmt) as usize
@@ -4569,7 +4606,8 @@ fn f32_to_f16_bits(f: f32) -> u32 {
 /// it on store -- Mesa packs an sRGB clear colour the same way, as
 /// F16F16F16F16 for the gamma'd PBE (pvr_arch_job_transfer.c:2372-2384).
 pub fn clear_uniform(surf: u8, c: &[f32; 4]) -> [u32; 4] {
-    if let Some(l) = gles_surf_int_layout(surf) {
+    /* RGBA32F's floats are its raw dwords ([`RGBA32F_LANES`]) */
+    if let Some(l) = raw_layout(surf) {
         pack_clear_int(l, &c.map(f32::to_bits))
     } else if rt_class(surf) != 0 {
         let [a, b] = pack_clear_float(surf, c);
@@ -4794,7 +4832,7 @@ fn srgb_targets_as_rgba8(d: &GlesDraw) -> GlesDraw {
 /// case 44) and the integer surfaces, whose clear is raw bits the
 /// background program and the USC clear register were never measured with.
 fn clears_by_quad(surf: u8) -> bool {
-    rt_class(surf) != 0 || gles_surf_is_integer(surf)
+    rt_class(surf) != 0 || raw_lanes(surf)
 }
 
 /// The frame's first object: a full-screen quad that (a) loads the target's
@@ -4820,7 +4858,8 @@ fn record_frame_quad(
     let (vs_sh, fs_sh): (*const ShcShader, *const ShcShader) = (&fl.vs_sh, &fl.fs_sh);
     let rt_class = pixel_class(d.target_format);
     let rt_sh: *const ShcShader = if rt_class != 0 { &fl.fs_rt_sh[rt_class as usize - 1] } else { core::ptr::null() };
-    let int = gles_surf_is_integer(d.target_format);
+    /* an integer target, or RGBA32F's raw lanes ([`raw_layout`]) */
+    let int = raw_lanes(d.target_format);
     let dwords = surf_out_dwords(d.target_format);
     let int_sh: *const ShcShader = &fl.fs_int_sh[fbload_int_index(dwords)];
     let (clear_gpu, clear_sh) = clear_program(b, fl, dwords);
@@ -5014,7 +5053,7 @@ fn record_attachment_loads(p: &mut Pvr) -> i32 {
             );
             continue;
         };
-        let int = gles_surf_is_integer(t.format);
+        let int = raw_lanes(t.format);
         let sh: *const ShcShader = match row {
             0 => &fl.fs_sh,
             1..=3 => &fl.fs_rt_sh[row - 1],
@@ -5147,7 +5186,7 @@ fn clear_mask_of(fmt: u8, mask: u8) -> u8 {
     if pixel_class(fmt) >= 2 {
         mask = if mask & 1 != 0 { 0xf } else { 0 };
     }
-    if let Some(l) = gles_surf_int_layout(fmt) {
+    if let Some(l) = raw_layout(fmt) {
         let own = (1u8 << l.channels) - 1;
         mask = match mask & own {
             0 => 0,
@@ -5335,8 +5374,8 @@ fn record_clear_quad0(p: &mut Pvr, d: &GlesDraw, slot0: bool) -> i32 {
     /* An integer target: its own channels written or none. A mask that
      * keeps some of them would need the pixel's other channels kept, which
      * the masked clear programs do for the float classes only (they convert
-     * what they read): refused by name. */
-    if let Some(l) = gles_surf_int_layout(d.target_format) {
+     * what they read): refused by name. RGBA32F's raw lanes as well. */
+    if let Some(l) = raw_layout(d.target_format) {
         let own = (1u8 << l.channels) - 1;
         mask = match mask & own {
             0 => 0,
@@ -5360,7 +5399,7 @@ fn record_clear_quad0(p: &mut Pvr, d: &GlesDraw, slot0: bool) -> i32 {
     let b = &mut p.b;
     let fl = &mut p.fbload;
     let dwords = surf_out_dwords(d.target_format);
-    let masked = if gles_surf_is_integer(d.target_format) { None } else { clear_masked_index(class, mask) };
+    let masked = if raw_lanes(d.target_format) { None } else { clear_masked_index(class, mask) };
     let (mut clear_gpu, clear_one) = clear_program(b, fl, dwords);
     /* a list that starts past draw buffer 0 ([`frame_out_base`]): the clear
      * writes the register attachment 0 is emitted from. The masked clear
@@ -7634,6 +7673,15 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
      * key encodes. Refused by name, never stored from the wrong packing. */
     if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && t.format == GLES_SURF_RGB10_A2) {
         glog_once!("{}", REFUSE_RGB10A2_MRT);
+        return -util::ENOTSUP;
+    }
+    /* An RGBA32F attachment takes the pixel's four output registers
+     * ([`RGBA32F_LANES`]): beside another attachment it has no per-target
+     * key and would need the tile-buffer spill. Refused by name, never
+     * stored from registers another attachment's colour shares. */
+    let present = || d.targets[..ntargets].iter().filter(|t| t.gpu != 0);
+    if present().count() > 1 && present().any(|t| t.format == GLES_SURF_RGBA32F) {
+        glog_once!("{}", REFUSE_RGBA32F_MRT);
         return -util::ENOTSUP;
     }
     /* An sRGB attachment beside one of another format is drawn as RGBA8
