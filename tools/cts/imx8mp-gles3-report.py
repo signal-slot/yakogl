@@ -273,6 +273,34 @@ def nice(problem):
     return problem
 
 
+def names_block(args):
+    """--names: per slice and entry, the record's verdict counts (Pass, Fail, NotSupported, other, no result) and the
+    names the record lists as not Pass. results.tsv names failing cases only; a count above the names listed
+    (a NotSupported, or Fail beyond the naming cap) is count-only, and the line says so. Same records as merge."""
+    mod = load_merge()
+    table = mod.load_table(args.table)
+    mg = mod.Merge(table, mod.entry_cases(table, args.mustpass), args.dirs)
+    print('--- --names: per slice and entry, record verdict counts and the not-pass names the record lists ---')
+    for d in args.dirs:
+        print('%s:' % rel(d))
+        any_row = False
+        for i in sorted(mg.rec):
+            r = mg.rec[i]
+            if r.get('dir') != d or r.get('tally') is None:
+                continue
+            any_row = True
+            b, p, f, s, o, nr = r['tally']
+            listed = list(r['names']) + list(r.get('outnames', []))
+            notpass = f + s + o
+            print('  e%d: begun %d, Pass %d, Fail %d, NotSupported %d, other %d, no result %d; not-pass %d, named %d%s' % (
+                i, b, p, f, s, o, nr, notpass, len(listed),
+                '' if len(listed) >= notpass else ', %d count-only' % (notpass - len(listed))))
+            for nm in listed:
+                print('    %s' % nm)
+        if not any_row:
+            print('  (no entry record)')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--table', default=os.path.join(HERE, 'imx8mp-gles3-tree.txt'))
@@ -280,6 +308,8 @@ def main():
     ap.add_argument('--date', default=datetime.date.today().isoformat(), help='date of the drafts (default: today)')
     ap.add_argument('--root', default=os.path.dirname(os.path.dirname(HERE)), help='tree whose docs the anchors are read from')
     ap.add_argument('--apply', metavar='ROOT', help='rewrite the anchored lines in the tree ROOT (all or nothing)')
+    ap.add_argument('--names', action='store_true',
+                    help='after the drafts, print per slice and entry the verdict counts and the not-pass names the record lists')
     ap.add_argument('dirs', nargs='+', help='slice record directories (tools/cts/log/*-imx8mp-gles3-*/)')
     args = ap.parse_args()
 
@@ -455,6 +485,10 @@ def main():
     left += [p for p in problems if not p.startswith('no record:')]
     left.append('triage of the not-pass groups into issues (`docs/es3/imx8mp-gles3-notpass.tsv`)')
     print('- Remains: %s.' % '; '.join(left))
+
+    if args.names:
+        print()
+        names_block(args)
 
     repl = [results_txt, status_txt, next_txt, roadmap_txt]
     anchors = find_anchors(args.apply or args.root, repl)
