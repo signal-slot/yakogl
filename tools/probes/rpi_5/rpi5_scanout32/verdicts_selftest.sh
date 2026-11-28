@@ -361,6 +361,18 @@ want_rc 3 "no alternation"
 check "buffers did not alternate at swap 3" "alternation failure named"
 check "q4: no (buffers did not alternate" "q4 no"
 
+# ---- a dlswap swap<k> FAIL line for a cause the checks do not name -----------
+for k in 2 4; do
+    sed "s/^\(u3 swap $k: .*\)\$/\1\ndlswap swap$k FAIL read-back mismatch lptrs-readback FAIL frcnt-advance ok settle ok/" \
+        "$T/pass.log" > "$T/swapfail$k.log"
+    grep -q "^dlswap swap$k FAIL " "$T/swapfail$k.log" || bad "swapfail$k.log was not built"
+    run "$T/swapfail$k.log"
+    want_rc 3 "swap $k FAIL line"
+    check "q4: no (swap $k failed" "swap $k FAIL: q4 no"
+    nope "q4: yes" "swap $k FAIL: no q4 yes"
+    nope "verdicts: PASS" "swap $k FAIL: no PASS"
+done
+
 # ---- restore ---------------------------------------------------------------
 run "$T/restorefail.log"
 want_rc 3 "restore FAIL"

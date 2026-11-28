@@ -487,6 +487,19 @@ if [ "$STOPPED" -ne 0 ]; then
     other+=("$NSW of $MIN_SWAPS swaps made: the probe stopped at $STOP_WHY")
 fi
 
+# a dlswap swap<k> FAIL line for any cause the checks above did not name
+# (a read-back, a restore word, ...) still fails the swap and answers q4 no
+if [ -z "$swap_fail" ]; then
+    for k in $(seq 1 "$NSW"); do
+        if l=$(grep -m 1 -E "^dlswap swap$k FAIL " "$TMP"); then
+            n=$(sed -E "s/^dlswap swap$k FAIL (.*) lptrs-readback .*/\1/; s/^dlswap swap$k FAIL //" <<< "$l")
+            swap_fail="swap $k failed ($n)"
+            other+=("$swap_fail")
+            break
+        fi
+    done
+fi
+
 named=$(grep -oE '(yes|no)' <<< "${SEEN[6]}" | head -n 1)
 if [ "$named" != "yes" ]; then
     [ -z "$swap_fail" ] && swap_fail="channel 0 did not name our list after the first swap"
