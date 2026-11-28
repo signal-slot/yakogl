@@ -28,6 +28,14 @@
 //! harness) and loaded with `dlopen`. So a job the table submits here holds
 //! the bytes the product builder writes. A test that builds no job needs no
 //! C compiler.
+//!
+//! The texture path (src/v3d/table71tex.rs, backend71tex.rs) calls five
+//! more, forwarded the same way: `v3d_tex71_pack_state`,
+//! `v3d_tex71_pack_sampler` (driver/src/v3d/v3d_tex71.c), `v3d_tfu71_pack`
+//! (v3d_tfu71.c) and Mesa's `v3d_store_tiled_image` / `v3d_load_tiled_image`
+//! (v3d_tiling_mesa.c), all in the same library. The OSAL's TFU entry
+//! `osal_v3d71_tfu` (src/osal/zephyr_v3d71.h) is mocked: it keeps each job
+//! ([`tfu_jobs`]) and answers [`set_tfu_rc`]'s value (0 by default).
 #![allow(dead_code)]
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
@@ -41,7 +49,10 @@ use yakogl::osal::{
     OSAL_QUERY_V3D_VPM_BYTES,
 };
 use yakogl::util::{EINVAL, ENOMEM, ENOTSUP};
-use yakogl::v3d::ffi71::{V3dCl, V3dJob71, V3dJob71Clear, V3dJob71Draw, V3dJob71DrawLayout, V3dJob71Target};
+use yakogl::v3d::ffi71::{
+    V3dCl, V3dJob71, V3dJob71Clear, V3dJob71Draw, V3dJob71DrawLayout, V3dJob71Target, V3dTex71Sampler, V3dTex71State,
+    V3dTfu71Args, V3dTfu71Job,
+};
 use yakogl::v3d::kick::{V3dKick, V3D_KICK_MAGIC};
 use yakogl::v3d::table71::yakogl_backend_v3d71;
 
@@ -60,6 +71,8 @@ pub struct Kick {
     pub kick: V3dKick,
     pub fence: i64,
     mem: Vec<u8>,
+    /// The allocations not freed when the job was submitted.
+    pub live: Vec<(u32, usize)>,
 }
 
 impl Kick {
@@ -90,6 +103,8 @@ struct World {
     draws_per_job: u32,
     job_open: Vec<bool>,
     log: Vec<String>,
+    tfu: Vec<V3dTfu71Job>,
+    tfu_rc: i32,
 }
 
 impl World {
@@ -107,6 +122,8 @@ impl World {
             draws_per_job: 0,
             job_open: vec![],
             log: vec![],
+            tfu: vec![],
+            tfu_rc: 0,
         }
     }
 }
@@ -170,7 +187,8 @@ unsafe extern "C" fn p_submit(desc: *const c_void, len: usize) -> i64 {
     }
     world(|w| {
         w.fence += 1;
-        let k = Kick { kick, fence: w.fence, mem: w.mem.clone() };
+        let live = w.allocs.iter().filter(|a| !a.2).map(|a| (a.0, a.1)).collect();
+        let k = Kick { kick, fence: w.fence, mem: w.mem.clone(), live };
         w.kicks.push(k);
         w.fence
     })
@@ -317,6 +335,49 @@ pub fn live_allocs() -> Vec<(u32, usize)> {
     world(|w| w.allocs.iter().filter(|a| !a.2).map(|a| (a.0, a.1)).collect())
 }
 
+/// The TFU jobs `osal_v3d71_tfu` was given, in order.
+pub fn tfu_jobs() -> Vec<V3dTfu71Job> {
+    world(|w| w.tfu.clone())
+}
+
+/// What `osal_v3d71_tfu` answers from now on (0: the job ran).
+pub fn set_tfu_rc(rc: i32) {
+    world(|w| w.tfu_rc = rc);
+}
+
+/// Whether the GPU address `gpu` lies in an allocation that is not freed.
+pub fn is_live(gpu: u32) -> bool {
+    world(|w| w.allocs.iter().any(|a| !a.2 && gpu >= a.0 && ((gpu - a.0) as usize) < a.1))
+}
+
+/// `len` bytes at GPU address `gpu` as the memory holds them now.
+pub fn gpu_read(gpu: u32, len: usize) -> Vec<u8> {
+    world(|w| {
+        let off = (gpu - GPU_BASE) as usize;
+        w.mem[off..off + len].to_vec()
+    })
+}
+
+/// The mock of src/osal/zephyr_v3d71.h's `osal_v3d71_tfu`: the job is kept,
+/// nothing is converted.
+///
+/// # Safety
+/// `j` is a live job, `st` null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn osal_v3d71_tfu(j: *const V3dTfu71Job, _timeout_us: u32, st: *mut [u32; 5]) -> i32 {
+    // SAFETY: the library passes a live job and status.
+    unsafe {
+        if let Some(s) = st.as_mut() {
+            *s = [0; 5];
+        }
+        let job = *j;
+        world(|w| {
+            w.tfu.push(job);
+            w.tfu_rc
+        })
+    }
+}
+
 /// GPU memory of the test's own (a surface, a vertex buffer): its address.
 pub fn gpu_block(bytes: usize) -> u32 {
     let mut m = OsalGpuMem::ZERO;
@@ -348,12 +409,21 @@ type BeginFn = unsafe extern "C" fn(*mut V3dJob71, *const V3dJob71Target, *mut V
 type DrawFn = unsafe extern "C" fn(*mut V3dJob71, *const V3dJob71Draw, *mut V3dJob71DrawLayout) -> i32;
 type EndFn = unsafe extern "C" fn(*mut V3dJob71, *const V3dJob71Clear, *mut u32, *mut u32) -> bool;
 type SizesFn = unsafe extern "C" fn(*const V3dJob71, u32, *mut u32, *mut u32);
+type PackStateFn = unsafe extern "C" fn(*mut u8, *const V3dTex71State) -> bool;
+type PackSamplerFn = unsafe extern "C" fn(*mut u8, *const V3dTex71Sampler) -> bool;
+type TfuPackFn = unsafe extern "C" fn(*const V3dTfu71Args, *mut V3dTfu71Job) -> bool;
+type TiledFn = unsafe extern "C" fn(*mut c_void, u32, *mut c_void, u32, c_int, c_int, u32, *const c_void);
 
 struct CJob {
     begin: BeginFn,
     draw: DrawFn,
     end: EndFn,
     sizes: SizesFn,
+    pack_state: PackStateFn,
+    pack_sampler: PackSamplerFn,
+    tfu_pack: TfuPackFn,
+    store_tiled: TiledFn,
+    load_tiled: TiledFn,
 }
 
 fn find_cc() -> String {
@@ -387,6 +457,9 @@ fn cjob() -> &'static CJob {
             .arg(format!("-I{ROOT}/driver/src/v3d/generated"))
             .arg(format!("{ROOT}/driver/src/v3d/v3d_job71.c"))
             .arg(format!("{ROOT}/driver/src/v3d/v3d_frame.c"))
+            .arg(format!("{ROOT}/driver/src/v3d/v3d_tex71.c"))
+            .arg(format!("{ROOT}/driver/src/v3d/v3d_tfu71.c"))
+            .arg(format!("{ROOT}/driver/src/v3d/v3d_tiling_mesa.c"))
             /* the library's own calls stay inside it, and it needs nothing
              * the two files do not define */
             .args(["-Wl,-Bsymbolic", "-Wl,-z,defs", "-o"])
@@ -411,6 +484,11 @@ fn cjob() -> &'static CJob {
                 draw: core::mem::transmute::<*mut c_void, DrawFn>(sym(c"v3d_job71_draw")),
                 end: core::mem::transmute::<*mut c_void, EndFn>(sym(c"v3d_job71_end")),
                 sizes: core::mem::transmute::<*mut c_void, SizesFn>(sym(c"v3d_job71_alloc_sizes")),
+                pack_state: core::mem::transmute::<*mut c_void, PackStateFn>(sym(c"v3d_tex71_pack_state")),
+                pack_sampler: core::mem::transmute::<*mut c_void, PackSamplerFn>(sym(c"v3d_tex71_pack_sampler")),
+                tfu_pack: core::mem::transmute::<*mut c_void, TfuPackFn>(sym(c"v3d_tfu71_pack")),
+                store_tiled: core::mem::transmute::<*mut c_void, TiledFn>(sym(c"v3d_store_tiled_image")),
+                load_tiled: core::mem::transmute::<*mut c_void, TiledFn>(sym(c"v3d_load_tiled_image")),
             }
         }
     })
@@ -466,4 +544,64 @@ pub unsafe extern "C" fn v3d_job71_alloc_sizes(
 ) {
     // SAFETY: as above.
     unsafe { (cjob().sizes)(j, page_size, tile_alloc_size, tile_state_size) }
+}
+
+/// # Safety
+/// `v3d_tex71_pack_state`'s contract (driver/src/v3d/v3d_tex71.h).
+#[no_mangle]
+pub unsafe extern "C" fn v3d_tex71_pack_state(out: *mut u8, s: *const V3dTex71State) -> bool {
+    // SAFETY: as above.
+    unsafe { (cjob().pack_state)(out, s) }
+}
+
+/// # Safety
+/// `v3d_tex71_pack_sampler`'s contract.
+#[no_mangle]
+pub unsafe extern "C" fn v3d_tex71_pack_sampler(out: *mut u8, s: *const V3dTex71Sampler) -> bool {
+    // SAFETY: as above.
+    unsafe { (cjob().pack_sampler)(out, s) }
+}
+
+/// # Safety
+/// `v3d_tfu71_pack`'s contract (driver/src/v3d/v3d_tfu71.h).
+#[no_mangle]
+pub unsafe extern "C" fn v3d_tfu71_pack(a: *const V3dTfu71Args, j: *mut V3dTfu71Job) -> bool {
+    // SAFETY: as above.
+    unsafe { (cjob().tfu_pack)(a, j) }
+}
+
+/// # Safety
+/// Mesa's `v3d_store_tiled_image` contract (common/v3d_tiling.h).
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn v3d_store_tiled_image(
+    dst: *mut c_void,
+    dst_stride: u32,
+    src: *mut c_void,
+    src_stride: u32,
+    tiling: c_int,
+    cpp: c_int,
+    image_h: u32,
+    b: *const c_void,
+) {
+    // SAFETY: as above.
+    unsafe { (cjob().store_tiled)(dst, dst_stride, src, src_stride, tiling, cpp, image_h, b) }
+}
+
+/// # Safety
+/// Mesa's `v3d_load_tiled_image` contract.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn v3d_load_tiled_image(
+    dst: *mut c_void,
+    dst_stride: u32,
+    src: *mut c_void,
+    src_stride: u32,
+    tiling: c_int,
+    cpp: c_int,
+    image_h: u32,
+    b: *const c_void,
+) {
+    // SAFETY: as above.
+    unsafe { (cjob().load_tiled)(dst, dst_stride, src, src_stride, tiling, cpp, image_h, b) }
 }

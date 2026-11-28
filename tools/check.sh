@@ -2108,6 +2108,20 @@ step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_test
 scope v3d tests
 step "test    $V3D_CONFIG (every tests/ target)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --tests
+# The Raspberry Pi 5's V3D 7.1 table (src/v3d/table71.rs) through the GL core,
+# with the feature set its tests' headers name: `gpu-v3d71`, which no other
+# row builds, so the row above compiles these targets empty. P9's acceptance
+# c3 (the six gl_test cases against Mesa's gl_*.clif, every refusal named in
+# docs/notes/v3d71-refusals.md; it includes tests/v3d71_table_cases.rs) and
+# P10's textures and TFU mipmaps through the table (src/v3d/table71tex.rs).
+# Both build driver/src/v3d/v3d_job71.c, v3d_tex71.c, v3d_tfu71.c and Mesa's
+# tiler with the host C compiler (tests/v3d71_table_rig/mod.rs).
+V3D71_CONFIG="host-test,gpu-v3d71,shaderc-online,no-shader-table"
+scope v3d v3d71
+step "test    $V3D71_CONFIG (tests/v3d71_gl_table.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D71_CONFIG" --test v3d71_gl_table
+step "test    $V3D71_CONFIG (tests/v3d71_table_tex.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D71_CONFIG" --test v3d71_table_tex
 scope v3d
 # The V3D compiler (src/shaderc/online/v3d) and the Mesa QPU packer build.rs
 # compiles for it exist only in `gpu-v3d` builds (docs/source-form.md, F1),
