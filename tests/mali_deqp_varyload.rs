@@ -40,7 +40,9 @@ mod mali_ref;
 const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
 /// The references byte-equal now, their tests running.
-const MATCHED: &[&str] = &[];
+/// `tex110` since plan #387 mali-train-3c (mixprec2 M2-1): the refused
+/// conversions are in stores a later one overwrites.
+const MATCHED: &[&str] = &["tex110"];
 
 /// Every refused reference with its whole refusal text.
 const REFUSED: &[(&str, &str)] = &[
@@ -51,7 +53,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("cond19", LOAD),
     ("swz41", LOAD),
     ("basic8", LOAD),
-    ("tex110", LOAD),
 ];
 
 #[test]
@@ -119,7 +120,6 @@ fn basic8() {
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
 fn tex110() {
     mali_ref::assert_matches("deqp_varyload_tex110");
 }

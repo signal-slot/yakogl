@@ -344,3 +344,54 @@ tools/mali/g310_check.sh --scratch "$TMPDIR/g310" 'deqp_mixprec2_*'
 # the first "refused this" line after each "Test case" line)
 tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS-host" --cases <list> --out "$TMPDIR/hm"
 ```
+
+## 6. Landed (plan #387, item `mali-train-3c`)
+
+HOST-ONLY: byte-compares against the Mesa references, no board run.
+
+### M2-1
+
+`mod.rs` `fragment_live` is the fragment liveness of both the walk
+(`nir_fs.rs` `ir_live`) and the link (`live_varying_loads`). Two kinds of
+store are no store and read nothing:
+
+* an output store of `main`'s own statement list that a later store of
+  that list to the same output replaces, with no `return` between
+  (`overwritten_outputs`; `rnd_swz4`, `rnd_tex140`);
+* a store to a local that a later store of the same statement list
+  overwrites whole before a live read (`nir::overwritten_stores`, the
+  vertex walk's rule). A shader that reads `gl_FragColor` writes it
+  through a local, so `rnd_sconv36`'s stores are of this kind. The
+  liveness and the overwritten set are solved together: `gl_FragColor =
+  gl_FragColor` falls first, then the store it read.
+
+The second kind is not limited to `gl_FragColor`: dEQP's `highp float res
+= float(0.0); res = ...` drops its first store too (`highp_locals_copy`
+skips a store the walk did not see).
+
+`rnd_sconv36`'s differing words were not a FAU-half rule (section 4's
+guess). Lane z of `vec4(-0.75, int(e), -0.75, float(d)) * vec4(c, b, 0, a)`
+is a constant times a constant zero beside a computed lane: the GLSL
+compiler folds nothing, and `nir_opt_algebraic`'s `fmul(a, 0.0)` runs
+before `nir_opt_constant_folding`, so the lane is `+0.0` (ours was the
+product's `-0.0`, a FAU half). The fp32 arm of the walk gives that lane
+the rule's 0.0.
+
+| reference | before | after |
+|---|---|---|
+| `deqp_mixprec2_rnd_sconv36` | MixedPrecision | **byte-equal** |
+| `deqp_mixprec2_rnd_swz4` | MixedPrecision | refused: fragment operand form |
+| `deqp_mixprec2_rnd_tex140` | MixedPrecision | refused: `gl_FragColor` lane |
+| `deqp_constprod_constchain_fs` | constant product | **byte-equal** |
+| `deqp_mixcol_hp_seq` | MixedPrecision | **byte-equal** |
+| `deqp_texmisc_tk_rnd_bias_proj` | texture look-up kind | **byte-equal** |
+| `deqp_varyload_tex110` | fragment varying load | **byte-equal** |
+| `deqp_cfold2_random_mixed_rcp16` | differs (`vs.varying`) | **byte-equal** |
+| `deqp_arith_random_frcp_fs_mediump` | texture look-up kind | refused: arithmetic |
+| `deqp_arith_random_fsin_fs_mediump` | arithmetic | refused: `gl_FragColor` lane |
+| `deqp_intrnd_trunc_atan_fs` | integer or boolean value | refused: constant fold |
+| `deqp_intval3_rsg_exp76_fs` | integer or boolean value | refused: arithmetic |
+| `deqp_fsint2_rnd_trig93` | integer or boolean value | refused: arithmetic |
+| `deqp_texmisc_tk_rnd_bias_two` | texture look-up kind | refused: `gl_FragColor` lane |
+
+The other 1,390 Mali host tests are unchanged.

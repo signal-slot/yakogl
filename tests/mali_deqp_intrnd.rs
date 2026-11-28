@@ -47,6 +47,8 @@ const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet
 /// values left out of the walk.
 const LANECYCLE: &str = "Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)";
 const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
+const CONST_FOLD: &str =
+    "Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet";
 const FRAGCOLOR: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 
@@ -60,7 +62,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("dead_cond_fs", FS_OPERAND),
     ("dead_ivec_uniform_fs", FRAGCOLOR),
     ("int_uniform_lanes_fs", INT_VALUE),
-    ("trunc_atan_fs", INT_VALUE),
+    /* its int value is in an overwritten store (mixprec2 M2-1) */
+    ("trunc_atan_fs", CONST_FOLD),
     ("trunc_lane_fs", INT_VALUE),
 ];
 

@@ -61,8 +61,11 @@ const LOWERED: &[&str] = &["ck_scale", "ck_sum", "lz_scale"];
 /// mediump `color` takes them (`nir_fs.rs` `Fs::hp32`); `int_uniform`, the
 /// fp32 product of an int uniform's float with the varying's lane as
 /// loaded (step MX4 of `docs/notes/mali-mixcol-lowering.md`); `f2i_rnd`,
-/// whose products by 0.0 then fold as Mesa's.
-const MATCHED: &[&str] = &["hp_mat", "hp_loop", "f2i_seq", "hp_scale", "ck_scale_highp", "int_uniform", "f2i_rnd"];
+/// whose products by 0.0 then fold as Mesa's; `hp_seq`, whose `highp int
+/// res = int(0.0)` is a store the sequence's overwrites (mixprec2 M2-1, plan
+/// #387 mali-train-3c).
+const MATCHED: &[&str] =
+    &["hp_mat", "hp_loop", "f2i_seq", "hp_scale", "ck_scale_highp", "int_uniform", "f2i_rnd", "hp_seq"];
 
 /// The references that compile with other words than Mesa's: `f2i_dead`'s
 /// colour holds a `-0.0` half (`80003c00`) where Mesa's FAU word has `0.0`
@@ -76,7 +79,6 @@ const REFUSALS: &[(&str, &str)] = &[
      * narrows each where it meets a mediump value (FADD.f32 .h0) */
     ("hp_bool", MIX),
     ("hp_param", MIX),
-    ("hp_seq", MIX),
     /* mixprec, an int read as a float beside two mediump float members
      * Mesa widens (`F16_TO_F32 r, u.w0.h0`) */
     ("int_uniform_struct", MIX),
@@ -115,7 +117,6 @@ fn mixcol_hp_loop() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (hp_seq)"]
 fn mixcol_hp_seq() {
     mali_ref::assert_matches("deqp_mixcol_hp_seq");
 }

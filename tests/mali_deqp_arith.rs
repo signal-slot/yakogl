@@ -128,9 +128,6 @@ const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own la
 const MIXED: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
 /// `MaliError::Rebalance`.
 const CHAIN: &str = "Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet";
-/// `random_frcp_fs_mediump` past its reciprocal (arith step 1a): its
-/// look-up with a projection.
-const TEX_KIND: &str = "Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message, in the note's
 /// shape order: the shape, the stage and precision of the reference, how many
@@ -345,11 +342,15 @@ const REFUSED: &[(&str, &str)] = &[
     /* random.fne fs mediump: 19 cases of shaders.random.all_features.fragment.29 */
     ("random_fne_fs_mediump", ARITH),
     /* random.frcp fs mediump: 15 cases of shaders.random.texture.fragment.1 */
-    ("random_frcp_fs_mediump", TEX_KIND),
+    /* its projective look-up is in a store a later one overwrites, dropped
+     * before the walk (mixprec2 M2-1): the next refusal */
+    ("random_frcp_fs_mediump", ARITH),
     /* random.frsq fs mediump: 10 cases of shaders.random.all_features.fragment.35 */
     ("random_frsq_fs_mediump", ARITH),
     /* random.fsin fs mediump: 35 cases of shaders.random.all_features.fragment.18 */
-    ("random_fsin_fs_mediump", ARITH),
+    /* its `sin` is in an overwritten store (mixprec2 M2-1): the colour's
+     * lanes next */
+    ("random_fsin_fs_mediump", FORM),
     /* random.fsin vs none: 22 cases of shaders.random.all_features.vertex.72 */
     ("random_fsin_vs_none", ARITH),
     /* random.fsqrt fs mediump: 34 cases of shaders.random.all_features.fragment.0 */
@@ -1135,7 +1136,7 @@ fn random_fne_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: a texture look-up other than texture2D(sampler2D, coordinate) (its `1.0 / x` is lowered, arith step 1a; random.frcp, fs, mediump; 15 cases)"]
+#[ignore = "refused: arith (its `1.0 / x` is lowered, arith step 1a, and its projective look-up dead, mixprec2 M2-1; random.frcp, fs, mediump; 15 cases)"]
 fn random_frcp_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_random_frcp_fs_mediump");
 }
@@ -1147,7 +1148,7 @@ fn random_frsq_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (random.fsin, fs, mediump; 35 cases)"]
+#[ignore = "refused: a gl_FragColor lane (its `sin` is dead, mixprec2 M2-1; random.fsin, fs, mediump; 35 cases)"]
 fn random_fsin_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_random_fsin_fs_mediump");
 }

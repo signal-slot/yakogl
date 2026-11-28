@@ -2310,27 +2310,20 @@ pub fn program_reads(r: &MaliShader<'_>, fs_glsl: &[u8], scratch: &Arena<'_>) ->
 /// discard's among them) or another live value reads it, or a local that a
 /// live value loads stores it. A product Mesa folds to zero before its link
 /// reads neither operand ([`zero_product`], and not an exact one,
-/// [`exact_values`]). The liveness is flow-insensitive (a store overwritten
-/// later, or an `if` of a constant condition, keeps what it reads), so it
+/// [`exact_values`]). A store that a later one of the same statement list
+/// overwrites is none ([`fragment_live`]: Mesa's variables are SSA values
+/// before `gl_nir_opts`; deqp_mixprec2_rnd_sconv36's vertex shader stores
+/// two of its four varyings). Otherwise the liveness is flow-insensitive
+/// (an `if` of a constant condition keeps what it reads), so it
 /// keeps at least what Mesa's pre-link DCE keeps; a local nothing live
 /// loads, and what only it reads, is dead (femtovg's `scissor` in the
 /// stencil program).
 fn live_varying_loads(m: &ir_mod::Module<'_>, scratch: &Arena<'_>) -> Result<[u8; select::MAX_VARYINGS], CompileError> {
-    let oom = |_| CompileError::OutOfMemory { which: Which::Scratch, left: 0 };
     let exact = exact_values(m, scratch)?;
-    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
-    let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
-    for (l, op) in live.iter_mut().zip(m.instrs) {
-        *l = matches!(op, ir_mod::Op::StoreOutput { .. });
-    }
-    for n in m.nodes {
-        if let ir_mod::Node::If { cond, .. } = n {
-            if let Some(l) = live.get_mut(cond.val.0 as usize) {
-                *l = true;
-            }
-        }
-    }
-    mark_reads(m, live, live_local, |i| exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32)));
+    let live = fragment_live(m, scratch, false, |i| {
+        exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32))
+    })
+    .map_err(refused)?;
     let mut out = [0u8; select::MAX_VARYINGS];
     for (op, _) in m.instrs.iter().zip(live.iter()).filter(|(_, l)| **l) {
         if let ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Varying(loc), comps } = *op {
@@ -2374,6 +2367,100 @@ fn exact_values<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<&'s [
     }
     mark_reads(m, exact, exact_local, |_| false);
     Ok(exact)
+}
+
+/// The instructions of fragment module `m` that are live, one flag per
+/// value: the output stores, the discards when `discards`, and the `if`
+/// conditions, and to a fixed point what they read ([`mark_reads`], with
+/// its `folded`). An output store a later one replaces
+/// ([`overwritten_outputs`]) and a store to a local that a later store of
+/// the same statement list overwrites whole before any live read
+/// (`nir::overwritten_stores`) are no stores and read nothing. The two are
+/// solved together: a load nothing live reads ends no pending store, so a
+/// chain of stores that each read the one before falls with its last.
+pub(super) fn fragment_live<'s>(
+    m: &ir_mod::Module<'_>,
+    scratch: &Arena<'s>,
+    discards: bool,
+    folded: impl Fn(usize) -> bool,
+) -> Result<&'s [bool], MaliError> {
+    let oom = |_| MaliError::OutOfScratch;
+    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
+    let overwritten = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    overwritten_outputs(m, overwritten);
+    /* each round drops at least one more store, or is the last */
+    loop {
+        for (l, op) in live.iter_mut().zip(m.instrs) {
+            *l = match op {
+                ir_mod::Op::StoreOutput { .. } => true,
+                ir_mod::Op::Discard => discards,
+                _ => false,
+            };
+        }
+        for n in m.nodes {
+            if let ir_mod::Node::If { cond, .. } = n {
+                if let Some(l) = live.get_mut(cond.val.0 as usize) {
+                    *l = true;
+                }
+            }
+        }
+        live_local.fill(false);
+        mark_reads(m, live, live_local, |i| overwritten[i] || folded(i));
+        /* an overwritten store is marked with its local's other stores
+         * and reads nothing (the `folded` closure): it is no store */
+        for (l, o) in live.iter_mut().zip(overwritten.iter()) {
+            *l &= !*o;
+        }
+        let before = overwritten.iter().filter(|o| **o).count();
+        nir::overwritten_stores(m, m.nodes_of(m.body), scratch, overwritten, &|i| live.get(i as usize) == Some(&true))?;
+        if overwritten.iter().filter(|o| **o).count() == before {
+            return Ok(live);
+        }
+    }
+}
+
+/// Marks in `overwritten` each output store of `main`'s own statement list
+/// that a later store of that list to the same output replaces before a
+/// `return` can end the shader (deqp_mixprec2_rnd_tex140: three
+/// `gl_FragColor = ...` before `gl_FragColor = a.rbag`, Mesa's program is
+/// that swizzle alone). An output store writes the whole output (a lane
+/// write or a read goes through a local, [`fragment_live`]); a store in an `if`
+/// or a loop replaces none and is not looked at.
+fn overwritten_outputs(m: &ir_mod::Module<'_>, overwritten: &mut [bool]) {
+    fn returns(m: &ir_mod::Module<'_>, nodes: &[ir_mod::Node]) -> bool {
+        nodes.iter().any(|n| match *n {
+            ir_mod::Node::If { then_, else_, .. } => returns(m, m.nodes_of(then_)) || returns(m, m.nodes_of(else_)),
+            ir_mod::Node::Loop { body } => returns(m, m.nodes_of(body)),
+            ir_mod::Node::Return => true,
+            ir_mod::Node::Instr(_) | ir_mod::Node::Break | ir_mod::Node::Continue => false,
+        })
+    }
+    /* the outputs a later store of the list writes, newest first */
+    let mut later = [None::<ir_mod::IoSlot>; nir_fs::MAX_TARGETS];
+    let mut nlater = 0usize;
+    for n in m.nodes_of(m.body).iter().rev() {
+        match *n {
+            ir_mod::Node::Instr(id) => {
+                if let Some(&ir_mod::Op::StoreOutput { slot, .. }) = m.instr(id) {
+                    if later[..nlater].contains(&Some(slot)) {
+                        if let Some(o) = overwritten.get_mut(id.0 as usize) {
+                            *o = true;
+                        }
+                    } else if nlater < later.len() {
+                        later[nlater] = Some(slot);
+                        nlater += 1;
+                    }
+                }
+            }
+            ir_mod::Node::If { .. } | ir_mod::Node::Loop { .. } | ir_mod::Node::Return => {
+                if returns(m, core::slice::from_ref(n)) {
+                    nlater = 0;
+                }
+            }
+            ir_mod::Node::Break | ir_mod::Node::Continue => nlater = 0,
+        }
+    }
 }
 
 /// Marks, to a fixed point, what the marked values of module `m` are

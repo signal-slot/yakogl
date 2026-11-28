@@ -6587,7 +6587,7 @@ fn vs_ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], Mal
     let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
     let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
     let overwritten = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
-    overwritten_stores(m, m.nodes_of(m.body), scratch, overwritten)?;
+    overwritten_stores(m, m.nodes_of(m.body), scratch, overwritten, &|_| true)?;
     for (l, op) in live.iter_mut().zip(m.instrs) {
         *l = matches!(op, IrOp::StoreOutput { .. } | IrOp::Discard);
     }
@@ -6614,18 +6614,21 @@ fn vs_ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], Mal
 /// has its own, from `scratch`. A read
 /// anywhere in a nested `if` or loop, and any jump, ends every pending
 /// store; a store in a nested `if` or loop ends none (it may not run) and
-/// replaces none. Each nested list is scanned on its own.
-fn overwritten_stores(
+/// replaces none. Each nested list is scanned on its own. A load `reads`
+/// is false of (its value id) is no read: the fragment walk passes the
+/// loads nothing live uses (`nir_fs::ir_live`).
+pub(super) fn overwritten_stores(
     m: &Module<'_>,
     nodes: &[IrNode],
     scratch: &Arena<'_>,
     overwritten: &mut [bool],
+    reads: &dyn Fn(u32) -> bool,
 ) -> Result<(), MaliError> {
     let pending = scratch.alloc_filled(m.locals.len(), None::<u32>).map_err(|_| MaliError::OutOfScratch)?;
     for n in nodes {
         match *n {
             IrNode::Instr(id) => match m.instr(id) {
-                Some(&IrOp::LoadLocal { local, .. }) => {
+                Some(&IrOp::LoadLocal { local, .. }) if reads(id.0) => {
                     if let Some(p) = pending.get_mut(local.0 as usize) {
                         *p = None;
                     }
@@ -6648,13 +6651,13 @@ fn overwritten_stores(
             },
             IrNode::If { then_, else_, .. } => {
                 for r in [then_, else_] {
-                    overwritten_stores(m, m.nodes_of(r), scratch, overwritten)?;
-                    end_read_locals(m, m.nodes_of(r), pending);
+                    overwritten_stores(m, m.nodes_of(r), scratch, overwritten, reads)?;
+                    end_read_locals(m, m.nodes_of(r), pending, reads);
                 }
             }
             IrNode::Loop { body } => {
-                overwritten_stores(m, m.nodes_of(body), scratch, overwritten)?;
-                end_read_locals(m, m.nodes_of(body), pending);
+                overwritten_stores(m, m.nodes_of(body), scratch, overwritten, reads)?;
+                end_read_locals(m, m.nodes_of(body), pending, reads);
             }
             IrNode::Break | IrNode::Continue | IrNode::Return => pending.fill(None),
         }
@@ -6664,21 +6667,21 @@ fn overwritten_stores(
 
 /// Ends the pending store ([`overwritten_stores`]) of each local that node
 /// list `nodes` reads anywhere, and every one when it holds a jump.
-fn end_read_locals(m: &Module<'_>, nodes: &[IrNode], pending: &mut [Option<u32>]) {
+fn end_read_locals(m: &Module<'_>, nodes: &[IrNode], pending: &mut [Option<u32>], reads: &dyn Fn(u32) -> bool) {
     for n in nodes {
         match *n {
             IrNode::Instr(id) => {
                 if let Some(&IrOp::LoadLocal { local, .. }) = m.instr(id) {
-                    if let Some(p) = pending.get_mut(local.0 as usize) {
+                    if let Some(p) = pending.get_mut(local.0 as usize).filter(|_| reads(id.0)) {
                         *p = None;
                     }
                 }
             }
             IrNode::If { then_, else_, .. } => {
-                end_read_locals(m, m.nodes_of(then_), pending);
-                end_read_locals(m, m.nodes_of(else_), pending);
+                end_read_locals(m, m.nodes_of(then_), pending, reads);
+                end_read_locals(m, m.nodes_of(else_), pending, reads);
             }
-            IrNode::Loop { body } => end_read_locals(m, m.nodes_of(body), pending),
+            IrNode::Loop { body } => end_read_locals(m, m.nodes_of(body), pending, reads),
             IrNode::Break | IrNode::Continue | IrNode::Return => pending.fill(None),
         }
     }

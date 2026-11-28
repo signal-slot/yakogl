@@ -29,7 +29,11 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal (or that were byte-equal
 /// when drawn), without the `deqp_mixprec2_` prefix.
-const LOWERED: &[&str] = &[];
+/// `rnd_sconv36` since plan #387 mali-train-3c (mixprec2 M2-1): a store a
+/// later one overwrites is dropped before the walk (`mod.rs`
+/// `fragment_live`), and a constant lane times a constant zero lane beside
+/// a computed lane is the algebraic rule's 0.0.
+const LOWERED: &[&str] = &["rnd_sconv36"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -41,14 +45,19 @@ const REFUSED: &[(&str, &str)] = &[
     ("hp_mat2_add", MIX),
     ("hp_out_param", MIX),
     ("hp_sqrt_vec3", MIX),
-    ("rnd_sconv36", MIX),
-    ("rnd_swz4", MIX),
-    ("rnd_tex140", MIX),
+    /* past the mixed-precision text since M2-1 (their overwritten stores
+     * are dropped): the last store's own forms are refused */
+    ("rnd_swz4", OPERAND),
+    ("rnd_tex140", LANE),
     ("seq_side", MIX),
     ("struct_nested", MIX),
 ];
 
 const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
+
+const OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
+
+const LANE: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 
 /// The words of each reference's `fs.fragment` region (Mesa's fragment
 /// program, the tail and the blend branch included).
@@ -110,7 +119,6 @@ fn hp_sqrt_vec3() {
 /// mediump uniform in a `gl_FragColor` store a later store overwrites; Mesa
 /// keeps only the last store.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn rnd_sconv36() {
     mali_ref::assert_matches("deqp_mixprec2_rnd_sconv36");
 }

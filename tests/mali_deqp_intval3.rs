@@ -53,6 +53,7 @@ const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet
 const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
 /// The later refusals of the references whose int and bool values are all
 /// dead (`nir_fs.rs` `ir_live`).
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 const FRAGCOLOR: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 const FS_UNIFORM: &str = "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet";
@@ -75,7 +76,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("reslib_inout_int_fs", INT_VALUE),
     ("rsg_cond12_fs", INT_VALUE),
     ("rsg_condcomb80_fs", CONTROL_FLOW),
-    ("rsg_exp76_fs", INT_VALUE),
+    /* its int value is in an overwritten store (mixprec2 M2-1) */
+    ("rsg_exp76_fs", ARITH),
     ("rsg_sconv72_fs", INT_VALUE),
     /* every int and bool value dead: the uniform's form next */
     ("rsg_swizzle12_fs", FS_UNIFORM),

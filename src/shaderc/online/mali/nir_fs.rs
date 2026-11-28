@@ -894,6 +894,7 @@ fn highp_locals_copy(
     m: &Module<'_>,
     prec: &FsPrecision,
     vals: &[[Val; 4]],
+    live: &[bool],
     island: &dyn Fn(Val) -> bool,
 ) -> Result<bool, MaliError> {
     let named = |h: u64| prec.highp_locals.contains(&h) && h != 0;
@@ -902,12 +903,18 @@ fn highp_locals_copy(
             continue;
         }
         let mut stores = 0usize;
-        for op in m.instrs.iter() {
+        for (id, op) in m.instrs.iter().enumerate() {
             let ir::Op::StoreLocal { local, src, write_mask, .. } = *op else { continue };
             if local.0 as usize != l {
                 continue;
             }
             stores += 1;
+            /* a store the walk did not see ([`ir_live`]: one a later store
+             * overwrites, dEQP's `highp float res = float(0.0)`) holds no
+             * value */
+            if live.get(id) == Some(&false) {
+                continue;
+            }
             /* or it holds a highp varying's island ([`Fs::hp32`]) and
              * constants: fp32 values the walk keeps fp32 until a mediump
              * variable takes them (deqp_fclane_op_pair_yz's `highp vec2
@@ -5063,27 +5070,23 @@ impl<'s> Fs<'s> {
 /// The IR instructions of module `m` Mesa's `nir_opt_dce` keeps before the
 /// back end: the output stores, the discards and the `if` conditions, and
 /// to a fixed point what they read, through values and locals
-/// ([`super::mark_reads`]). The liveness is flow-insensitive (a store that
-/// a later one overwrites stays live), so it keeps at least what Mesa
-/// keeps; what it drops no output depends on (deqp_mixcol_f2i_seq's
+/// ([`super::fragment_live`]). A store to a local that a later store of the
+/// same statement list overwrites whole before any live read
+/// ([`super::nir::overwritten_stores`], the vertex walk's rule) reads
+/// nothing: Mesa's `nir_lower_vars_to_ssa` leaves it no use and
+/// `nir_opt_dce` drops it with what only it reads. A shader that reads
+/// `gl_FragColor` writes it through a local, so this is how an overwritten
+/// `gl_FragColor = ...` leaves no words (deqp_mixprec2_rnd_sconv36: three
+/// stores, the third `gl_FragColor = gl_FragColor`, before the last one;
+/// docs/notes/mali-mixprec2-lowering.md, M2-1). The two are solved
+/// together: a load nothing live reads ends no pending store, so a chain
+/// of stores that each read the one before falls with its last. Otherwise
+/// the liveness is flow-insensitive, so it keeps at least what Mesa keeps;
+/// what it drops no output depends on (deqp_mixcol_f2i_seq's
 /// `in0 + vec4(in1)`, the sequence's first operand; deqp_mixcol_f2i_dead's
 /// `int d = int(e) - int(i)`, never read).
 fn ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliError> {
-    let oom = |_| MaliError::OutOfScratch;
-    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
-    let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
-    for (l, op) in live.iter_mut().zip(m.instrs) {
-        *l = matches!(op, ir::Op::StoreOutput { .. } | ir::Op::Discard);
-    }
-    for n in m.nodes {
-        if let Node::If { cond, .. } = n {
-            if let Some(l) = live.get_mut(cond.val.0 as usize) {
-                *l = true;
-            }
-        }
-    }
-    super::mark_reads(m, live, live_local, |_| false);
-    Ok(live)
+    Ok(super::fragment_live(m, scratch, true, |_| false)?)
 }
 
 pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Result<Fs<'s>, MaliError> {
@@ -5174,7 +5177,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     /* the highp locals copy gl_FragCoord alone; a read beside the copy
      * that the walk narrowed ([`Fs::frag_coord16`]) may meet the fp32 copy
      * in a highp tree, where Mesa reads it at fp32: no reference */
-    let copies = highp_locals_copy(m, &prec, vals, &|v| f.hp32(v, 0))?;
+    let copies = highp_locals_copy(m, &prec, vals, f.ir_live, &|v| f.hp32(v, 0))?;
     f.mixed |= !copies || (f.fc_copy && f.frag16.is_some());
     f.ir_vals = vals;
     f.mark_live();
@@ -7298,6 +7301,20 @@ fn walk_nodes(
                             v
                         }
                     };
+                    /* a constant lane times a constant zero lane, in a
+                     * vector with a computed lane (so the GLSL compiler
+                     * folded nothing): the same `fmul(a, 0.0)` rule runs
+                     * before `nir_opt_constant_folding` (gl_nir_opts: the
+                     * algebraic pass first), so the lane is the rule's 0.0
+                     * and not the product's signed zero
+                     * (deqp_mixprec2_rnd_sconv36: `vec4(-0.75, int(e),
+                     * -0.75, float(d)) * vec4(c, b, 0, a)`, lane z the
+                     * inline `0x0.h0` of `MKVEC.v2i16 r1, 0x0.h0, r0^.h0`) */
+                    let zero = |v: Val| matches!(v, Val::Const(c) if c & !F32_NEG_ZERO == 0);
+                    if op == Alu::Fmul && matches!((x, y), (Val::Const(_), Val::Const(_))) && (zero(x) || zero(y)) {
+                        *o = Val::Const(0);
+                        continue;
+                    }
                     *o = f.op32(op, [pz(x), pz(y), Val::Undef], at)?;
                 }
             }

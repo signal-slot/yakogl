@@ -96,8 +96,9 @@ fn texmisc_tk_rnd_bias_two() {
     mali_ref::assert_matches("deqp_texmisc_tk_rnd_bias_two");
 }
 
+/// Its three look-ups are in stores `gl_FragColor = a` overwrites, dropped
+/// before the walk (mixprec2 M2-1).
 #[test]
-#[ignore = "refused: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query)"]
 fn texmisc_tk_rnd_bias_proj() {
     mali_ref::assert_matches("deqp_texmisc_tk_rnd_bias_proj");
 }
@@ -146,6 +147,7 @@ fn texmisc_fcm_eval_order() {
 
 const TEX_VERTEX: &str = "a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product or sum";
 const TEX_KIND: &str = "a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query)";
+const FRAG_COLOR: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 const FRAG_COORD: &str = "fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y";
 
 /// Every ignored reference above and the refusal the compiler gives it now.
@@ -158,8 +160,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_texmisc_tk_rnd_proj_swizzle", TEX_KIND),
     ("deqp_texmisc_tk_rnd_proj_sum", TEX_KIND),
     ("deqp_texmisc_tk_rnd_bias_fragcolor", TEX_KIND),
-    ("deqp_texmisc_tk_rnd_bias_two", TEX_KIND),
-    ("deqp_texmisc_tk_rnd_bias_proj", TEX_KIND),
+    /* its look-ups are in overwritten stores (mixprec2 M2-1) */
+    ("deqp_texmisc_tk_rnd_bias_two", FRAG_COLOR),
     ("deqp_texmisc_tk_rnd_cube_bias", TEX_KIND),
     ("deqp_texmisc_fcm_int_to_float", FRAG_COORD),
     ("deqp_texmisc_fcm_ivec2_to_vec2", FRAG_COORD),
@@ -169,8 +171,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_texmisc_fcm_eval_order", FRAG_COORD),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run).
+const MATCHED: &[&str] = &["deqp_texmisc_tk_rnd_bias_proj"];
 
 #[test]
 fn refusals_pinned() {

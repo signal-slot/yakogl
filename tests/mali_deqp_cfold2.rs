@@ -31,8 +31,8 @@
 //! (the viewport transform's clamp of `1/w` of a constant zero w);
 //! `random_mixed_rcp_inf` and `random_mixed_rsq_inf` fold their constants and
 //! refuse later. `random_mixed_rcp16` compiles since its `rcp` is dead and
-//! left out of the walk (`nir_fs.rs` `ir_live`), but its vertex program keeps
-//! a varying Mesa's link removes ([`DIFFERS`]). Step A of the note (the
+//! left out of the walk (`nir_fs.rs` `ir_live`), and is byte-equal since the
+//! link drops the varying its overwritten store read (mixprec2 M2-1). Step A of the note (the
 //! vertex walk's integer and boolean constants through `nir::fold_int`)
 //! makes `const_call_other_bvec` and `const_call_other_ivec` byte-equal and
 //! moves `zero_operand_inot`, `random_mixed_icmp`, `random_mixed_inot`,
@@ -171,10 +171,10 @@ fn cfold2_zero_operand_rcp_inf() {
     mali_ref::assert_matches("deqp_cfold2_zero_operand_rcp_inf");
 }
 
-/// Its `rcp` is dead and left out of the walk (`nir_fs.rs` `ir_live`); the
-/// vertex program keeps a varying Mesa's link removes.
+/// Its `rcp` is dead and left out of the walk (`nir_fs.rs` `ir_live`), and
+/// the store that read its varying is overwritten: the link removes the
+/// varying as Mesa's (`mod.rs` `fragment_live`, mixprec2 M2-1).
 #[test]
-#[ignore = "differs: a varying program and the position's FAU words Mesa's link has not; pinned by refusals_pinned"]
 fn cfold2_random_mixed_rcp16() {
     mali_ref::assert_matches("deqp_cfold2_random_mixed_rcp16");
 }
@@ -209,14 +209,13 @@ const MATCHED: &[&str] = &[
     "deqp_cfold2_const_other_ior",
     "deqp_cfold2_random_mixed_f2i",
     "deqp_cfold2_zero_operand_rcp_inf",
+    "deqp_cfold2_random_mixed_rcp16",
 ];
 
-/// The references that compile with other words than Mesa's: the vertex
-/// program of `random_mixed_rcp16` stores a varying the fragment shader
-/// reads only in dead code, which Mesa's link removes (`vs.varying`);
+/// The references that compile with other words than Mesa's:
 /// `zero_operand_icmp` adds its mediump lanes at fp32 where Mesa narrows
 /// them to fp16 (the compiled audit's cause V1).
-const DIFFERS: &[&str] = &["deqp_cfold2_random_mixed_rcp16", "deqp_cfold2_zero_operand_icmp"];
+const DIFFERS: &[&str] = &["deqp_cfold2_zero_operand_icmp"];
 
 #[test]
 fn refusals_pinned() {

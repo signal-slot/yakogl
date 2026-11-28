@@ -24,7 +24,7 @@
 //! | reference | case | shape | fs | verdict at the tip |
 //! |---|---|---|---|---|
 //! | `rnd_cond9` | `random.conditionals.fragment.9` | dead `if`/`else` over int, ivec and bool globals and uniforms (Mesa drops every uniform; the colour is `vec4(s, 0.5, 1, r < q)`, `s` 0 and `q` -1.0) | 9 | refused: control flow (the host's first refusal is not the board's) |
-//! | `rnd_trig93` | `random.trigonometric.fragment.93` | int and bool constants and globals into `gl_FragColor`, then `asin(vec4) * tan(vec4)` overwrites it | 48 | refused: an integer or boolean value |
+//! | `rnd_trig93` | `random.trigonometric.fragment.93` | int and bool constants and globals into `gl_FragColor`, then `asin(vec4) * tan(vec4)` overwrites it | 48 | refused: arithmetic (the int and bool store is overwritten, mixprec2 M2-1) |
 //! | `fn_bvec2_ne` | `functions.datatypes.bool_bvec2_fragment` | `bvec2(v_in0)` into a user function `!(a.x == a.y)`, compared with `uniform bool ref_out0` (`isOk`), the bool in three colour lanes | 14 | refused: an integer or boolean value |
 //! | `step_lowp_float` | `operator.common_functions.step.lowp_float_fragment` | lowp `step(float, float)`, one lane, `* 0.5 + 0.25` | 12 | refused: an integer or boolean value |
 //! | `step_lowp_vec2` | `operator.common_functions.step.lowp_vec2_fragment` | lowp `step(vec2, vec2)`, two lanes, `* 0.5 + 0.25` | 17 | refused: an integer or boolean value |
@@ -42,6 +42,8 @@ mod mali_ref;
 /// The fragment refusal of an integer or boolean value.
 const INT_VALUE: &str = "an integer or boolean value";
 /// The fragment refusal of control flow, `rnd_cond9`'s first on the host.
+/// `rnd_trig93` past its overwritten store (mixprec2 M2-1): `asin * tan`.
+const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)";
 const CONTROL_FLOW: &str = "control flow (if, a loop, a return before the end)";
 
 /// The references the compiler makes byte-equal.
@@ -51,7 +53,7 @@ const MATCHED: &[&str] = &[];
 /// and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
     ("rnd_cond9", CONTROL_FLOW),
-    ("rnd_trig93", INT_VALUE),
+    ("rnd_trig93", ARITH),
     ("fn_bvec2_ne", INT_VALUE),
     ("step_lowp_float", INT_VALUE),
     ("step_lowp_vec2", INT_VALUE),
