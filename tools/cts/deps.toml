@@ -461,6 +461,38 @@ packages.apt = ["git", "python3", "cmake", "ninja-build", "g++"]
 packages.portage = ["dev-vcs/git", "dev-lang/python", "dev-build/cmake", "dev-build/ninja", "sys-devel/gcc"]
 
 [[dep]]
+name = "DEQP_ES2_PROGRAMS"
+path = "deqp-es2-programs-da11eb6b"
+marker = "deqp-es2-programs-da11eb6b/index.tsv"
+board = "*"
+requires = ["HOST_DEQP_CTS"]
+note = "every shader program dEQP-GLES2 compiles, harvested by tools/cts/deqp-es2-programs.sh (index.tsv, programs/<id>.vert and .frag, cases-without-program.txt, commit): tests/shaderc71_deqp_programs.rs (check.sh's shaderc71_deqp_programs row) compiles each at V3D 7.1, and tools/cts/deqp-es2-programs-ref71.sh reads the same directory. The harvest runs the whole gles2 mustpass on the host against the V3D 4.2 library, whose outcome is index.tsv's 4.2 column, so it is made at the yakogl commit the test's pins come from, da11eb6b: a harvest at another commit is not this entry. The build clones this repository at that commit into a .part directory (--shared when this checkout has the commit, else that one commit fetched from github.com/signal-slot/yakogl) and runs that commit's deqp-es2-programs.sh there with HOST_DEQP_CTS as its CTS; deqp-gles2 and the library are built inside the .part directory and removed with it, and the .qpa logs (run/) are not kept. A run that left any case not run (a crashed or timed-out chunk) is refused. HOST_DEQP_CTS (network) plus the deqp-gles2 and library builds and a mustpass run: minutes to tens of minutes, once per host. In every named board's set and in no board-less one, as HOST_DEQP_CTS: the gate's job neither checks nor builds it (.github/workflows/gate.yml), so a runner without it is not refused; check.sh reads it from the rpi_5 set when it is there, and its row is a gap naming DEQP_ES2_PROGRAMS when it is not (`deps-env.sh --build DEQP_ES2_PROGRAMS` makes it). dEQP's output, never committed"
+build = '''
+tip=da11eb6b5881bf96bd64bffe9fe103d96e1ed515
+part="$DEPS/deqp-es2-programs-da11eb6b.part"
+rm -rf "$part"
+mkdir -p "$part"
+if git cat-file -e "$tip^{commit}" 2>/dev/null; then
+  git clone -q --shared --no-checkout "$PWD" "$part/yakogl"
+else
+  git init -q "$part/yakogl"
+  GIT_TERMINAL_PROMPT=0 git -C "$part/yakogl" fetch -q --depth 1 https://github.com/signal-slot/yakogl "$tip"
+fi
+git -C "$part/yakogl" checkout -q --detach "$tip"
+PATH="$HOME/.cargo/bin:$PATH" "$part/yakogl/tools/cts/deqp-es2-programs.sh" \
+  --cts "$DEPS/VK-GL-CTS-host" --out "$part/out"
+if grep -q "$(printf '\tnot-run$')" "$part/out/cases-without-program.txt"; then
+  echo "DEQP_ES2_PROGRAMS: the harvest left cases not run ($part/out/cases-without-program.txt): not kept" >&2
+  exit 1
+fi
+rm -rf "$part/out/run"
+mv "$part/out" "$DEPS/deqp-es2-programs-da11eb6b"
+rm -rf "$part"
+'''
+packages.apt = ["git", "python3", "cmake", "ninja-build", "g++"]
+packages.portage = ["dev-vcs/git", "dev-lang/python", "dev-build/cmake", "dev-build/ninja", "sys-devel/gcc"]
+
+[[dep]]
 name = "SLINT_NOSTD_DIR"
 path = "slint-nostd"
 marker = "slint-nostd/internal"
