@@ -354,36 +354,49 @@ emit), PDS pair 3 (shared registers 6-7), `pbe_word[3]` at kick dwords
 `PVR_RENDER_TILE_BUFFERS` 3, one tile's worth each (`PVR_TILE_BUFFER_BYTES`),
 already allocated by `pvr_render_init`.
 
-## 3. (c) The knob, and where it joins (nothing here is edited)
+## 3. (c) The knob, and where it joins
 
 Plan #335's shape (`gc-mrt4-board-check.md` section 3), for all three GPUs:
 **no new Cargo feature**; a runtime knob behind the existing `test-knobs`
 feature (`Cargo.toml`, the `test-knobs` comment block), set before the
-context is created, with a C setter.
+context is created, with a C setter. What landed (item `knob`, after the
+PowerVR half in 0a740915):
 
-* **The shared static.** `cfg(feature = "test-knobs") static
-  backend::TEST_DRAW_TARGETS` in `src/backend.rs`, an atomic `u8` like
-  `HOST_DRAW_TARGETS`, feeds `draw_targets()` **after** `HOST_DRAW_TARGETS`:
-  non-zero, clamped to `GLES_MAX_TARGETS`, is what `GL_MAX_DRAW_BUFFERS`,
-  `GL_MAX_COLOR_ATTACHMENTS`, the attachment checks and `gl_MaxDrawBuffers`
-  read. #335's `gc_debug_set_draw_targets` can write the same static. It must
-  be set **before context creation**: `gl_MaxDrawBuffers` is baked at compile
-  time (`src/shaderc/online/lower.rs`), so a later change speaks only to
-  programs compiled after it. Without `test-knobs` the static does not exist
-  and `draw_targets()` is the `DRAW_TARGETS` const as today.
-* **The per-GPU C setters and statics**, in the `v3d_debug_*` / `pvr_debug_*`
-  namespaces, in new `knob.rs` files of the V3D and PowerVR back ends:
-  `int v3d_debug_set_draw_targets(int n)` and `int pvr_debug_set_draw_targets(int n)`,
-  with `#[no_mangle] static mut v3d_debug_draw_targets: i32` and
-  `pvr_debug_draw_targets: i32` (the shape of `pvr_debug_narrow_la` /
-  `pvr_debug_set_narrow_la`, `src/pvr/backend.rs`, whose setter returns the
-  previous value; this note assumes the new setters do too, and the item may
-  say otherwise). **0 is the product answer** (the knob leaves
-  `DRAW_TARGETS` alone); any other value is **clamped to what the back end
-  draws** — 4 on the V3D, 4 on the PowerVR once `pvr-render`/`pvr-backend`
-  land, and a value of 1 or 2 is honoured (a *lower* count, useful for the
-  test's own sweep); a value above the back end's clamp is clamped, never
-  refused. The setter writes the static and the shared `TEST_DRAW_TARGETS`.
+* **The shared static.** `#[cfg(feature = "test-knobs")] pub static
+  backend::KNOB_DRAW_TARGETS: AtomicU8` (`src/backend.rs:939-940`), 0 while
+  unset. `backend::draw_targets()` (`src/backend.rs:945-961`) reads
+  `HOST_DRAW_TARGETS` first (host tests' stand-in, `host-test` only; it
+  **wins**), then `KNOB_DRAW_TARGETS`, each non-zero value clamped to
+  `GLES_MAX_TARGETS`, and else the `DRAW_TARGETS` const. The gating is on
+  the feature alone, so it covers `gpu-v3d` and `gpu-powervr` builds alike.
+  That count is what `GL_MAX_DRAW_BUFFERS`, `GL_MAX_COLOR_ATTACHMENTS`, the
+  attachment checks and `gl_MaxDrawBuffers` read. It must be set **before
+  the first shader is compiled** (in practice before context creation):
+  `gl_MaxDrawBuffers` is baked at compile time
+  (`src/shaderc/online/lower.rs`), so a later change speaks only to programs
+  compiled after it, and the PowerVR reads its end-of-tile selection when the
+  back end is brought up. Without `test-knobs` the static does not exist and
+  `draw_targets()` is `DRAW_TARGETS` as before.
+* **The per-GPU C setters**, one per namespace, no static of their own:
+  `int v3d_debug_set_draw_targets(int n)` (`src/v3d/debug.rs:18-26`,
+  registered in `src/v3d/mod.rs` as `pub mod debug`, the file
+  `#![cfg(feature = "test-knobs")]`) and `int pvr_debug_set_draw_targets(int
+  n)` (`src/pvr/debug.rs:16-24`, the same shape). Both write
+  `KNOB_DRAW_TARGETS` and have the same semantics:
+  - `n` in 1..=`GLES_MAX_TARGETS` (4) is answered as given (a lower count
+    than the build's, 1 or 2, is honoured too);
+  - `0` clears the knob: the build's own count again (`DRAW_TARGETS`: 3 on
+    the V3D; 4 on the PowerVR in the ES 3.0 report, 3 under `report-es2`);
+  - `n < 0` or `n > 4` is **refused** and changes nothing (not clamped);
+  - the return value is the count `draw_targets()` answered **before** the
+    call, whether or not the call was refused.
+  #335's `gc_debug_set_draw_targets` can write the same static.
+* **Host tests of the setters.** `tests/v3d_draw_targets_knob.rs` and
+  `tests/pvr_draw_targets_knob.rs` pin those semantics through
+  `glGetIntegerv`. `tests/es3_mrt4_v3d.rs` (`set_draw_targets`, :47) and
+  `tests/es3_mrt4_pvr.rs` (`set_draw_targets`, :527) set their count through
+  the GPU's setter, `HOST_DRAW_TARGETS` left unset; es3_mrt4_pvr calls it
+  before `pvr_backend_init` (`rig`).
 * **The image knobs.** `CONFIG_V3D_GL_TEST_MRT4` in the Pi 4 menu and
   `CONFIG_PVR_GL_TEST_MRT4` in the AM62P menu of
   `driver/samples/zephyr/gl_test/Kconfig` (both `bool`, `default n`,
@@ -397,32 +410,32 @@ context is created, with a C setter.
   image turns them on with `-DCONFIG_V3D_GL_TEST_MRT4=y` /
   `-DCONFIG_PVR_GL_TEST_MRT4=y`.
 
-Where the knob joins once item `knob` lands it (this note edits none of it):
+Where the knob joins the gate (item `knob`):
 
 * **`tools/check.sh`, the "no test knob in the artefact" row**
-  (`check_knobs_absent`, `knob_sets`, the row at its end, `scope pvr vivante`):
-  `KNOB_POWERVR_SYMBOLS` (today `pvr_debug_narrow_la pvr_debug_set_narrow_la
-  pvr_debug_set_split_zs pvr_debug_split_zs`) gains `pvr_debug_draw_targets
-  pvr_debug_set_draw_targets`. There is **no V3D list today**: add
-  `KNOB_V3D_SYMBOLS="v3d_debug_draw_targets v3d_debug_set_draw_targets"` and a
-  third `knob_sets v3d '<pattern>' "$KNOB_V3D_SYMBOLS"` line, with `scope pvr
-  vivante v3d` on the row (the `gpu-v3d` Zephyr archive is built the same way,
-  `base="osal-zephyr,gpu-v3d,shaderc-online,no-shader-table"`). **The pattern
-  must not be `^(v3d_debug_|gl_test_)`**: `v3d_debug_msaa` and
-  `v3d_debug_set_msaa` are defined **without** `cfg(test-knobs)`
-  (`src/v3d/backend.rs`, `#[no_mangle] pub static mut v3d_debug_msaa`), so the
-  product archive defines them today and a broad pattern would turn the row
-  red. Use `'^v3d_debug_(set_)?draw_targets$'`, or fold the two msaa symbols
-  into the expected set of both archives; the first is the smaller change.
-* **Host rows with the knob on**: `tests/es3_mrt4_*_v3d.rs` and
-  `tests/es3_mrt4_*_pvr.rs`, `cargo test --test <name>` with
-  `host-test,gpu-v3d,shaderc-online,no-shader-table,test-knobs` (the V3D set,
-  `V3D_CONFIG` + `test-knobs`) and `host-test,gpu-powervr,shaderc-online,test-knobs`
-  (`KNOBS_POWERVR_CONFIG`); each is a row of its own in `check.sh` (the way
-  `tests/gc_tiled_rt.rs` is a `knobs_file_tests` row), so a file that stops
-  compiling turns the gate red. Any `--lib` unit test of the setter joins
-  `KNOBS_POWERVR_TESTS` by name (`knobs_lib_tests`); a V3D equivalent list is
-  not needed unless a lib test is added.
+  (`check_knobs_absent`, `knob_sets`, `knob_symbols`, the row at its end,
+  now `scope pvr vivante v3d`): `KNOB_POWERVR_SYMBOLS` holds
+  `pvr_debug_set_draw_targets`, and the new `KNOB_V3D_SYMBOLS` holds
+  `v3d_debug_set_draw_targets`, checked by a third line `knob_sets v3d
+  '^(v3d_debug_|gl_test_)' "$KNOB_V3D_SYMBOLS" "$KNOB_V3D_PRODUCT"` on the
+  `osal-zephyr,gpu-v3d,shaderc-online,no-shader-table` archive and its
+  `test-knobs` twin. `v3d_debug_msaa` and `v3d_debug_set_msaa` are defined
+  **without** `cfg(test-knobs)` (`src/v3d/backend.rs`, product code: the EGL
+  4x config switch), so the product archive defines them; rather than narrow
+  the namespace pattern, `knob_sets` takes an optional fourth argument, an
+  awk pattern of product switches left out of both archives
+  (`KNOB_V3D_PRODUCT='^v3d_debug_(set_)?msaa$'`). A new `v3d_debug_*` symbol
+  outside that pattern therefore fails the row until it is behind the feature
+  and listed. Both archives were built and read that way at this item
+  (product: 0 knob symbols, test-knobs: 1).
+* **Host rows with the knob on**, `knobs_file_tests` rows (every declared
+  test must pass, `tests_as_declared`) right after the PowerVR knob rows:
+  `tests/v3d_draw_targets_knob.rs` and `tests/es3_mrt4_v3d.rs` under
+  `KNOBS_V3D_CONFIG="host-test,gpu-v3d,shaderc-online,no-shader-table,test-knobs"`
+  (`scope v3d`), and `tests/es3_mrt4_pvr.rs` under `KNOBS_POWERVR_CONFIG`
+  (`host-test,gpu-powervr,shaderc-online,test-knobs`, `scope pvr`). No V3D
+  `--lib` list (`knobs_lib_tests`) and no V3D knob clippy row: there is no
+  V3D lib test of the knob.
 * **Pinned unchanged without the knob** (item `default-pin`): a default
   build and a `report-es2` build answer 3 for `GL_MAX_DRAW_BUFFERS` and
   `GL_MAX_COLOR_ATTACHMENTS`; `tests/es2_report_guard.rs` already pins the ES 2.0
@@ -513,6 +526,28 @@ shape).
    PDS words (§2.2): **run case 106 `mrt3` and the regression set first in the
    same image or the one before it**, so a regression of the three-target path
    is attributed to the constant and not to the fourth target.
+1a. **Check RT 3's PBE register pair in the kick before trusting any
+   four-target result (firmware ABI, only a board settles it).** The kick
+   writes RT i's PBE pair at 3D-command dwords `30 + 4*i` and `32 + 4*i`
+   (`driver/rust/src/gpu/pvr/render.rs:58` `PBE_STRIDE_DW`, `:1521-1527`), so RT 3
+   is at dwords **42-45**. The stride 4 was measured on the board for RT 0-2
+   only; RT 3 is an extrapolation. The DDK 25.2 `RGXFWIF_CMD3D` register struct
+   is not in `third_party/ti-img-rogue-ddk-25.2`, and Mesa's upstream firmware
+   stream uses `pbe_reg_words[8][3]` (stride 6,
+   `imagination/vulkan/pvr_arch_job_render.c:1046-1052`). If the stride is
+   wrong, RT 3 stores to the wrong place or the GPU faults. Procedure: build
+   with `CONFIG_PVR_GL_TEST_MRT4=y` and the render layer's verbose flag
+   (`cfg.verbose`, `render.rs:1568`) on, run case 245, and read the dump of
+   `dk[42..45]`. It must equal `pbe_word[3]` (low and high word of both
+   entries, as `lohi` writes them), and case 245 must show attachment 3's
+   colour with no FWCCB fault and no MMU fault in the log. Record, with the
+   case line:
+   `pvr_gl_test: rt3 pbe dk[42..45] == pbe_word[3] ok, no FWCCB/MMU fault`
+   (or `MISMATCH dk[42..45]=<dump> pbe_word[3]=<dump>`). **On a mismatch, a
+   fault, or attachment 3 stored elsewhere: stop. Record the dump in the issue
+   and the commit message, and do not flip `DRAW_TARGETS` to 4**; the stride
+   is then a firmware question (try 6 per Mesa) for a separate item, not for
+   this session's guess.
 2. Boot, run once. Read: the check lines (above); the case line `gl_test: case
    245 mrt4: PASS|FAIL` (the harness's per-case line, `gl_test.c` header);
    a skip prints `gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS N < 4)`; and

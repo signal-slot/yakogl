@@ -16,6 +16,7 @@
 //! | [`state`] | the GL core's draw in gallium's terms (st/mesa's part), and the refusals |
 //! | [`backend`] | jobs, their memory, the draw, the table |
 //! | [`clear_mrt`] | the clear quad's fragment source for several colour attachments |
+//! | `debug` | the `v3d_debug_*` test knobs (`test-knobs` only) |
 //! | [`kick`] | the descriptor the OSAL's `submit()` takes |
 //!
 //! A `gpu-v3d71` build (the Raspberry Pi 5's V3D 7.1, which implies
@@ -32,6 +33,8 @@
 
 pub mod backend;
 pub mod clear_mrt;
+/// Test knobs that belong to no one backend table (`test-knobs` only).
+pub mod debug;
 pub mod ffi;
 pub mod kick;
 pub mod state;
