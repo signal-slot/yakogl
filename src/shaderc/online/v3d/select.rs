@@ -552,6 +552,7 @@ struct Sel<'a> {
     /// on one dot product). Forgotten at every branch, label, loop head or
     /// back edge, and when an op writes the operand or the result again
     /// ([`Sel::push`]), so a reuse reads the value the same `rsqrt` would.
+    /// An `r5` or payload operand is never remembered ([`Sel::rsqrt`]).
     rsqrts: AVec<'a, (Operand, V)>,
 }
 
@@ -895,8 +896,13 @@ impl<'a> Sel<'a> {
             return Ok(Operand::V(r));
         }
         let r = self.add(a, AddOp::Rsqrt, x, Operand::None)?;
+        /* only an operand whose value lasts: r5 is the C term of the last
+         * `ldvary` and a payload register may be reused, so those two are
+         * never shared */
         if let Operand::V(v) = r {
-            self.rsqrts.push(a, (x, v))?;
+            if !matches!(x, Operand::R5 | Operand::Payload(_) | Operand::None) {
+                self.rsqrts.push(a, (x, v))?;
+            }
         }
         Ok(r)
     }
