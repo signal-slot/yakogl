@@ -1325,6 +1325,7 @@ mod tests {
                     fs_selected(f, pr, a)
                 },
                 false,
+                false,
                 a,
             );
             assert_eq!(r.err(), Some(V3d71Error::Alloc(Alloc71Error::DoesNotFit)));
@@ -1339,6 +1340,7 @@ mod tests {
                     *asked.borrow_mut() += 1;
                     fs_selected(f, pr, a)
                 },
+                false,
                 false,
                 a,
             )
@@ -1362,12 +1364,13 @@ mod tests {
                     Err(SelectError::NotSelected)
                 },
                 false,
+                false,
                 a,
             );
             let _ = f;
             assert_eq!(r.err(), Some(V3d71Error::Chain(V3dError::from(SelectError::NotSelected))));
             assert_eq!(n.get(), 1);
-            let r = under_pressure71(&[], |_| Err(SelectError::NotSelected), false, a);
+            let r = under_pressure71(&[], |_| Err(SelectError::NotSelected), false, false, a);
             assert_eq!(r.err(), Some(V3d71Error::Alloc(Alloc71Error::DoesNotFit)));
         });
     }
