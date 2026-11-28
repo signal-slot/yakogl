@@ -32,6 +32,13 @@ Verdin slices names both with the entries each measured (read from the records: 
 a slice of that board, e.g. "entries 0-50 on the Verdin iMX8M Plus, 13-15 and 51-132 on the Armadillo-X2"), and the
 RESULTS.md and #24 drafts list each slice's board. An X2 slice is a full record, never PARTIAL for being X2; PARTIAL
 stays for real gaps (entries without a record). Verdin only: as before.
+
+Armadillo-X2 forms of tools/board.sh x2: a refused jump (`board.sh x2 eNN rc=3 verdict=refused ...`; its meta.txt,
+eNN.meta.txt beside the README when the slice carries it, has jump=refused, refused_rc and refused=<cause>, no
+t_reboot) is a refusal, not a WDOG1 reset or a hang: it is not in the resets-or-hangs figure, its cases are out of
+the pass counts (no result), the entry is named with its cause ("eNN: refused jump ..." problem, a "- Refused:" line
+in the #24 comment) and the drafts stay PARTIAL (the entry has no result). A return without ping (meta lost=<t>,
+back=1, timeline "ping n/a", back_after=?s) is an ordinary return. Records without these forms read as before.
 """
 import argparse
 import datetime
@@ -127,10 +134,64 @@ def mustpass_counts(c, rec):
     return [m, min(m, b), p, f, s, o, m - p - f - s - o], out
 
 
-def totals(args):
+# A refused Armadillo-X2 jump (board.sh x2, run_refused): the loader refused, the board was not rebooted. Its
+# verdict line is `board.sh x2 eNN rc=3 verdict=refused ...`; the run's meta.txt (eNN.meta.txt beside the README,
+# when the slice carries it) has jump=refused (exit N), refused_rc=3 and refused=<the loader's words>, no t_reboot.
+REFUSED_LINE = re.compile(r'\bboard\.sh\s+\S+\s+e(\d+)\s+rc=(\S+)\s+verdict=(\S+)')
+
+
+def read_meta(p):
+    """key=value of a meta.txt, {} when there is none."""
+    kv = {}
+    if os.path.isfile(p):
+        for l in open(p, errors='replace'):
+            k, _, v = l.rstrip('\n').partition('=')
+            kv[k] = v
+    return kv
+
+
+def refusals(args):
+    """{entry: (slice directory, rc, cause)} of the entries whose record is a refused jump: the slice that holds the
+    entry's record (or, for an entry without any results row, any slice) has a verdict=refused line for it (the
+    last verdict line of an entry in a README wins). The cause is the meta.txt's refused= text when the slice
+    carries eNN.meta.txt, else None. A refusal is no WDOG1 reset and no hang: the board never jumped."""
+    lines = {}   # dir -> {entry: (verdict, rc)}
+    for d in args.dirs:
+        v = {}
+        try:
+            names = sorted(f for f in os.listdir(d) if f.lower().startswith('readme'))
+        except OSError:
+            names = []
+        for name in names:
+            for l in open(os.path.join(d, name), errors='replace'):
+                m = REFUSED_LINE.search(l)
+                if m:
+                    v[int(m.group(1))] = (m.group(3), m.group(2))
+        lines[d] = v
+    if not any(vd == 'refused' for v in lines.values() for vd, _ in v.values()):
+        return {}
+    mod = load_merge()
+    table = mod.load_table(args.table)
+    mg = mod.Merge(table, mod.entry_cases(table, args.mustpass), args.dirs)
+    out = {}
+    for i in range(len(table)):
+        r = mg.rec.get(i)
+        ds = [r['dir']] if r is not None and r.get('dir') is not None else list(args.dirs)
+        for d in ds:
+            vd, rc = lines.get(d, {}).get(i, (None, None))
+            if vd == 'refused':
+                kv = read_meta(os.path.join(d, 'e%02d.meta.txt' % i))
+                out[i] = (d, rc, kv.get('refused') or None)
+                break
+    return out
+
+
+def totals(args, refused=()):
     """Per-entry rows [i, mustpass, begun, pass, fail, ns, other, none] over mustpass cases only (no-record
     entries: begun 0, none = mustpass), their sum, the raw record sum (merge --totals' total row), the
-    no-record tuple (count, entries, span, mustpass cases) and the merge module's problems."""
+    no-record tuple (count, entries, span, mustpass cases) and the merge module's problems. A refused entry
+    (refusals) counts as an entry without a result (begun 0, none = mustpass) whatever its row says, and is
+    neither a no-record entry nor an entry a board measured."""
     mod = load_merge()
     table = mod.load_table(args.table)
     per = mod.entry_cases(table, args.mustpass)
@@ -138,7 +199,7 @@ def totals(args):
     rows, raw = [], [0] * 7
     for i in range(len(table)):
         c = mg.counts(i)
-        if c is None:
+        if c is None or i in refused:
             k = len(per[i])
             rows.append([i, k, 0, 0, 0, 0, 0, k])
             raw = [a + b for a, b in zip(raw, (k, 0, 0, 0, 0, 0, k))]
@@ -146,14 +207,14 @@ def totals(args):
         raw = [a + b for a, b in zip(raw, c)]
         rows.append([i] + mustpass_counts(c, mg.rec[i])[0])
     tot = [sum(r[k] for r in rows) for k in range(1, 8)]
-    missing = [i for i in range(len(table)) if mg.counts(i) is None]
+    missing = [i for i in range(len(table)) if mg.counts(i) is None and i not in refused]
     miss = (len(missing), len(table), mod.span(missing).replace(',', ', '), sum(len(per[i]) for i in missing))
     # The entries each board measured: the board of the slice that holds the entry's record (a no-record
     # entry belongs to no board).
     boards = {}
     for i in range(len(table)):
         r = mg.rec.get(i)
-        if r is not None and r.get('tally') is not None and r.get('dir') is not None:
+        if r is not None and r.get('tally') is not None and r.get('dir') is not None and i not in refused:
             boards.setdefault(board_of(r['dir']), []).append(i)
     return rows, tot, raw, miss, {b: mod.span(e).replace(',', ', ') for b, e in boards.items()}
 
@@ -288,10 +349,33 @@ def main():
     if rc_c not in (0, 1):
         problems.append('merge --check could not run: %s' % (err_c.strip() or out_c.strip() or 'exit %d' % rc_c))
     try:
-        rows, tot, raw, miss, board_span = totals(args)
+        refused = refusals(args)
+    except (OSError, ValueError):
+        refused = {}
+    try:
+        rows, tot, raw, miss, board_span = totals(args, refused)
     except (OSError, ValueError) as e:
         problems.append('totals could not be read: %s' % e)
         rows, tot, raw, miss, board_span = [], [0] * 7, [0] * 7, (0, 0, 'none', 0), {}
+    if refused:
+        # merge --check names a refused entry as "eNN: verdict=refused ... is not a clean done" (a row) or within
+        # "no record: ..." (an all-'-' row). Neither is a reset verdict: one refusal line per entry instead, with its
+        # cause, and the no-record line for the other entries only. PARTIAL stays: a refused entry has no result.
+        kept = []
+        for p in problems:
+            m = re.match(r'e(\d+): verdict=refused ', p)
+            if m and int(m.group(1)) in refused:
+                continue
+            if p.startswith('no record: '):
+                if miss[0]:
+                    kept.append('no record: %d of %d entries (%s), %s mustpass cases' % (miss[0], miss[1], miss[2], n(miss[3])))
+                continue
+            kept.append(p)
+        ref_probs = ['e%d: refused jump (rc=%s, the board was not rebooted; no result, not a reset or hang): %s (%s)' % (
+            i, rc, why or 'no cause in the slice record', rel(d)) for i, (d, rc, why) in sorted(refused.items())]
+        problems = kept + ref_probs
+    else:
+        ref_probs = []
     mp, begun, npass, nfail, nns, nother, nnone = tot
     # Completeness is judged on mustpass cases only: merge --check (every entry has a record with a clean
     # verdict, one record per entry, one commit). Cases the records begin outside the mustpass list never
@@ -317,15 +401,19 @@ def main():
     results_commit = results_commit or 'an unnamed commit (origin/main'
 
     n_entries = miss[1] or 133
-    run_n = n_entries - miss[0]
-    if miss[0]:
-        entries_txt = '%d of %d entries run (no record: %s)' % (run_n, n_entries, miss[2])
+    run_n = n_entries - miss[0] - len(refused)
+    # the entries without a result: no record, and (only when there are any) refused jumps
+    ref_span = mod_span(sorted(refused)) if refused else ''
+    gap_en = '; '.join(([('no record: %s' % miss[2])] if miss[0] else []) + (['refused: %s' % ref_span] if refused else []))
+    gap_ja = '、'.join((['記録なし %s' % miss[2]] if miss[0] else []) + (['ジャンプ拒否 %s' % ref_span] if refused else []))
+    if miss[0] or refused:
+        entries_txt = '%d of %d entries run (%s)' % (run_n, n_entries, gap_en)
     else:
         entries_txt = '%d of %d entries run' % (run_n, n_entries)
     shown = sorted(args.dirs, key=slice_order)   # display only: merge keeps the order given (the first real row of an entry claims it)
     dirs_txt = ', '.join('`%s/`' % rel(d) for d in shown)
     partial = '' if ok else 'PARTIAL: '
-    bad_verdict = any('verdict' in p for p in problems)
+    bad_verdict = any('verdict' in p for p in problems if p not in ref_probs)
     ev_resets, ev_hangs, ev_short, ev_unnamed = fault_events(args.dirs, rows)
     n_res, n_hang = len(ev_resets), len(ev_hangs) + len(ev_unnamed)
     n_ev = n_res + n_hang
@@ -404,9 +492,9 @@ def main():
     print('--- STATUS.md (Japanese, ES 3.0 bullet, replaces "i.MX8MP はまだボードで走らせていない。") ---')
     # As the Pi 4 sentence before it: commit without backticks, the date in full-width parentheses,
     # "必須 N 件中 合格 a / 失敗 b / 未対応 c / その他 d / 結果なし e、リセット 0".
-    if miss[0]:
+    if miss[0] or refused:
         scope = 'ツリー（%d エントリ、tools/cts/imx8mp-gles3-tree.txt）のうち %d エントリ' % (n_entries, run_n)
-        part_ja = '（途中、記録が不完全。記録なし %s）' % miss[2]
+        part_ja = '（途中、記録が不完全。%s）' % gap_ja
     else:
         scope = '全ツリー（%d エントリ、tools/cts/imx8mp-gles3-tree.txt）' % n_entries
         part_ja = '' if ok else '（途中、記録が不完全）'
@@ -421,9 +509,9 @@ def main():
     print('--- ROADMAP.md (stage 4, i.MX8MP line) ---')
     # As the AM62P and Pi 4 bullets: "<board>: the whole tree (...) at `sha` (date): N cases, a pass /
     # b fail / c NotSupported / d other / e without a result", wrapped at 78 columns, 2-space continuation.
-    if miss[0]:
-        scope = '%d of the tree\'s %d entries (`tools/cts/imx8mp-gles3-tree.txt`; no record: %s)' % (
-            run_n, n_entries, miss[2])
+    if miss[0] or refused:
+        scope = '%d of the tree\'s %d entries (`tools/cts/imx8mp-gles3-tree.txt`; %s)' % (
+            run_n, n_entries, gap_en)
     else:
         scope = 'the whole tree (%d entries, `tools/cts/imx8mp-gles3-tree.txt`)' % n_entries
     roadmap_txt = wrap('- i.MX8MP: %s%s%s at %s (%s): %s cases, %s pass / %s fail / %s NotSupported / %s other / '
@@ -444,6 +532,10 @@ def main():
     print('- Entries: %s.' % entries_txt)
     print('- Records: %s.' % dirs_txt)
     print('- Resets: %s.' % reset_txt)
+    for i, (d, rc, why) in sorted(refused.items()):
+        # a refused jump: not a reset or hang, no result; named with its cause for the close's cause list
+        print('- Refused: e%d (`%s/`): the jump was refused (rc=%s), the board was not rebooted; %s.' % (
+            i, rel(d), rc, why or 'no cause in the slice record'))
     print('- Totals over the %s mustpass cases (%s begun): %s Pass / %s Fail / %s NotSupported / %s other / '
           '%s without a result.' % (n(mp), n(begun), *five))
     if out_of_list:
@@ -452,7 +544,10 @@ def main():
     left = []
     if miss[0]:
         left.append('entries %s (%s mustpass cases) have no record' % (miss[2], n(miss[3])))
-    left += [p for p in problems if not p.startswith('no record:')]
+    if refused:
+        left.append('entries %s (%s mustpass cases) were refused before the jump and need a rerun' % (
+            ref_span, n(sum(r[1] for r in rows if r[0] in refused))))
+    left += [p for p in problems if not p.startswith('no record:') and p not in ref_probs]
     left.append('triage of the not-pass groups into issues (`docs/es3/imx8mp-gles3-notpass.tsv`)')
     print('- Remains: %s.' % '; '.join(left))
 
