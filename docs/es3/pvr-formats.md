@@ -845,18 +845,21 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
 ### 10.1 Sampling
 
 - `PVR_SAMPLED_TEXFMTS` (`src/backend.rs`) holds every ES 3.0 storage class
-  of `docs/es3/sized-formats.md` but `GLES_TEXFMT_RGB10A2`: R11G11B10F,
-  RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I, RGBA32UI/I,
-  RGBA32F. The GL core stores each format in its own class there (R8UI as
-  RGBA8UI with zeros, RG32F as RGBA32F, ...).
-- **Deviation: RGB10_A2 stays in RGBA8.** The descriptor decodes the
-  `RGB10A2` class (A2R10B10G10, PCK 0x148), but the GL core makes a texture
-  of that class no render target and gives it no glGenerateMipmap, and ES 3.0
-  requires both of GL_RGB10_A2; until the PowerVR renders the class (the
-  §2.5 row: A2R10B10G10 packmode, F16 accum, the RGBA16F shader output), the
-  two bits are the smaller loss.
-- **The render-target class is built in the back end and the compiler
-  (item rgb10a2-rt), not yet turned on.** For `GLES_SURF_RGB10_A2`:
+  of `docs/es3/sized-formats.md`: R11G11B10F, RGB9E5, RGB10A2, RGB10A2UI,
+  RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I, RGBA32UI/I, RGBA32F. The GL core
+  stores each format in its own class there (R8UI as RGBA8UI with zeros,
+  RG32F as RGBA32F, ...).
+- **RGB10_A2 is its own class (item fix-rgb10a2-rb).** The descriptor
+  decodes `RGB10A2` (A2R10B10G10, PCK 0x148), and the class's bit makes
+  `rt_format_drawable(GLES_SURF_RGB10_A2)` true: a GL_RGB10_A2 texture,
+  renderbuffer and attachment is the 10/10/10/2 surface, reports 10/10/10/2
+  component sizes and reads back as UNSIGNED_INT_2_10_10_10_REV; its
+  glGenerateMipmap is the GL core's field-by-field box filter (the GPU chain
+  takes RGBA8 only). The GL draw key of a single RGB10_A2 target is the back
+  end's class (`gl::draw::target_rt_class`, from `pvr::backend::rt_class`);
+  beside other targets it keeps the core's one-dword class and the back end
+  refuses the draw by name (below). Pinned by `tests/pvr_rgb10a2_rb.rs`.
+- **The render-target class (item rgb10a2-rt).** For `GLES_SURF_RGB10_A2`:
   - PBE (`pbe_emit_words`): packmode A2R10B10G10 (14), `norm` 1,
     `source_format` F16_PER_CHANNEL (Mesa `FORMAT(R10G10B10A2_UNORM,
     A2R10B10G10, F16)`, `arch-formats.c:223`; `job-common.c:72-73`, channel
@@ -883,21 +886,13 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
     the rig tests `an_rgb10a2_frame_*` in `src/pvr/backend_tests.rs`. Not
     checked on silicon.
 
-  What the GL side still has to change to turn the class on (files of other
-  items): (1) `PVR_SAMPLED_TEXFMTS` (`src/backend.rs`) gains
-  `GLES_TEXFMT_RGB10A2`, which makes `rt_format_drawable(GLES_SURF_RGB10_A2)`
-  true, so the GL core keeps GL_RGB10_A2 in its own class and hands the
-  surface over; (2) the variant key the GL core builds for the target
-  (`gl::draw::current_blend_key`, from `gles_surf_rt_class`) has to be
-  `SHC_RT_SRGB`'s on the PowerVR, as `pvr::backend::rt_class` says, not
-  RGBA8's -- through `gles_surf_rt_class` gated on `gpu-powervr` or a
-  back-end hook, since the V3D renders the class its own way; (3)
-  glGenerateMipmap of the class on the PowerVR (the GL core's RGB10A2 box
-  filter, `src/gl/texture.rs`) has to be checked; and, for RGB10_A2 beside
-  another attachment, a per-target key for the halves in
-  `src/target_key.rs`. Then a host dEQP run of `fbo.color.*rgb10_a2*`,
-  `fragment_ops.blend.*` and `texture.format.sized.*rgb10_a2*` and an AM62P
-  single-case check.
+  What is left: RGB10_A2 beside another attachment (which drew as RGBA8
+  before the class was turned on, and is refused by name now: dEQP
+  `fragment_out.array.fixed.rgb10_a2_*` and the `fragment_out.random`
+  cases that pick it) needs a per-target key for the halves in
+  `src/target_key.rs`; then a host dEQP run of `fbo.color.*rgb10_a2*`,
+  `fragment_ops.blend.*`, `fragment_out.*rgb10_a2*` and
+  `texture.format.sized.*rgb10_a2*` and an AM62P single-case check.
 - The texture state is `es3_tex_format` (`src/pvr/backend.rs`): the TPU
   formats and swizzles of §2.1-§2.3 (the GL core's classes are four
   components wide, so the swizzle is the identity but for the packed floats'

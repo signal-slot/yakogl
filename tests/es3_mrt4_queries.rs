@@ -234,11 +234,10 @@ const FORMATS: [Fmt; 5] = [
     Fmt {
         name: "RGB10_A2",
         internal: GL_RGB10_A2,
-        /* V3D has the 10/10/10/2 surface; the PowerVR back end does not
-         * (rt_format_drawable(GLES_SURF_RGB10_A2) is false), so GL_RGB10_A2 is held as RGBA8 and
-         * src/gl/framebuffer.rs:2321 answers 8 (docs/notes/v3d-rgb10a2.md (a)): by design, as at
-         * attachment 0 */
-        sizes: if cfg!(feature = "gpu-v3d") { [10, 10, 10, 2] } else { [8, 8, 8, 8] },
+        /* both builds of this file have the 10/10/10/2 surface
+         * (rt_format_drawable(GLES_SURF_RGB10_A2): docs/notes/v3d-rgb10a2.md (a) on the
+         * V3D, tests/pvr_rgb10a2_rb.rs on the PowerVR), as at attachment 0 */
+        sizes: [10, 10, 10, 2],
         ctype: GL_UNSIGNED_NORMALIZED,
         enc: GL_LINEAR,
     },

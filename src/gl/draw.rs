@@ -1482,6 +1482,23 @@ fn several_targets(c: &GlContext) -> bool {
 /// FS variant is needed (blending off or ONE/ZERO, which is a plain replace,
 /// and every channel written). A mask with every channel off is handled by
 /// the ISP (`GlesDraw::color_write`), not by a variant.
+/// The render-target class a fragment shader drawing into `fmt` is compiled
+/// for: [`gles_surf_rt_class`], but the back end's own on the PowerVR, which
+/// accumulates RGB10_A2 as the sRGB class's four halves
+/// (`pvr::backend::rt_class`, docs/es3/pvr-formats.md 10.1) -- for the one
+/// target only: beside others the format keeps the core's class, the
+/// one-dword slot `target_key.rs` gives it, and the PowerVR back end refuses
+/// that draw by name (`REFUSE_RGB10A2_MRT`) rather than the compiler a
+/// halves variant of several outputs.
+fn target_rt_class(c: &GlContext, fmt: u8) -> u32 {
+    #[cfg(feature = "gpu-powervr")]
+    if !several_targets(c) {
+        return crate::pvr::backend::rt_class(fmt);
+    }
+    let _ = c;
+    gles_surf_rt_class(fmt)
+}
+
 fn current_blend_key(c: &GlContext) -> u32 {
     let mut key = SHC_BLEND_KEY_REPLACE;
     let off = disabled_channels(c);
@@ -1538,7 +1555,7 @@ fn current_blend_key(c: &GlContext) -> u32 {
     /* a float or sRGB render target takes the fragment shader variant that
      * packs its output for that class (a non-zero key even for plain
      * replace) */
-    key |= shc_blend_key_target(gles_surf_rt_class(fmt), off);
+    key |= shc_blend_key_target(target_rt_class(c, fmt), off);
     if key == SHC_BLEND_KEY_REPLACE {
         0
     } else {
@@ -4495,7 +4512,7 @@ fn build_common(
             let cls = if gles_surf_is_srgb(d.target_format) && several_targets(c) {
                 SHC_RT_RGBA8
             } else {
-                gles_surf_rt_class(d.target_format)
+                target_rt_class(c, d.target_format)
             };
             key = shc_blend_key(SHC_BF_ZERO, SHC_BF_ONE, SHC_BF_ZERO, SHC_BF_ONE, SHC_BLEND_ADD, SHC_BLEND_ADD)
                 | shc_blend_key_target(cls, 0);

@@ -208,10 +208,12 @@ const BASE_SAMPLED_TEXFMTS: u64 = texfmts(&[
 /// `smp` without `fcnorm`); the other integer sampler dimensions are refused
 /// by name at compile time.
 ///
-/// Not `GLES_TEXFMT_RGB10A2`, which the descriptor decodes too: a texture of
-/// that class is no render target and has no glGenerateMipmap in the GL core
-/// (docs/es3/sized-formats.md), and ES 3.0 makes GL_RGB10_A2 both, so it
-/// stays in RGBA8 (two bits lost) until the PowerVR renders the class.
+/// `GLES_TEXFMT_RGB10A2` is the descriptor's A2R10B10G10 UNORM (Mesa's
+/// `FORMAT(R10G10B10A2_UNORM, A2R10B10G10, F16)`, pvr_arch_formats.c:223),
+/// and its bit makes [`rt_format_drawable`] hand `GLES_SURF_RGB10_A2` over:
+/// the PowerVR renders it through the PBE's A2R10B10G10 pack over F16
+/// halves (`pvr::backend::rt_class`, docs/es3/pvr-formats.md 10.1), and the
+/// GL core's box filter makes its glGenerateMipmap levels field by field.
 pub const PVR_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
@@ -219,6 +221,7 @@ pub const PVR_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
         GLES_TEXFMT_ETC2_SRGB_RGBA,
         GLES_TEXFMT_R11G11B10F,
         GLES_TEXFMT_RGB9E5,
+        GLES_TEXFMT_RGB10A2,
         GLES_TEXFMT_RGB10A2UI,
         GLES_TEXFMT_RGBA8_SNORM,
         GLES_TEXFMT_RGBA8UI,

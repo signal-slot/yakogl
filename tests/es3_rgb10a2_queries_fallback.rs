@@ -37,8 +37,11 @@
 //! The rows say what these builds answer today, matching or not; what the
 //! spec asks is in the messages.
 //!
+//! The PowerVR build holds the class (`PVR_SAMPLED_TEXFMTS` has
+//! `GLES_TEXFMT_RGB10A2`, tests/pvr_rgb10a2_rb.rs) and compiles this file
+//! only under `report-es2`.
+//!
 //! ```text
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,test-knobs --test es3_rgb10a2_queries_fallback
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --test es3_rgb10a2_queries_fallback
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es3_rgb10a2_queries_fallback
 //! ```
@@ -48,7 +51,7 @@
 //! answers are pinned by tests/es3_rgb10a2_queries_v3d.rs). No GPU runs: the
 //! stand-in back end draws nothing.
 
-#![cfg(all(feature = "host-test", any(feature = "gpu-powervr", feature = "gpu-vivante", feature = "report-es2")))]
+#![cfg(all(feature = "host-test", any(feature = "gpu-vivante", feature = "report-es2")))]
 #![cfg_attr(feature = "report-es2", allow(dead_code, unused_imports))]
 
 use core::ffi::{c_char, c_void};

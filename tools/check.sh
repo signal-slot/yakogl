@@ -2611,6 +2611,10 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_tex_lod_words.rs)"
 # GL_MAX_VERTEX_OUTPUT_COMPONENTS 64 on the PowerVR.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_vout64.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_vout64
+# A GL_RGB10_A2 renderbuffer on the PowerVR is the 10/10/10/2 surface: its
+# sizes, the clear and draw handed over, the read-back round trip.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_rgb10a2_rb.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_rgb10a2_rb
 # Flat shading on the V3D and the GC7000UL (docs/notes/es3-flatshading.md): a
 # regression guard that pins the provoking vertex (the last), the flat flags
 # and the native primitive of every mode. Compiles to nothing under report-es2.

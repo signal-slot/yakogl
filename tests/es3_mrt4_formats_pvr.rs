@@ -752,6 +752,11 @@ enum Outcome {
     /// Complete; the back end refuses the draw by name: an integer
     /// attachment beside another one (`GL_INVALID_OPERATION`).
     RefusedInteger,
+    /// Complete; the back end refuses the draw by name: an RGB10_A2
+    /// attachment (the 10/10/10/2 surface, two output dwords of halves)
+    /// beside another one (`REFUSE_RGB10A2_MRT`, `GL_INVALID_OPERATION`);
+    /// its clear beside the others is refused at the read's flush.
+    RefusedRgb10a2,
     /// The renderbuffer storage is refused (`GL_INVALID_ENUM`), so the
     /// framebuffer is incomplete.
     NotRenderable,
@@ -768,9 +773,9 @@ use Outcome::*;
 const ROWS: [(GLenum, &str, u8, Outcome, bool); 25] = [
     (GL_RGBA8, "RGBA8", GLES_SURF_RGBA8888, Draws, true),
     (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8", GLES_SURF_SRGB8_A8, Draws, true),
-    /* the 10-bit class is drawn as RGBA8 on the PowerVR today
-     * (docs/es3/backend-caps.md section 3) */
-    (GL_RGB10_A2, "RGB10_A2", GLES_SURF_RGBA8888, Draws, true),
+    /* the 10/10/10/2 surface (tests/pvr_rgb10a2_rb.rs): two output dwords
+     * of halves, drawn alone only */
+    (GL_RGB10_A2, "RGB10_A2", GLES_SURF_RGB10_A2, RefusedRgb10a2, false),
     (GL_RGB10_A2UI, "RGB10_A2UI", GLES_SURF_RGB10_A2UI, RefusedInteger, true),
     (GL_R8, "R8", GLES_SURF_RGBA8888, Draws, true),
     (GL_RG8, "RG8", GLES_SURF_RGBA8888, Draws, true),
@@ -890,15 +895,16 @@ fn four_pbe_states_reach_the_hardware() {
     }
 }
 
-/// The back end refuses, by name, an integer attachment 3 beside RGBA8
-/// targets: `GL_INVALID_OPERATION`, no kick. (An sRGB one was refused the
-/// same way until item pvr-srgb-mix of plan #368.)
+/// The back end refuses, by name, an integer or an RGB10_A2 attachment 3
+/// beside RGBA8 targets: `GL_INVALID_OPERATION`, no kick. (An sRGB one was
+/// refused the same way until item pvr-srgb-mix of plan #368.)
 #[test]
 fn integer_attachment_3_is_refused_by_name_today() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
         let want = match outcome {
             RefusedInteger => "an integer colour attachment beside another colour attachment",
+            RefusedRgb10a2 => "an RGB10_A2 colour attachment beside another",
             _ => continue,
         };
         let f = Fbo::new(internal);
@@ -924,7 +930,8 @@ fn clear_buffer_and_read_of_attachment_3() {
             continue;
         }
         let _f = Fbo::new(internal);
-        assert_eq!(clear_and_read(internal), (GL_NO_ERROR, GL_NO_ERROR), "{name}: clear, read");
+        let read = if outcome == RefusedRgb10a2 { GL_INVALID_OPERATION } else { GL_NO_ERROR };
+        assert_eq!(clear_and_read(internal), (GL_NO_ERROR, read), "{name}: clear, read");
         /* the other clear family for the class is a type mismatch */
         let wrong = if int_class(internal) { 0 } else { 1 };
         // SAFETY: plain GL calls.
