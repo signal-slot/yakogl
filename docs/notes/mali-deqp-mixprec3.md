@@ -3,7 +3,8 @@
 # Mali dEQP-GLES2 `mixprec3`: FS mixed precision and fragment varying loads at 8ff01055
 
 Date 2026-11-24. Plan #402 item `ref-mixprec3` (stage 5, issue #20, NanoPC-T6
-Mali-G610). It adds references and a test. It changes no code. The
+Mali-G610) added the references and the test; section 5 is the lowering
+that item `lower-mixprec3` made from them. The
 references are `tools/mali/testdata/deqp_mixprec3_*` (Mesa 26.2.1 drm-shim,
 GPU g610) and the test is `tests/mali_deqp_mixprec3.rs`. Read
 `docs/notes/mali-deqp-mixcol.md` and `docs/notes/mali-deqp-mixprec.md` first:
@@ -213,7 +214,64 @@ The LOAD shapes do not match the refusal's three cases one for one.
   colour. That is Mesa's `FADD.f32 .h0` at the last fp32 value, the same as
   in `deqp_mixcol_hp_scale`. The bool form is `MUX.v2i16` with no conversion.
 
-## 5. Reproducing
+## 5. The lowering (plan #402 `lower-mixprec3`)
+
+Landed on 2026-11-28 from proto-mixprec3-tip's combined diff (proto-mixlink2's
+diff from its report, with the varying-load half rebuilt from
+proto-varyload's description; proto-varyload's own diff was lost). HOST-ONLY:
+nothing here ran on the board. It takes these references:
+
+| test | now byte-equal (`MATCHED` or `LOWERED`) |
+|---|---|
+| `mali_deqp_mixprec3` | `hp_bvec4`, `mp_vec3_scale`, `lp_vec3_scale`, `vary_array_static` |
+| `mali_deqp_mixprec4` | all six |
+| `mali_deqp_mixcol` | `hp_bool`, `lz_rnd_other` |
+| `mali_deqp_varyload` | `rnd57`, `rnd31`, `basic33`, `cond19`, `tex110` |
+| `mali_deqp_irindex` | `load_vec3_cmp` |
+| `mali_deqp_constprod` | `constchain_fs` |
+| `mali_deqp_texmisc` | `tk_rnd_bias_proj` |
+
+What it does (`src/shaderc/online/mali/`):
+
+1. **Highp compares stay fp32.** A compare inside a highp island is
+   `FCMP_OR.f32` followed by the 16-bit `b2f` `MUX.v2i16` (`hp_bvec4`, the
+   mixprec4 compares). `nir_fs.rs` `swapped_compares` orders the two varying
+   loads of a vector compare as Mesa does (`gt_vec2`, `le_vec2`).
+2. **Varying conversions in Mesa's order.** `conversion_order` relaxes the
+   `lone` rule. A varying array's elements count as one variable (`Fs::arr_el`).
+   A slot holding several variables, or an array, is converted lazily at each
+   variable's first reader (`Conversions::lazy`, the `flush` closure in
+   `select`). A pair whose odd lane is read first, or colour-only lanes Mesa
+   pairs as (odd, even), converts with the odd lane low (`Conversions::swap`,
+   `Leaves::conv_swap`, used by `conversion()`). The existing `same` check
+   still guards the order.
+3. **Overwritten stores are dead.** `mod.rs` `overwritten_stores` is used by
+   `live_varying_loads` and `nir_fs.rs` `ir_live`. It drops an output store
+   that a later store of the same output replaces in `main`'s top-level list
+   with no control node between them (`tex110`, `cond19`), and an overwritten
+   store to an output's own local (`nir.rs` `overwritten_stores`, now
+   `pub(super)`; `basic33`). Values that only such a store read no longer
+   refuse. So seven other pins move forward to a later refusal (`arith`,
+   `fsint2`, `intrnd`, `intval3`, `mixprec2`), none of them backward.
+4. **`-0.0 * b` folds to the constant -0.0** in `walk_nodes` (`rnd57`), and a
+   colour `Pack` reads `Leaf::Part { h: 1 }` as `.h1` (`basic33`).
+
+Still open:
+
+- mixprec3 `hp2_sum` (FORM) and `hp_vec3_sum` (LOAD) need the link side:
+  the vertex shader stores the sum the link moved into it, and the packed
+  slot of `v_in0.z` and `v_in1`.
+- varyload `swz41` (LOAD) is refused. `cond36` (fs word [1]: ours
+  `V2F32_TO_V2F16.discard`, 11 words against 9, extra FAU words) and `basic8`
+  (fs word [1]: ours `FADD.f32.discard r2.h0`, 18 words against 19) compile
+  with other words, held by `differences_pinned`.
+- mixcol `hp_param`, `hp_seq`, `int_uniform_struct` (MIX) and `ck_rnd_other`,
+  `lz_rnd` (FORM). `f2i_dead` still differs in its FAU words.
+
+No glmark2 verdict moves ("mali: 69 shaders, 52 compiled; 31 pairs tried, 31
+linked; 23 of 33 scenes compile-clean", the same as before).
+
+## 6. Reproducing
 
 ```sh
 # a reference (MESA_SHIM_WORK defaults to $CONNECTED_DEPS_DIR/mesa-shim)

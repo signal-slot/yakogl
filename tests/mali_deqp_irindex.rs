@@ -27,7 +27,9 @@ mod mali_ref;
 
 /// The references the fix made byte-equal, without the `deqp_irindex_`
 /// prefix: each has a byte-compare test below that is not ignored.
-const LOWERED: &[&str] = &["b2f16_pair", "pair_hi_unread", "pair_lo_unread", "val16_abs_fold"];
+/// `load_vec3_cmp` since plan #402's lower-mixprec3: the compare of the
+/// highp varying's lanes kept fp32 (nir_fs.rs `walk_nodes`).
+const LOWERED: &[&str] = &["b2f16_pair", "load_vec3_cmp", "pair_hi_unread", "pair_lo_unread", "val16_abs_fold"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -49,7 +51,6 @@ const MIXED: &str =
 /// site of each); `sqrt_op_value` is past it now ([`MIXED`]).
 const REFUSED: &[(&str, &str)] = &[
     ("load_mat3", IR_INDEX),
-    ("load_vec3_cmp", MIXED),
     ("mat3_uniform_conv", ALGEBRAIC),
     ("mat4_pair_unread", IR_INDEX),
     ("sqrt_op_value", MIXED),
@@ -69,7 +70,6 @@ fn load_mat3() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (a compare of a highp varying's narrowed lanes)"]
 fn load_vec3_cmp() {
     mali_ref::assert_matches("deqp_irindex_load_vec3_cmp");
 }

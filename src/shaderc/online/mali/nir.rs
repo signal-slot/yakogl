@@ -5921,7 +5921,7 @@ fn vs_ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], Mal
 /// anywhere in a nested `if` or loop, and any jump, ends every pending
 /// store; a store in a nested `if` or loop ends none (it may not run) and
 /// replaces none. Each nested list is scanned on its own.
-fn overwritten_stores(
+pub(super) fn overwritten_stores(
     m: &Module<'_>,
     nodes: &[IrNode],
     scratch: &Arena<'_>,

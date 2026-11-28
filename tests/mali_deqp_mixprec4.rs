@@ -22,13 +22,13 @@
 //!                                                                                     bool into color.yz
 //! ```
 //!
-//! No reference is byte-equal at the tip: `gt_vec2`, `eq_vec4`, `le_vec2`,
-//! `bin_ge_float` and `bin_eq_vec4` meet the MIX refusal, `ge_vec4` meets the
-//! IrIndex back-end defect. Each test is `#[ignore]`d and [`refusals_pinned`]
-//! (running) holds its refusal and checks that every `deqp_mixprec4_*`
-//! reference on disk is listed. The lowering that lifts one (plan #402 item
-//! `lower-mixprec3`, `fix-irindex`) removes its `ignore` and moves it from
-//! [`REFUSED`] to [`MATCHED`] in the same commit. The fragment shaders are
+//! Every reference is byte-equal since plan #402's `lower-mixprec3`
+//! ([`MATCHED`]); before it `gt_vec2`, `eq_vec4`, `le_vec2`, `bin_ge_float`
+//! and `bin_eq_vec4` met the MIX refusal and `ge_vec4` the IrIndex back-end
+//! defect (of the fp16 compare path, which the fp32 compare no longer
+//! takes). [`refusals_pinned`] checks that every `deqp_mixprec4_*`
+//! reference on disk is listed; a reference that is refused again goes
+//! back to [`REFUSED`] with its text and an `#[ignore]`. The fragment shaders are
 //! written from the pattern of the `deqp_mixcol_hp_bool` and
 //! `deqp_mixprec3_hp_bvec4` shaders (es2fShaderOperatorTests.cpp
 //! ShaderOperatorCase, VK-GL-CTS 93bca01) with the operator and width
@@ -41,21 +41,14 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
-const IRINDEX: &str = "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)";
+/// The references byte-equal now (plan #402's lower-mixprec3): a compare
+/// of the highp varyings' island kept fp32 (`FCMP_OR.f32`, nir_fs.rs
+/// `walk_nodes`), its two loads in the order of NIR's sources before
+/// `nir_opt_move` (nir_fs.rs `swapped_compares`; `gt_vec2`, `le_vec2`).
+const MATCHED: &[&str] = &["gt_vec2", "ge_vec4", "eq_vec4", "le_vec2", "bin_ge_float", "bin_eq_vec4"];
 
-/// The references byte-equal now: none.
-const MATCHED: &[&str] = &[];
-
-/// Every refused reference with its whole refusal text.
-const REFUSED: &[(&str, &str)] = &[
-    ("gt_vec2", MIX),
-    ("ge_vec4", IRINDEX),
-    ("eq_vec4", MIX),
-    ("le_vec2", MIX),
-    ("bin_ge_float", MIX),
-    ("bin_eq_vec4", MIX),
-];
+/// Every refused reference with its whole refusal text: none.
+const REFUSED: &[(&str, &str)] = &[];
 
 #[test]
 fn refusals_pinned() {
@@ -80,37 +73,31 @@ fn refusals_pinned() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn gt_vec2() {
     mali_ref::assert_matches("deqp_mixprec4_gt_vec2");
 }
 
 #[test]
-#[ignore = "refused: Valhall back end defect (IrIndex); pinned by refusals_pinned"]
 fn ge_vec4() {
     mali_ref::assert_matches("deqp_mixprec4_ge_vec4");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn eq_vec4() {
     mali_ref::assert_matches("deqp_mixprec4_eq_vec4");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn le_vec2() {
     mali_ref::assert_matches("deqp_mixprec4_le_vec2");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn bin_ge_float() {
     mali_ref::assert_matches("deqp_mixprec4_bin_ge_float");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn bin_eq_vec4() {
     mali_ref::assert_matches("deqp_mixprec4_bin_eq_vec4");
 }
