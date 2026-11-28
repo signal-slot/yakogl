@@ -946,6 +946,16 @@ chain's storage falls in a frame (`gc_return_mipmap_chain` is not called in
 these frames, `gc-slow-terrain.md` "The mipmap path on the board"), so the
 open kick is not submitted early.
 
+**Built, host-measured** (`tests/gc_chain_open_kick.rs`, knob
+`gc_chain_open_kick`, test-knobs only, default off): the kicks of a warm
+frame, knob off to on, in both GPU models, are terrain 11 to 1, shadow 2 to
+2, refract 3 to 2, as predicted. Waits outside the swap in the `Lag` model:
+terrain 11 to 0, refract 2 to 0, shadow 0. The draws and RS jobs of each
+frame are the same with the knob on and off, and a 64x64 chain read back
+through `return_mipmap_chain` is byte-identical (on, the read-back submits
+the chain's kick and waits for it once). No board number yet: the ms
+figures above are still predictions.
+
 Reading rule: terrain's saving is mostly inside the spread of repeated runs
 (the "does nothing" band of the gc_tiled_rt section, -3 to +0.7 ms), so read
 it from the counters first: kicks 11 to 1 and `frame_open` waits (PERF page

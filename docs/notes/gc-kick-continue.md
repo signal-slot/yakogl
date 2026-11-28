@@ -196,7 +196,11 @@ applies to.
   select still protects the surface it may have filled (seed or copy). The
   file is resolve-wide's while that item runs. Land C4 after it.
 - **C5. The mipmap chain stays in the open kick.** Applies on top of
-  mip-one-kick.
+  mip-one-kick. Built behind the test knob `gc_chain_open_kick`
+  (`gc_debug_set_chain_open_kick`, default off; `tests/gc_chain_open_kick.rs`).
+  With the knob on, `mip_fence` stays for the knob-off path and a new
+  `mip_kick` holds the chain's kick; the error paths keep their
+  `gc_finish`.
   - mip-one-kick will need a way past A1 for the levels (a flag, or a state
     that the target check skips). Delete it: C1 removes the check.
   - Delete `mipmap.rs:278-281` (`gc_flush` at the chain's end) and the

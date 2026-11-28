@@ -268,13 +268,15 @@ select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch probes
 `gc_debug_flip_experiment` with its setter (case 88, the flip study);
 `gc_debug_narrow_la` with its setter (case 132's RGBA8 arm);
 `gc_debug_tiled_rt` with `gc_debug_set_tiled_rt` (`tiled_rt.rs`);
+`gc_debug_chain_open_kick` with `gc_debug_set_chain_open_kick` (`mipmap.rs`,
+the chain in the open kick, docs/notes/gc-kick-continue.md C5);
 `gc_debug_set_depth_tpu` (`depth_sample.rs`), `gc_debug_depth_dump`
 (`depth_dump.rs`) and `gc_debug_ts_probe` (`ts_probe.rs`); and the
 `gc_kick_diff_*` recorder (`kick.rs`, `docs/notes/gc-kick-diff.md`). Without
 the feature each reads as its default (MSAA, the flip study and the tiled
 targets off, the narrow store on) and none of the symbols is in the archive;
 `tools/check.sh` pins the exact set, `KNOB_VIVANTE_SYMBOLS`
-(`tools/check.sh`), 19 names today. `gc_debug_rs_clear`
+(`tools/check.sh`), 23 names today. `gc_debug_rs_clear`
 (`backend.rs`) is a Rust-only function (no `no_mangle`, so the archive
 does not export it) that host tests use to switch the resolve-engine clear
 off.
