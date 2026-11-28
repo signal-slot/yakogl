@@ -26,6 +26,7 @@ use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend};
 use yakogl::gl::buffer::glBindBuffer;
 use yakogl::gl::consts::*;
 use yakogl::gl::draw::*;
+use yakogl::gl::es3::glClearBufferfv;
 use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
@@ -557,4 +558,43 @@ fn draw_on_an_incomplete_four_x_framebuffer() {
     assert_eq!(draw_triangle(), (GL_NO_ERROR, 1), "complete again");
     attach_tex(GL_COLOR_ATTACHMENT1, texture());
     assert_eq!(draw_triangle(), (GL_INVALID_FRAMEBUFFER_OPERATION, 0), "4x colour with a texture");
+}
+
+/// ES 3.0.6 4.4.4 and 4.2.3: glClear and glClearBuffer* on an incomplete
+/// framebuffer are GL_INVALID_FRAMEBUFFER_OPERATION and the back end is
+/// handed no draw at all, not even a clear-only one; once the counts match
+/// again the clear goes through.
+#[test]
+fn clear_on_an_incomplete_four_x_framebuffer() {
+    let _g = context_ms4();
+    let mut n = Names::default();
+    n.fbo();
+    let colour = n.rb(4, GL_RGBA8);
+    attach_rb(C0, colour);
+    let depth = n.rb(0, GL_DEPTH_COMPONENT16);
+    attach_rb(GL_DEPTH_ATTACHMENT, depth);
+    assert_eq!(status(), INCOMPLETE_MS);
+    let clears = || -> (Vec<GLenum>, usize) {
+        SEEN.lock().unwrap().clear();
+        let v = [0.0f32; 4];
+        // SAFETY: v outlives the calls.
+        let errs = unsafe {
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            let a = glGetError();
+            glClearBufferfv(GL_COLOR, 0, v.as_ptr());
+            let b = glGetError();
+            glClearBufferfv(GL_DEPTH, 0, v.as_ptr());
+            let c = glGetError();
+            glFinish();
+            vec![a, b, c]
+        };
+        let seen = SEEN.lock().unwrap().len();
+        (errs, seen)
+    };
+    let bad = GL_INVALID_FRAMEBUFFER_OPERATION;
+    assert_eq!(clears(), (vec![bad; 3], 0), "4x colour with a 0 depth");
+    respecify(depth, 4, GL_DEPTH_COMPONENT16);
+    assert_eq!(status(), COMPLETE, "depth re-stored with 4");
+    let (errs, _) = clears();
+    assert_eq!(errs, vec![GL_NO_ERROR; 3], "complete again");
 }
