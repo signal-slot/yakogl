@@ -1,0 +1,5 @@
+12:00:01 [shadow] <default>: FPS: 96
+12:00:02 [terrain] <default>: FPS: 16
+glmark2: score 101
+[00:09:00.000,000] <inf> yakogl: render freelists: 2 grow requests; GPU recoveries 1 (HWR counter 1)
+[00:09:01.000,000] <err> yakogl: render: stopped: cause 2
