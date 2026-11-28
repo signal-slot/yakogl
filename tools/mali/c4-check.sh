@@ -16,7 +16,7 @@
 #   vsunif    vertex shader 'a uniform other than a float, vec2, vec3, vec4
 #             or mat4'                                              <= 362
 #   vsloop    vertex shader 'a loop in a vertex shader'             <= 105
-#   vsconst   vertex shader 'Valhall: a constant operation on or to a value
+#   vsconst   vertex shader 'a constant operation on or to a value
 #             that is not a finite normal float'                    <= 114
 # Strict decrease (the count must be below its 8ff01055 count):
 #   fsunif    fragment shader 'a mediump fragment shader uniform ...'
@@ -27,7 +27,8 @@
 #   varyload  fragment shader 'a fragment varying load or conversion'
 #   irindex   fragment shader 'back end defect: an invariant of the pipeline
 #             did not hold (IrIndex'
-# A refusal is matched as a substring of the cause text; host texts are cut at
+# A refusal is matched as a substring of the cause text, with or without
+# the board's 'Valhall: ' prefix (host texts have none); host texts are cut at
 # ' is not lowered', board texts are not, so the substrings stop before it.
 #
 # Usage:
@@ -77,8 +78,31 @@ if [ -z "$measure_dir" ]; then
 fi
 [ -f "$measure_dir/measure.tsv" ] || { echo "$me: $measure_dir has no measure.tsv" >&2; exit 2; }
 
-VS="refused, vertex shader: Valhall"
-FS="refused, fragment shader: Valhall"
+# The board texts start with 'Valhall: ', the host texts do not. Both sides
+# (baseline slices and measurement) are copied with 'Valhall: ' taken out, so
+# the specs below match a refusal with or without the prefix.
+work=$(mktemp -d "${TMPDIR:-$REPO/build}/c4-check-norm-XXXXXX")
+trap 'rm -rf "$work"' EXIT
+norm() { # <dir> <copy>: a copy of a slice or measurement without 'Valhall: '
+	local f
+	mkdir -p "$2"
+	for f in measure.tsv results.tsv refusals.tsv; do
+		[ -f "$1/$f" ] && sed 's/Valhall: //g' "$1/$f" > "$2/$f"
+	done
+	return 0
+}
+nb=()
+for i in "${!base[@]}"; do
+	[ -d "${base[$i]}" ] || { echo "$me: baseline slice ${base[$i]} is not a directory" >&2; exit 2; }
+	norm "${base[$i]}" "$work/base$i"
+	nb+=("$work/base$i")
+done
+base=("${nb[@]}")
+norm "$measure_dir" "$work/new"
+measure_dir=$work/new
+
+VS="refused, vertex shader"
+FS="refused, fragment shader"
 # name|kind|limit|reason; caps first, as refusal-compare prints its verdicts
 specs=(
 	"vsunif|cap|362|$VS: a uniform other than a float, vec2, vec3, vec4 or mat4"
@@ -89,7 +113,7 @@ specs=(
 	"fsint|fewer||$FS: an integer or boolean value"
 	"mixprec|fewer||$FS: a fragment shader that mixes highp and mediump or lowp float values"
 	"varyload|fewer||$FS: a fragment varying load or conversion"
-	"irindex|fewer||$FS back end defect: an invariant of the pipeline did not hold (IrIndex"
+	"irindex|fewer||$FS: Valhall back end defect: an invariant of the pipeline did not hold (IrIndex"
 )
 args=(--base "${base[@]}" --new "$measure_dir")
 for sp in "${specs[@]}"; do

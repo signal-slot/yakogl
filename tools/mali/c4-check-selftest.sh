@@ -16,7 +16,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 C4=$HERE/c4-check.sh
-EXPECT=15
+EXPECT=20
 base=${TMPDIR:-$REPO/build}
 mkdir -p "$base"
 tmp=$(mktemp -d "$base/c4-check-selftest-XXXXXX")
@@ -77,6 +77,7 @@ mkmeasure() {
     case ${STAGE[$k]} in vertex) st=vs ;; *) st=fs ;; esac
     t=${TEXT[$k]%% is not lowered*}
     t=${t%)}
+    t=${t#Valhall: } # a host text has no prefix
     for ((i = 0; i < n; i++)); do
       printf 'dEQP-GLES2.%s.%d\tFail\tf\tFail\t%s\tfam\tshape\t%s\n' "$k" "$i" "$st" "$t" >> "$d/measure.tsv"
     done
@@ -116,6 +117,18 @@ check "irindex is FAIL with now=9" grep -q '^irindex .*now=9 limit=<5 FAIL' <<<"
 # a refusal the host no longer has at all is 0, not an error (a base has it)
 mkmeasure "$tmp/gone" fsunif=1
 check "a measure with most refusals gone exits 0" run "$tmp/gone"
+
+# the 'Valhall: ' prefix: a host text has none, a board text has it; both count
+mkmeasure "$tmp/pre" vsunif=3 vsloop=2
+sed -i 's/\t\(a uniform other\|a loop\)/\tValhall: \1/' "$tmp/pre/measure.tsv"
+check "the prefixed fixture has the prefix" grep -q 'Valhall: a loop' "$tmp/pre/measure.tsv"
+out=$(bash "$C4" "$tmp/pre" --base "$tmp/base" 2>&1)
+check "host lines with the prefix count" grep -q '^vsunif .*now=3 ' <<<"$out"
+check "host lines with the prefix count (loop)" grep -q '^vsloop .*now=2 ' <<<"$out"
+mkmeasure "$tmp/nopre" vsunif=3 vsloop=2
+out=$(bash "$C4" "$tmp/nopre" --base "$tmp/base" 2>&1)
+check "host lines without the prefix count" grep -q '^vsunif .*now=3 ' <<<"$out"
+check "a board-form baseline counts the same" grep -q '^vsloop .*base=5 now=2 ' <<<"$out"
 
 # not runnable
 mkdir -p "$tmp/empty"
