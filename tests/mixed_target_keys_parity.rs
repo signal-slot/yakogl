@@ -287,17 +287,31 @@ fn srgb_beside_integer_is_refused_by_name() {
     }
 }
 
+/// Past the four registers: the targets that do not fit spill to tile
+/// buffers, and both sides give the mix the same key (they were refused by
+/// name, `REFUSE_FOUR_REGISTERS`, until `eot2_tb1` and `eot3_tb12`).
 #[test]
-fn past_four_registers_is_refused_by_name() {
-    // RGBA8 (one register) + RGBA32UI (four): the GL list stays Some (the
-    // pinned difference of the header) but there is no mixed key.
-    let f = [GL_RGBA8, GL_RGBA32UI];
-    let (gl_list, gl_mixed) = gl_side(&f);
-    assert_eq!(gl_list.map(|l| l.1), Some(2));
-    assert_eq!(gl_mixed, None);
-    assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)), Err(pvr_keys::REFUSE_FOUR_REGISTERS));
-    // three RGBA16F: two registers each
+fn past_four_registers_agrees_on_the_spilled_key() {
+    // RGBA8 (one register) + RGBA32UI (four): the second spills
+    agree(&[GL_RGBA8, GL_RGBA32UI]);
+    // RGBA32UI first of three: the two after it both spill
+    agree(&[GL_RGBA32UI, GL_R32UI, GL_RGBA8]);
+    // two RGBA32UI: one layout everywhere, no mixed key on either side
+    let f = [GL_RGBA32UI, GL_RGBA32UI];
+    assert_eq!(gl_side(&f).1, None);
+    assert_eq!(pvr_keys::draw_mixed_key(&draw_of(&f)), Err(pvr_keys::REFUSE_NOT_A_MIX));
+}
+
+/// Three targets whose last one does not fit the four registers spills it
+/// to tile buffer 0 (`eot3_tb`): an integer mix has the same key on both
+/// sides (the shape of dEQP fragment_out.random seed 9: one register, one
+/// register, four), and three RGBA16F, one class everywhere, have their keys
+/// and no mixed key on either.
+#[test]
+fn the_last_of_three_spilled_agrees() {
+    agree(&[GL_R32I, GL_R32UI, GL_RGBA32UI]);
+    agree(&[GL_RGBA8, GL_RG32UI, GL_R32UI]);
     let f = [GL_RGBA16F, GL_RGBA16F, GL_RGBA16F];
     assert_eq!(gl_side(&f).1, None);
-    assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)), Err(pvr_keys::REFUSE_FOUR_REGISTERS));
+    assert_eq!(pvr_keys::draw_mixed_key(&draw_of(&f)), Err(pvr_keys::REFUSE_NOT_A_MIX));
 }

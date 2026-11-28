@@ -8,7 +8,8 @@
 //! under key 0 and under the integer key of its first integer output
 //! (`shc_blend_key_int_rt`), and the outcome is pinned literally: Ok with its
 //! `num_outputs` and the pixel output registers the bytes write (through
-//! tests/usc_exec `run_binary`), or the exact refusal. The test documents the
+//! tests/usc_exec `run_binary`), with its tile buffers for a program that
+//! stores targets past the four registers, or the exact refusal. The test documents the
 //! current behaviour and does not judge it: a change of the compiler that
 //! moves a row moves it here on purpose.
 //! HOST-ONLY: no GPU arithmetic.
@@ -32,6 +33,7 @@ static COMPILING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct Rec {
     num_outputs: u8,
+    num_tile_buffers: u8,
     image: Vec<u8>,
 }
 
@@ -46,7 +48,11 @@ fn compile_for(src: &str, key: u32) -> Result<Rec, String> {
         let rec = compile_fragment_for(&l.module, &l.reflection, a, key).map_err(|e| format!("chain: {e:?}"))?;
         // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
         let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
-        Ok(Rec { num_outputs: rec.num_outputs, image: code.iter().flat_map(|w| w.to_le_bytes()).collect() })
+        Ok(Rec {
+            num_outputs: rec.num_outputs,
+            num_tile_buffers: rec.num_tile_buffers,
+            image: code.iter().flat_map(|w| w.to_le_bytes()).collect(),
+        })
     })
     .unwrap()
 }
@@ -70,11 +76,13 @@ fn ops(image: &[u8]) -> Vec<(&'static str, Option<(u32, u32)>)> {
 
 /// The pixel output registers a program writes, in order: the destinations
 /// of the operations into the bank the last operation writes (the program
-/// ends on its last pixel output write).
-fn pixel_outputs(image: &[u8]) -> Vec<u32> {
+/// ends on its last pixel output write). `None` for a program that ends
+/// without a destination: one that stores targets to tile buffers ends on
+/// the stores' nop.
+fn pixel_outputs(image: &[u8]) -> Option<Vec<u32>> {
     let ops = ops(image);
-    let (_, Some((bank, _))) = *ops.last().expect("a program") else { panic!("ends without a destination") };
-    ops.iter().filter_map(|(_, d)| d.filter(|(b, _)| *b == bank).map(|(_, i)| i)).collect()
+    let (_, Some((bank, _))) = *ops.last().expect("a program") else { return None };
+    Some(ops.iter().filter_map(|(_, d)| d.filter(|(b, _)| *b == bank).map(|(_, i)| i)).collect())
 }
 
 fn key_int(channels: u8, bits: u8, signed: bool) -> u32 {
@@ -94,6 +102,10 @@ fn shader(decls: &[&str], body: &str) -> String {
 fn outcome(src: &str, key: u32) -> String {
     match compile_for(src, key) {
         Err(e) => format!("err {e}"),
+        Ok(rec) if pixel_outputs(&rec.image).is_none() => {
+            /* (the byte model has no tile-buffer store) */
+            format!("ok n={} tile buffers={}", rec.num_outputs, rec.num_tile_buffers)
+        }
         Ok(rec) => {
             let mut inp = usc_exec::sentinel_inputs(1.0e30);
             inp.coeff.fill(0x4000_0000);
@@ -101,7 +113,7 @@ fn outcome(src: &str, key: u32) -> String {
                 Ok(m) => format!("{:?}", m.keys().collect::<Vec<_>>()),
                 Err(e) => format!("model: {e}"),
             };
-            format!("ok n={} pixout={:?} ran={ran}", rec.num_outputs, pixel_outputs(&rec.image))
+            format!("ok n={} pixout={:?} ran={ran}", rec.num_outputs, pixel_outputs(&rec.image).unwrap_or_default())
         }
     }
 }
@@ -172,7 +184,8 @@ fn shapes() -> Vec<Shape> {
             ),
             int_key: key_int(4, 32, true),
             key0: "ok n=3 pixout=[32, 33, 34] ran=[0, 1, 2]",
-            keyint: "err chain: Build(Unsupported(\"integer colour outputs past the pixel's four output registers\"))",
+            /* three RGBA32I: r0-r3 and tile buffers 0 and 1 (eot3_tb12) */
+            keyint: "ok n=4 tile buffers=2",
         },
         Shape {
             name: "int + uint (two integer outputs)",
