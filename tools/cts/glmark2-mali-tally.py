@@ -11,6 +11,7 @@
   python3 -I tools/cts/glmark2-mali-tally.py [--allow-verdict-mismatch] ... <runner-dir>
   python3 -I tools/cts/glmark2-mali-tally.py --baseline <rundir> [--forward-only] ... <rundir>
   python3 -I tools/cts/glmark2-mali-tally.py --host-verdicts FILE [--strict] ... <rundir>
+  python3 -I tools/cts/glmark2-mali-tally.py --compare <earlier rundir> ... <rundir>
 
 It plays for glmark2 the part tools/cts/mali-deqp-tally.py plays for dEQP-GLES2.
 The run is one glmark2-es2 process per scene (tools/cts/mali-glmark2-build.sh's
@@ -150,6 +151,13 @@ is "no prediction", a not-run scene is never flagged. Then "forecast: host predi
 refused, K without a line; F flagged". With another output mode the forecast goes to stderr.
 --strict (needs --host-verdicts) makes the exit status 5 when some scene is flagged. Without
 the option nothing changes.
+
+--compare <earlier rundir> (a record or runner directory, same --column and --table) prints, after
+the default table, one line per scene: "compare <scene>: <old verdict> -> <new verdict>; forward|back|
+unchanged" (the order of --baseline's states: missing < crash < refused < clean; a verdict change
+inside one state is unchanged), then "compare: clean scenes A -> B; GL error lines C -> D; moved
+forward F, back K, unchanged U". With another output mode the lines go to stderr. The exit status is
+not changed by movement (only bad input exits non-zero). Without the option nothing changes.
 
 Nothing printed carries a board address: IPv4 addresses, user@host logins and
 UART device paths read from the run are replaced by <addr>, <login>, <uart>.
@@ -938,10 +946,31 @@ def render_forecast(t, host):
     return out, flags
 
 
+def render_compare(t, old):
+    """lines: one per scene, old and new verdict and the move, then the totals"""
+    out, cnt = [], {"forward": 0, "back": 0, "unchanged": 0}
+    for r, b in zip(t["rows"], old["rows"]):
+        move = DELTA_RANK[delta_state(r)] - DELTA_RANK[delta_state(b)]
+        word = "forward" if move > 0 else "back" if move < 0 else "unchanged"
+        cnt[word] += 1
+        out.append("compare %s: %s -> %s; %s" % (r["info"], b["verdict"], r["verdict"], word))
+
+    def nclean(x):
+        return sum(1 for r in x["rows"] if r["verdict"] == "ok")
+
+    def nerr(x):
+        return sum(r["gl_errors"] for r in x["rows"])
+
+    out.append("compare: clean scenes %d -> %d; GL error lines %d -> %d; moved forward %d, back %d, "
+               "unchanged %d" % (nclean(old), nclean(t), nerr(old), nerr(t),
+                                 cnt["forward"], cnt["back"], cnt["unchanged"]))
+    return out
+
+
 def main(argv):
     mode, column, table, args, allow = None, "mali", PICTURES, [], False
     baseline, forward_only = None, False
-    host_path, strict = None, False
+    host_path, strict, compare = None, False, None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -953,7 +982,7 @@ def main(argv):
             forward_only = True
         elif a == "--strict":
             strict = True
-        elif a in ("--column", "--table", "--baseline", "--host-verdicts"):
+        elif a in ("--column", "--table", "--baseline", "--host-verdicts", "--compare"):
             i += 1
             if i >= len(argv):
                 print("glmark2-mali-tally: %s needs a value" % a, file=sys.stderr)
@@ -962,6 +991,8 @@ def main(argv):
                 column = argv[i]
             elif a == "--baseline":
                 baseline = argv[i]
+            elif a == "--compare":
+                compare = argv[i]
             elif a == "--host-verdicts":
                 host_path = argv[i]
             else:
@@ -978,6 +1009,7 @@ def main(argv):
     try:
         t = tally(args[0], column, table)
         base = tally(baseline, column, table) if baseline is not None else None
+        old = tally(compare, column, table) if compare is not None else None
         host = read_host_verdicts(host_path, scene_list()) if host_path is not None else None
     except (Malformed, SystemExit) as e:
         # SystemExit: common-tally's read_picture_table on a malformed table
@@ -1001,8 +1033,13 @@ def main(argv):
     fc, flags = render_forecast(t, host) if host is not None else ([], 0)
     if fc and mode is None:
         out = out + fc
+    cmp_lines = render_compare(t, old) if old else []
+    if cmp_lines and mode is None:
+        out = out + cmp_lines
     print("\n".join(out))
     sys.stdout.flush()
+    if cmp_lines and mode is not None:
+        print("\n".join(cmp_lines), file=sys.stderr)
     if delta and mode is not None:
         print("\n".join(delta), file=sys.stderr)
     if fc and mode is not None:
