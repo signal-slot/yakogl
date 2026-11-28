@@ -523,7 +523,7 @@ fn page_phys(k: &YdPvrKm, i: usize, p: u32) -> u64 {
 /// Answer a FREELIST_GROW for `id` (`c`: the first six words of the
 /// firmware's command, for the log): the DDK's RGXProcessRequestGrow. The
 /// ready pages become current, then one grow's worth of new pages is listed
-/// below the stack ([`serve`]) and the firmware is told the delta and the new
+/// below the stack (`serve`) and the firmware is told the delta and the new
 /// totals on the KCCB.
 pub fn grow(k: &mut YdPvrKm, id: u32, c: &[u32; 6], resp: &mut KccbCmd, ondemand: Option<&mut GrowSource<'_>>) {
     k.fl_grow_reqs += 1;
@@ -603,7 +603,7 @@ pub fn grow(k: &mut YdPvrKm, id: u32, c: &[u32; 6], resp: &mut KccbCmd, ondemand
 
 /// With the ready pages on (`CONFIG_YAKOGL_DRV_GPU_PVR_FL_READY_PAGES`: the
 /// list's `grow_threshold` is not 0): print the firmware's own counts for
-/// list `i` as it asks for a grow, before [`serve`] and before our answer
+/// list `i` as it asks for a grow, before `serve` and before our answer
 /// is posted. The ack line after the answer shows the same words, so the
 /// pair shows what the firmware did with the answer. The open item "the
 /// grow answer's READY word has no effect visible in the ack"
@@ -879,7 +879,7 @@ mod grow_tests {
     //! Gate 1 of the on-demand grow
     //! (docs/notes/pvr-render-pool.md): where a grow's pages
     //! come from, how they are listed, and what is counted and said, on a host
-    //! carveout. [`serve`] is the grow without the KCCB post.
+    //! carveout. `serve` is the grow without the KCCB post.
     use super::*;
     use crate::gpu::pvr::km::YdPvrKmOps;
     use core::ffi::c_void;
