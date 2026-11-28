@@ -5284,8 +5284,24 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     for (i, op) in m.instrs.iter().enumerate().take(MAX_VALUES) {
         match *op {
             ir::Op::LoadInput { slot: IoSlot::Varying(v), .. } => {
+                /* a matrix varying read whole (its columns' loads one after
+                 * the other, one dereference of the variable): GLSL's
+                 * lower_precision converts the variable at the dereference,
+                 * so every column is loaded and converted where the first
+                 * is (deqp_opform_matneg_mat3's `-v_mat3`: the three
+                 * `LD_VAR_BUF_IMM` and their conversions, then the first
+                 * column pair's `MKVEC.v2i16 r5, r1.h1, r2.h0`) */
+                let later_column = m.inputs.iter().any(|d| {
+                    d.kind == IoKind::Varying
+                        && d.location < v
+                        && u32::from(v - d.location) < u32::from(super::glsl::columns(d.gl_type))
+                });
+                let column = later_column
+                    && matches!(i.checked_sub(1).and_then(|j| m.instrs.get(j)),
+                        Some(ir::Op::LoadInput { slot: IoSlot::Varying(u), .. }) if *u + 1 == v);
+                let first = if column { f.var_key.get(v as usize - 1).copied() } else { None };
                 let k = f.var_key.get_mut(v as usize).ok_or(MaliError::VaryingLocation)?;
-                *k = (*k).min(f.keys[i]);
+                *k = (*k).min(first.unwrap_or(u32::MAX)).min(f.keys[i]);
             }
             ir::Op::LoadInput { slot: IoSlot::PointCoord, .. } => f.pcoord_key = f.pcoord_key.min(f.keys[i]),
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => f.fz_key = f.fz_key.min(f.keys[i]),
@@ -12662,6 +12678,18 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             .filter(|n| mk_first(n))
             .all(|n| matches!(*n, P::Op(Alu::Fmin | Alu::Fmax, [x, ..]) if packed(x)));
     let admitted = if minmax_pack { admitted | prod(Form::Mk, Place::AbsSrc) } else { admitted };
+    /* the negation of a matrix varying, its columns summed: a column pair
+     * across two slots under the fneg, and the negated columns first in
+     * the sums, all source modifiers (deqp_opform_matneg_mat3: `MKVEC.v2i16
+     * r5, r1.h1, r2.h0`, `FADD.v2f16 r0, r0^.neg, r5^.neg`, `FADD.v2f16 r1,
+     * r1^.neg.h00, r2^.neg.h11`). A `vec2` of two lanes of one slot under
+     * an fneg is not drawn so (deqp_arith_op_unary_unary_minus_fs_mediump) */
+    let cross_lanes = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::Lanes { k, e, .. }) if k != e);
+    let neg_mk = |n: &P| matches!(*n, P::Op(Alu::Fneg, [x, ..]) if pr.form(x) == Form::Mk);
+    let neg_cross = pr.nodes[..pr.n].iter().any(neg_mk)
+        && pr.nodes[..pr.n].iter().filter(|n| neg_mk(n)).all(|n| matches!(*n, P::Op(_, [x, ..]) if cross_lanes(x)));
+    let admitted =
+        if neg_cross { admitted | prod(Form::Mk, Place::NegSrc) | prod(Form::Neg, Place::AddA) } else { admitted };
     if f.prods & !admitted != 0 {
         return Err(MaliError::FsOperandForm);
     }

@@ -44,6 +44,10 @@ mod mali_ref;
 /// and its product with a constant is the link's factored product
 /// (nir_fs.rs `unit_product`), and a uniform's half in both lanes of an
 /// output word is one `IADD.v2u16`.
+/// `matneg_mat3` since the same item (opform O6, class NM): a matrix
+/// varying read whole is loaded and converted at its first column, and the
+/// gate admits a cross-slot column pair under an fneg and the negated
+/// columns first in a sum.
 const LOWERED: &[&str] = &[
     "matadd_uniform",
     "matsub_uniform",
@@ -52,6 +56,7 @@ const LOWERED: &[&str] = &[
     "clamp_vec3_float",
     "matmul_const",
     "rnd_splat18",
+    "matneg_mat3",
 ];
 
 /// The references that compile with other words than Mesa's (hazards).
@@ -60,7 +65,6 @@ const DIFFERS: &[&str] = &[];
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("conv_vec3", TEXT_OPERAND),
-    ("matneg_mat3", TEXT_OPERAND),
     ("ret_dynamic", TEXT_OPERAND),
     ("ret_never", TEXT_OPERAND),
     ("rnd_constneg85", TEXT_OPERAND),
@@ -117,7 +121,6 @@ fn matmul_const() {
 /// `-v_mat3`: the negation of a cross-slot column pair, and a negation
 /// first in a sum (class NM).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn matneg_mat3() {
     mali_ref::assert_matches("deqp_opform_matneg_mat3");
 }

@@ -428,3 +428,22 @@ Byte-equal now: `deqp_opform_min_vec3`, `deqp_opform_clamp_vec3_float`,
 
 Byte-equal now: `deqp_opform_matmul_const`, `deqp_opform_rnd_splat18`.
 `--lib mali::` and every `tests/mali_*.rs`: 1,412 passed, 0 failed.
+
+### O6 (class NM)
+
+`matneg_mat3` needed the two productions (`Mk@NegSrc`, `Neg@AddA`) and
+one place:
+
+- The gate admits them when every `vec2` under an fneg is a matrix
+  column's pair across two slots (`Leaf::Lanes` of two loads). A `vec2`
+  of two lanes of one slot under an fneg (`unary_minus`, class NS) is
+  still out.
+- A matrix varying read whole (the front end's column loads one after
+  the other) is loaded and converted where its first column is: GLSL's
+  lower_precision converts the variable at the dereference. Our third
+  slot's load stood at the third column's negation, after the first
+  column pair's `MKVEC.v2i16`; Mesa has the three `LD_VAR_BUF_IMM` and
+  their conversions first.
+
+Byte-equal now: `deqp_opform_matneg_mat3`. `--lib mali::` and every
+`tests/mali_*.rs`: 1,413 passed, 0 failed.
