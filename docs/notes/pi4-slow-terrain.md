@@ -33,6 +33,11 @@ this section is the history of how that was found and is left as written.
   unchanged, `alloc.rs` keeps r0..r4 for short values. Noise FS words
   1495 -> 1090 (Mesa 1161), terrain VS 172 -> 156 (Mesa 154), FS 160 -> 146
   (Mesa 153), CS 97 -> 87 (Mesa 92); `wait.ns` 28.34 -> 25.57 ms.
+- **At `dfabc888` (main).** The Pi 4 session of `dfabc888` reports terrain at
+  **34.68 ms a frame (29 FPS)** (record `records/pi4/common-dfabc888/`, not
+  readable when this line was written, so the figure is as that session
+  reported it). #1209's title (terrain slow, 161.8 ms) no longer holds at
+  about 35 ms.
 - **What is left** is "What is left, ranked (current)" below: 25.6 of the
   31.9 ms is the CPU waiting for the GPU jobs (render plus TFU about 27 ms).
   The CPU work outside the waits is about 6 ms. Job 4 (the terrain draw) is
