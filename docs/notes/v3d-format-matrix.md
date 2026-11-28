@@ -7,8 +7,8 @@ question, one row per ES 3.0 sized colour format, every cell with the
 `file:line` that decides it. Nothing here is measured on a board: it is what
 the code at main `434d2695` does, read against Mesa 26.2.1's V3D 4.2 tables.
 No code changed. Two gap entries and the section 2 rows they decide were
-rewritten after that baseline moved: `684ef106` (plan #368) moved G3's
-blend half, and the plan #383 item `v3d-wide-int-rt` closed G2 for the
+rewritten after that baseline moved: `684ef106` (plan #368) and plan #383's
+`v3d-per-rt-mask` / `v3d-per-rt-blend-enable` moved G3, and the plan #383 item `v3d-wide-int-rt` closed G2 for the
 R / RG formats; those entries name their commits, and the `file:line`
 cites inside them and in the section 2 rows they decide are of this
 workspace.
@@ -91,7 +91,7 @@ format can be a colour attachment (`attachment_storage`,
 | SRGB8 | SRGB8_A8, alpha 255 (`texture.rs:5751`) | n/a (not renderable: `framebuffer.rs:505-507` refuses `t.format == GL_RGB` of the class; no RB name) | n/a: incomplete |
 | RGB10_A2 | RGB10A2 (`es3_formats.rs:121-129`) | RGB10_A2 (`framebuffer.rs:729`) | drawn (`framebuffer.rs:425-426`, `:535`); `tests/es3_formats_v3d.rs:1334` |
 | RGB10_A2UI | RGB10A2UI (`es3_formats.rs:130-138`) | RGB10_A2UI (`framebuffer.rs:659`) | drawn (`framebuffer.rs:439`) |
-| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:412`, `WIDE_INT_RT` `:427`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1128`); beside another target the texture is the store's wide surface at attachment 1.. too (`fb_target_n` `:1400`, `tests/es3_v3d_int_rg_mrt_format.rs`) and each RT takes its own mask (`per_target_masks`, `src/gl/draw.rs:2782`), refused by name only under GL_BLEND beside a non-integer target; G2, G3, `tests/es3_v3d_fbo_int_rg.rs` |
+| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:409`, `WIDE_INT_RT` `:428`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1129`); beside another target the texture is the store's wide surface at attachment 1.. too (`fb_target_n` `:1449`, `tests/es3_v3d_int_rg_mrt_format.rs`) and each RT takes its own mask (`per_target_masks`, `src/gl/draw.rs:2814`), integer targets left out of BLEND_ENABLES under GL_BLEND (`760055af3`); G2, G3, `tests/es3_v3d_fbo_int_rg.rs` |
 | RGBA8I, RGBA8UI | RGBA8I / RGBA8UI | own surface | drawn (`framebuffer.rs:433-434`) |
 | R16I, R16UI, RG16I, RG16UI | RGBA16I / RGBA16UI | own surface | drawn as the store's wide surface RGBA16I / RGBA16UI, as `R8I .. RG8UI` above; G2 |
 | RGBA16I, RGBA16UI | RGBA16I / RGBA16UI | own surface | drawn (`framebuffer.rs:435-436`) |
@@ -131,9 +131,11 @@ clear of several colour attachments"` (`backend.rs:6063`), for every row.
 
 **Blend.** The TLB blends in the tile buffer's type
 (`state.rs:681-696`, `v3d_job.c:691-708`). Integer surfaces take no blend:
-`d.blend = c.blend && !gles_surf_is_integer(...)` (`src/gl/draw.rs:4174`,
-ES 3.0 4.1.8). One BLEND_CFG serves every RT, enabled for every RT since
-`684ef106` (`v3d_job.c:696-707`), configured from RT 0 (G3).
+no blend enable (ES 3.0 4.1.8): `d.blend = c.blend && draw_blends_a_target(d)`
+(`src/gl/draw.rs:4451`; with `PER_TARGET_BLEND_ENABLE` `:2772`, gpu-v3d
+without gpu-v3d71, "some written target is not integer", `:2781`).
+BLEND_ENABLES names the RTs that blend (`blend_enables`, `v3d_job.c:690`),
+one BLEND_CFG serves them, configured from RT 0 (G3).
 
 **Read-back** is `glReadPixels` (`src/gl/framebuffer.rs:2969-3148`): float
 surfaces by `read_float_row` (`:3184`, RGBA/UNSIGNED_BYTE clamped or
@@ -331,8 +333,8 @@ same samples through `XYZW`.
     builder, "v3d: a colour write mask per render target, so a wide r/rg
     integer texture draws beside other targets"; the same change is
     `48f6017c` on this branch). `per_target_masks`
-    (`src/gl/draw.rs:2782`, called at `:5285` where `PER_TARGET_MASK`
-    `:2723` holds for `gpu-v3d` only) gives each written target
+    (`src/gl/draw.rs:2814`, called at `:5362` where `PER_TARGET_MASK`
+    `:2758` holds for `gpu-v3d` only) gives each written target
     glColorMask limited to its own channels and, where they differ, sets
     `GlesDraw::per_target_mask` and `target_color_mask`; `job_state`
     (`src/v3d/state.rs:714`) turns them into
@@ -343,9 +345,9 @@ same samples through `XYZW`.
     Where every target takes the same mask nothing is set and the packet
     is the one from before. Uneven masks under glEnable(GL_BLEND) with
     both integer and non-integer targets are drawn too since plan #383
-    item `v3d-per-rt-blend-enable`: BLEND_ENABLES leaves the integer RTs
-    out (`PER_TARGET_BLEND_ENABLE`, `src/gl/draw.rs`); the V3D 7.1 build
-    keeps the refusal (G3).
+    item `v3d-per-rt-blend-enable` (`760055af3`): BLEND_ENABLES leaves the
+    integer RTs out (`PER_TARGET_BLEND_ENABLE`, `src/gl/draw.rs:2772`); the
+    V3D 7.1 build keeps the refusal (G3).
   - *Clears keep the absent channels at 0, 0, 1.* Since `ab0222cf`
     (plan #383 item `v3d-int-clear-narrow`) the GL core narrows a colour
     clear of such a texture before the back end sees it
@@ -385,8 +387,8 @@ same samples through `XYZW`.
   `tests/es3_v3d_int_rg_mrt_mask.rs` (same feature set) decodes the
   COLOR_WRITE_MASKS word the real `v3d_job.c` builds for each format at
   attachment 1 beside RGBA8 and RGBA32UI, at attachment 0 beside RGBA8,
-  under glColorMask subsets, with three targets, and pins the blend
-  refusal. `tests/es3_int_rt.rs`
+  under glColorMask subsets, with three targets, and under GL_BLEND (integer
+  RTs out of BLEND_ENABLES; the destination-alpha refusal of G3). `tests/es3_int_rt.rs`
   `completeness_takes_four_channel_integer_texture_attachments` (`:416`)
   pins the completeness answer at `:423-429`: COMPLETE for R / RG under
   `gpu-powervr` and `gpu-v3d`, INCOMPLETE under `gpu-vivante` (its 8- and
@@ -410,45 +412,60 @@ same samples through `XYZW`.
   `invalidate.format`, `render.recreate_color`, `render.resize` 12
   each. The 8 still incomplete are `invalidate.{sub,whole}.unbind_blit_msaa_*`
   (no integer format). The board counts are the next Pi 4 tree run's.
-- **G3 One blend state and one colour mask for every render target.**
-  When this note was written BLEND_ENABLES carried `mask = 1`, enabling
-  RT 0 only; `684ef106` matched Mesa, which enables every RT when RT 0
-  blends without independent blend (`on.mask = 0xf`, `v3d_job.c:696-698`;
-  Mesa `v3dx_state.c:151-155`, `v3dx_emit.c:528-531`). One BLEND_CFG
-  still serves all four RTs (mask 0xf, `v3d_job.c:699-707`) with RT 0's
-  state: Mesa splits it between RTs with and without alpha when a
-  framebuffer mixes them (`v3dx_emit.c:540-558`, `blend_dst_alpha_one`),
-  yakogl takes the alpha-less rule from the frame target alone
-  (`state.rs:682`), so a framebuffer of an alpha-less and an
-  alpha-bearing RT blends one of them with the wrong destination-alpha
-  factor (a draw's own RTs 1..3 do blend now, under RT 0's config). The
-  colour-mask half is closed by `v3d-per-rt-mask` (`0ebbd507`,
-  `d319c89c`; pinned by `tests/es3_v3d_int_rg_mrt_mask.rs`, which decodes
-  the packet the real `v3d_job.c` builds, and by the beside-a-renderbuffer
-  cases of `tests/es3_v3d_fbo_int_rg.rs`): COLOR_WRITE_MASKS
-  carries a mask per RT where the GL core gives one
-  (`V3dJobState::rt_colormask_own`, `v3d_job.c:773-788`; Mesa packs one
-  per RT with independent blend, `v3dx_emit.c:571-585`), so the G2 draw
-  of an R or RG integer texture beside another target is taken. The
-  application still has one glColorMask (ES 3.0 has no glColorMaski); the
-  per-RT masks only limit it to each target's channels. What remains
-  open is one BLEND_CFG (one blend equation and factor set) for every RT
-  that blends; ES 3.0 has no per-buffer blend state, so it costs nothing
-  in GL terms. BLEND_ENABLES is per RT: `9cccb4ae` made the job builder
-  write `V3dJobState::rt_blend_mask` (integer and 32F RTs left out, Mesa
-  `v3dx_state.c:148-156`), and plan #383 item `v3d-per-rt-blend-enable`
-  made the GL core use it (`PER_TARGET_BLEND_ENABLE`, gpu-v3d without
-  gpu-v3d71): `per_target_masks` no longer refuses uneven masks under
-  glEnable(GL_BLEND) with integer and non-integer targets, and
-  `GlesDraw::blend` is "some written target is not integer"
-  (`draw_blends_a_target`), so an integer attachment 0 beside an RGBA8
-  attachment 1 blends attachment 1. With target 0 not blending,
-  `state::job_state` refuses by name a blend factor reading the
-  destination alpha (DST_ALPHA, ONE_MINUS_DST_ALPHA, SRC_ALPHA_SATURATE):
-  the job state carries only target 0's alpha width. The V3D 7.1 build
-  gives every RT one enable and keeps the refusal. Pinned in
-  `tests/es3_v3d_int_rg_mrt_mask.rs`, `tests/es3_v3d_int_rg_mrt_mask_layers.rs`
-  and `tests/es3_mrt_blend_v3d.rs`; host only, no picture compared.
+- **G3 One BLEND_CFG for every render target; colour mask and blend enable
+  are per RT.** Open only in the BLEND_CFG half. History: BLEND_ENABLES
+  carried `mask = 1` (RT 0 only) when this note was written; `684ef106`
+  made the job builder enable every RT; `9cccb4ae` made it write one enable
+  bit per RT (`V3dJobState::rt_blend_own` / `rt_blend_mask`, integer and 32F
+  RTs left out as Mesa `v3dx_state.c:148-156`, `blend_enables`
+  `v3d_job.c:690`). Closed halves:
+  - *Colour mask per RT* by `v3d-per-rt-mask` (`0ebbd507`, `d319c89c`):
+    COLOR_WRITE_MASKS carries a mask per RT (`rt_colormask_own`,
+    `v3d_job.c:788-797`; Mesa `v3dx_emit.c:571-585`). The application still
+    has one glColorMask (ES 3.0 has no glColorMaski); the per-RT masks limit
+    it to each target's channels. Pinned by
+    `tests/es3_v3d_int_rg_mrt_mask.rs` (decodes the packet the real
+    `v3d_job.c` builds) and `tests/es3_v3d_int_rg_mrt_mask_layers.rs`.
+  - *Blend enable per RT* by `v3d-per-rt-blend-enable` (`760055af3`, "v3d:
+    blend enable per RT reaches the GL core; uneven masks under GL_BLEND
+    are drawn"). With `PER_TARGET_BLEND_ENABLE` (`src/gl/draw.rs:2772`,
+    gpu-v3d without gpu-v3d71) `GlesDraw::blend` means "glEnable(GL_BLEND)
+    and some written target is not integer" (`draw_blends_a_target` `:2781`,
+    `:4451`), not target 0's answer alone: an integer attachment 0 beside an
+    RGBA8 attachment 1 blends attachment 1. `per_target_masks` (`:2814`) no
+    longer refuses uneven masks under GL_BLEND with integer and non-integer
+    targets, and `state::rt_masks` (`src/v3d/state.rs:820`) leaves integer
+    RTs out of BLEND_ENABLES, so a wide R / RG integer texture is never
+    blended. Pinned by `tests/es3_v3d_int_rg_mrt_mask.rs` (the blend case
+    near `:516`), `tests/es3_v3d_int_rg_mrt_mask_layers.rs` and
+    `tests/es3_mrt_blend_v3d.rs` (the unit test of the job state is in
+    `state.rs`, `:1094-1102`); `job_check` part 22 checks the packet. There
+    is no `tests/es3_v3d_int_rg_blend.rs`; the blend cases live in those
+    files. Host only, no picture is compared.
+  Still refused or open:
+  - A blend factor reading the destination alpha (DST_ALPHA,
+    ONE_MINUS_DST_ALPHA, SRC_ALPHA_SATURATE) while target 0 does not blend
+    (an integer target 0 beside a blended one): `state::job_state`
+    (`src/v3d/state.rs:743`) answers "a blend factor reading the destination
+    alpha with target 0 not blending (its alpha width is target 0's, not the
+    blended targets')", because the job state carries only target 0's alpha
+    width. Other factors draw.
+  - One BLEND_CFG (one equation, factor set and constant colour) serves
+    every RT that blends; ES 3.0 has no per-buffer blend state, so that
+    costs nothing in GL terms. What it cannot do is Mesa's split between
+    RTs with and without alpha (`v3dx_emit.c:540-558`,
+    `blend_dst_alpha_one`): the alpha-less rule is taken from target 0
+    alone (`state.rs:746`), so a framebuffer mixing an alpha-less and an
+    alpha-bearing blended RT blends one of them with the wrong
+    destination-alpha factor. A BLEND_CFG per target (ES 3.2 per-target
+    blend state) is not built.
+  - The V3D 7.1 build (`src/v3d/glue71.rs`) gives every target one blend
+    enable, so it keeps the uneven-mask-under-GL_BLEND refusal
+    (`per_target_masks`, the "draw refused: colour masks ... one blend
+    enable for every target" log, GL_INVALID_OPERATION).
+  Host dEQP-GLES3 `fbo` and `fragment_ops` figures before and after this
+  commit are the `deqp-v3d-postblend` item's, not repeated here. The next
+  Pi 4 tree run decides on the board.
 - **G4 The clear quad does not clamp a fixed-point clear colour.** The TLB
   path clamps for sRGB and RGB10_A2 (`state.rs:529-539`); the quad hands
   `clear_rgba` to the float program (`backend.rs:5546-5552`), and `glClearColor`
