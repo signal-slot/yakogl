@@ -393,3 +393,40 @@ run by `cargo test -p yakogl-drivers` (the gate's drivers rows). New tests:
   selector (`PERF_SEL` 0x1000).
 - The cluster's `throughput:` line from RATE has no `draw ... ms mean`
   part: that is PERF page 0's value, a second boot if it is ever wanted.
+
+## While the Verdin is away: the common set on the Armadillo-X2
+
+The Verdin i.MX8MP has been off the farm since 2026-11-16 (farm rule of
+2026-11-27). The i.MX8MP common set (GM: glmark2-es2 800x600, 33 scenes;
+GT: gl_test, `tools/cts/common-tree.txt`) is taken on the Armadillo-X2
+instead: same SoC and GPU (GC7000UL). The X2 is a stand-in, not a stage-2
+board; its numbers say so everywhere they are recorded.
+
+- **Runner.** `tools/cts/x2-common.sh --commit <rev>` (`--dry-run` prints the
+  commit, the directories and the commands; `--self-test` needs no board).
+  `<rev>` must be an ancestor of origin/main. Images are built only from a
+  worktree checked out at that commit (one build for GM, one for GT, each
+  refused unless it prints `gc_wdog_arm: armed`), never from the working
+  tree. The rows run through the worktree's `tools/board.sh x2 tree`; the
+  script stages nothing on the board's disks. The board host, console and
+  workspace paths come from the environment (see the script's header), never
+  from a file. Records are redacted before they are kept.
+- **Record directory.** `records/imx8mp/common-<sha8>/` (gitignored): the
+  `tree.txt`, the GM and GT directories (`meta.txt`, `INDEX.txt`,
+  `console.txt`), `ms-per-scene.tsv`, `tally.txt`, `x2-common.log` and the
+  file `measured-on`, whose first line is `measured-on: armadillo-x2`.
+  That is the path `common-row.py` and `one-commit-docs.py` read, the same
+  as for a Verdin record.
+- **Dated copy.** `records/imx8mp/<YYYYMMDD-HHMM>-x2-common-<sha8>/` is a copy
+  of the same files, and is the directory a RESULTS row or an issue comment
+  cites. A record directory that exists is never overwritten.
+- **Labelling.** `measured-on` and the records' `meta.txt`
+  (`board_measured=Armadillo-X2`) carry the board. `one-commit-docs.py` reads
+  `measured-on` and writes "measured on the Armadillo-X2" into the i.MX8MP
+  row of each doc it edits; `readme-glmark2-check.py` accepts an i.MX8MP row
+  that cites a dated record only when its text says so. Say "measured on the
+  X2" in every record, note and comment that quotes these figures; never
+  present them as Verdin figures.
+- **Per-scene pictures.** The per-scene SNVS record described above is the
+  Verdin's route (no console); on the X2 the per-scene figures come from the
+  GM console (`ms-per-scene.tsv`).
