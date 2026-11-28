@@ -755,6 +755,12 @@ enum Outcome {
     /// The renderbuffer storage is refused (`GL_INVALID_ENUM`), so the
     /// framebuffer is incomplete.
     NotRenderable,
+    /// Attachment 3 takes two output registers and does not fit beside
+    /// three RGBA8 targets: `GL_FRAMEBUFFER_UNSUPPORTED` (item pvr-budget-fb,
+    /// plan #368, the budget of tests/es3_mrt4_budget_pvr.rs), and a draw or
+    /// clear is `GL_INVALID_FRAMEBUFFER_OPERATION`. Before it the frame was
+    /// complete and drawn as three targets, attachment 3 not emitted.
+    OverBudget,
 }
 
 use Outcome::*;
@@ -792,9 +798,10 @@ const ROWS: [(GLenum, &str, u8, Outcome, bool); 25] = [
     (GL_R11F_G11F_B10F, "R11F_G11F_B10F", GLES_SURF_RGBA8888, NotRenderable, true),
     /* RG16F is kept as four halves (the GL core hands RGBA16F over): two
      * registers, so it does NOT fit beside three RGBA8 targets in four
-     * (pvr-budget4-test's): drawn as three targets, attachment 3 not
-     * emitted, where the one-register rows draw four */
-    (GL_RG16F, "RG16F", GLES_SURF_RGBA16F, Draws, false),
+     * (pvr-budget4-test's): GL_FRAMEBUFFER_UNSUPPORTED since item
+     * pvr-budget-fb (before it, drawn as three targets, attachment 3 not
+     * emitted), where the one-register rows draw four */
+    (GL_RG16F, "RG16F", GLES_SURF_RGBA16F, OverBudget, false),
     (GL_RGB565, "RGB565", GLES_SURF_RGBA8888, Draws, true),
     (GL_RGBA4, "RGBA4", GLES_SURF_RGBA8888, Draws, true),
     (GL_RGB5_A1, "RGB5_A1", GLES_SURF_RGBA8888, Draws, true),
@@ -834,8 +841,9 @@ fn four_draw_buffers_are_offered() {
 }
 
 /// Completeness and the surface the GL core hands over for attachment 3, for
-/// each format: every name but GL_R11F_G11F_B10F is a complete framebuffer
-/// beside RGBA8 on 0-2.
+/// each format: every name but GL_R11F_G11F_B10F (not renderable) and
+/// GL_RG16F (past the four output registers, GL_FRAMEBUFFER_UNSUPPORTED, its
+/// draw and clears refused) is a complete framebuffer beside RGBA8 on 0-2.
 #[test]
 fn completeness_and_surface_of_attachment_3() {
     let _g = rig();
@@ -844,6 +852,14 @@ fn completeness_and_surface_of_attachment_3() {
         if outcome == NotRenderable {
             assert_eq!(f.build_err, GL_INVALID_ENUM, "{name}: storage");
             assert_eq!(f.status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{name}: status");
+            continue;
+        }
+        if outcome == OverBudget {
+            assert_eq!(f.build_err, GL_NO_ERROR, "{name}: building");
+            assert_eq!(f.status, GL_FRAMEBUFFER_UNSUPPORTED, "{name}: status");
+            assert_eq!(drawn(class_of(internal)).err(), Some(GL_INVALID_FRAMEBUFFER_OPERATION), "{name}: draw");
+            assert!(KICKS.lock().unwrap().is_empty(), "{name}: no kick");
+            assert_eq!(clear_and_read(internal).0, GL_INVALID_FRAMEBUFFER_OPERATION, "{name}: clear");
             continue;
         }
         assert_eq!(f.build_err, GL_NO_ERROR, "{name}: building");
@@ -865,9 +881,10 @@ fn completeness_and_surface_of_attachment_3() {
 /// pins its state). The end-of-tile data always carries four pairs (the
 /// driver's four-pair program, `pvr::backend::eot_four_rt`). RG16F, kept as
 /// four halves, takes two registers and does not fit beside three RGBA8
-/// targets: it is not emitted (three PBE states, the fourth pair zero), as
-/// pvr-budget4-test's budget says. Before pvr-backend every row came to
-/// three states (`num_targets` clamped to three).
+/// targets: it was drawn short (three PBE states, the fourth pair zero)
+/// until item pvr-budget-fb made it GL_FRAMEBUFFER_UNSUPPORTED (`OverBudget`,
+/// not drawn here). Before pvr-backend every row came to three states
+/// (`num_targets` clamped to three).
 #[test]
 fn four_pbe_states_reach_the_hardware() {
     let _g = rig();
@@ -920,7 +937,7 @@ fn integer_attachment_3_is_refused_by_name_today() {
 fn clear_buffer_and_read_of_attachment_3() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
-        if outcome == NotRenderable {
+        if outcome == NotRenderable || outcome == OverBudget {
             continue;
         }
         let _f = Fbo::new(internal);
