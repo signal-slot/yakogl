@@ -17,7 +17,7 @@
 
 set -u
 export LC_ALL=C
-unset MESA_ETNA_TREE
+unset MESA_ETNA_TREE MESA_ETNA_JOBS
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -120,6 +120,16 @@ if [ "$rc" -eq 0 ] && [ ! -e "$TMP/dry" ] &&
 	pass
 else
 	fail "--dry-run (rc=$rc, wrote: $([ -e "$TMP/dry" ] && echo yes || echo no))"
+fi
+# MESA_ETNA_JOBS: ninja's -j in both builds; a value that is not a count is
+# refused before any step.
+MESA_ETNA_JOBS=3 run "$BUILD" --dry-run "$TMP/dry"
+if [ "$rc" -eq 0 ] && [ "$(grep -c 'ninja -j 3 -C ' "$TMP/out")" -eq 2 ]; then pass; else fail "--dry-run with MESA_ETNA_JOBS=3 (rc=$rc)"; fi
+MESA_ETNA_JOBS=many run "$BUILD" --dry-run "$TMP/dry"
+if [ "$rc" -eq 64 ] && grep -q "MESA_ETNA_JOBS 'many' is not a count" "$TMP/err" && [ ! -s "$TMP/out" ]; then
+	pass
+else
+	fail "MESA_ETNA_JOBS=many (rc=$rc)"
 fi
 run "$BUILD" --dry-run "$TMP/good"
 if [ "$rc" -eq 0 ] && grep -q 'nothing to do' "$TMP/out"; then pass; else fail "--dry-run on a complete tree (rc=$rc)"; fi

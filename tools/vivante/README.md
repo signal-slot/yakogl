@@ -764,8 +764,13 @@ comparison against `testdata/hwdb-compare-st-6205.txt`, and the signature of
 modes 1, 8 and 15 on the two shim rows. Exit 0 pass, 1 mismatch, 2 gap (no
 tree: the check was not run), 64 usage. `gate_st_selftest.sh` checks the
 script without a tree. The gate (`tools/check.sh`, Vivante scope) runs the
-self-test only: the dependency layout carries no etnaviv Mesa tree, so the
-two checks would be a gap on every runner, and they are run by hand.
+self-test and both checks as rows. They use `MESA_ETNA_TREE` when it is set,
+or the layout's tree when `tools/cts/deps-env.sh --present` finds it complete.
+Without either, a build row runs `mesa-etna-build.sh` under the dependency
+layout first (about 8 minutes on 4 cores, once per machine; a no-op once the
+tree matches the checkout's inputs) and the two checks wait for it. Only a
+run that reaches the Vivante scope builds it. The script's exit 2 (a tree it
+finds incomplete, as after a build that failed) makes the row a gap.
 
 `gate_st_table.sh` (no arguments) is the third host check of the ST row: it
 runs `gen_shader_table.py --st --check`, which regenerates
@@ -797,7 +802,10 @@ absolute paths). `--dry-run [<dir>]` prints the steps and changes nothing;
 complete tree, else exits 2 with a `gap:` line, which is a gap and not a pass;
 `--marker` prints the expected marker. `tools/cts/deps-env.sh --present` adds
 `MESA_ETNA_TREE` to its output when that `--check` of the layout's tree
-passes, so a host without the tree sees it unset.
+passes, so a host without the tree sees it unset. `MESA_ETNA_JOBS=<n>` is
+ninja's `-j` (the gate's build row sets it to its compiler slots). A second
+build of the same directory waits for the first one's lock (up to an hour)
+and then finds the tree complete.
 
 ### A tile-status fast clear: mode 29 and `testdata/ts-clear.golden`
 

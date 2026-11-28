@@ -22,6 +22,10 @@ unset MESA_PAN_TREE
 # And DEQP_GLES3_TEST_DIR: without the corpus the shaderc rows carry a gap
 # naming it; the plans below are made without it.
 unset DEQP_GLES3_TEST_DIR
+# And MESA_ETNA_TREE: without it a build row makes the layout's tree before
+# the gate_st.sh hwdb and golden rows; the plans below are made without it
+# (one names it itself).
+unset MESA_ETNA_TREE
 # check.sh fills an unset input from the dependency layout (tools/cts/deps.toml),
 # which would bring every variable above back on a host that has one: the plans
 # are made with no layout (a directory that does not exist).
@@ -347,14 +351,35 @@ checks=$((checks + 1))
 ! printf '%s\n' "$out" | grep -qE '^(plan|ok) +zephyr  stm32mp257f_dk' ||
   { echo "FAIL stm32mp257f_dk without ZEPHYR_WS: an image row is planned"; fails=$((fails + 1)); }
 # its GPU row's host check: the gate_st.sh self-test (no Mesa tree), planned
-# on a change of the script; the script's hwdb and golden checks need
-# MESA_ETNA_TREE, which no runner's layout has, so they are no rows
+# on a change of the script; its hwdb and golden checks read MESA_ETNA_TREE:
+# without one, a build row makes the layout's tree first and both checks are
+# planned after it, never a gap; with one named, there is no build row. Each
+# input of the checks, and the script that makes the tree, reaches all of them.
 out=$(plan tools/vivante/gate_st.sh)
-checks=$((checks + 1))
-! printf '%s\n' "$out" | grep -qE 'gate_st\.sh (hwdb|golden)' ||
-  { echo "FAIL gate_st: a row runs a check that needs MESA_ETNA_TREE"; fails=$((fails + 1)); }
 expect "gate_st: the self-test row" '^plan  tools   tools/vivante/gate_st_selftest.sh \(no Mesa tree\)$' "$out"
 expect "gate_st: the Vivante scope only" '^check.sh: .*\(--changed HEAD, scopes: vivante \)' "$out"
+for p in tools/vivante/gate_st.sh tools/vivante/hwdb_compare.py tools/vivante/cs_golden.c \
+  tools/vivante/mesa-cs-golden.patch tools/vivante/testdata/hwdb-compare-st-6205.txt \
+  tools/vivante/mesa-etna-build.sh; do
+  out=$(plan "$p")
+  expect "gate_st without MESA_ETNA_TREE: $p plans the tree's build row" \
+    '^plan  build   vivante Mesa 26.2.1 etnaviv tree \(tools/vivante/mesa-etna-build.sh\)$' "$out"
+  for sub in hwdb golden; do
+    expect "gate_st $sub without MESA_ETNA_TREE: $p plans the row" \
+      "^plan  tools   tools/vivante/gate_st\.sh $sub \(MESA_ETNA_TREE\)$" "$out"
+    checks=$((checks + 1))
+    ! printf '%s\n' "$out" | grep -qE "^gap +tools   tools/vivante/gate_st\.sh $sub" ||
+      { echo "FAIL gate_st $sub without MESA_ETNA_TREE ($p): the row is a gap"; fails=$((fails + 1)); }
+  done
+  out=$(MESA_ETNA_TREE=$PWD/build/check/plan-etna plan "$p")
+  checks=$((checks + 1))
+  ! printf '%s\n' "$out" | grep -qE 'vivante Mesa 26\.2\.1 etnaviv tree' ||
+    { echo "FAIL gate_st with MESA_ETNA_TREE ($p): the tree's build row is planned"; fails=$((fails + 1)); }
+  for sub in hwdb golden; do
+    expect "gate_st $sub with MESA_ETNA_TREE: $p plans the row" \
+      "^plan  tools   tools/vivante/gate_st\.sh $sub \(MESA_ETNA_TREE\)$" "$out"
+  done
+done
 out=$(plan tools/probes/rpi_5/rpi5_hello/src/main.c)
 expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
 expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"
