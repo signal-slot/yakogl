@@ -78,24 +78,46 @@ pub mod rgpio {
 }
 
 /// FrameGen0's sequence complete: display stream 0's `DisEngCfg` "sequence
-/// complete 0" status, bit 20 of the DPU's `IRQ_INTERRUPTSTATUS0` (cleared
-/// by writing it to `IRQ_INTERRUPTCLEAR0`). It sets when FrameGen0 has
-/// finished the frame it was running after `FGENABLE` is cleared: the
-/// disable is done and the pixel clock may go. i.MX 95 Applications
-/// Processor Reference Manual, the Display Processing Unit chapter (the
-/// FrameGen unit's shut-down and the interrupt controller's group 0
-/// table); the bit position is hal_nxp's BSD-3 `drivers/dpu_1/fsl_dpu.h`
-/// `kDPU_Group0DiSengcfgSeqComplete0Interrupt` = `1U << 20U`, in the list
-/// the i.MX 95 builds (no `FSL_FEATURE_DISPLAY_SEERIS_MDR7`). The
-/// FrameGen0 status word `FGENSTS` itself has only `EnSts` (bit 0) and
-/// `PanicStat` (bit 1); its `EnSts` is what read 1 on the board after the
-/// two-frame wait. Linux (`dc_crtc_atomic_disable`, NXP's
-/// `dpu95_crtc_disable`) waits for this event before it lets the pixel
-/// clock go; here it is polled, as `dpu::wait_flip` polls bit 3.
+/// complete 0", bit 20 of an interrupt block's group 0 words (NXP's
+/// `dpu95.h` `DPU95_IRQ_DISENGCFG_SEQCOMPLETE0` = 20; hal_nxp's BSD-3
+/// `drivers/dpu_1/fsl_dpu.h` `kDPU_Group0DiSengcfgSeqComplete0Interrupt` =
+/// `1U << 20U`). It sets when FrameGen0 has finished the frame it was
+/// running after `FGENABLE` is cleared: the disable is done and the pixel
+/// clock may go. The FrameGen0 status word `FGENSTS` itself has only
+/// `EnSts` (bit 0) and `PanicStat` (bit 1).
+///
+/// Linux takes this event from the display engine 0 interrupt block
+/// ([`DISP_IRQ0`]), not from the common-control block at DPU + 0x1000
+/// (`IRQ_INTERRUPTSTATUS0`, the one `dpu::wait_flip` polls): NXP's
+/// `dpu95-core.c` maps `comctrl_irq_reg` at `dpu_base + 0x1000` for the
+/// software interrupts only and `disp_irq0_reg` at `dpu_base + 0x381000`
+/// for `DPU95_IRQ_DISENGCFG_SEQCOMPLETE0` (`dpu95_dec_seqcomplete0_irq_handler`
+/// -> `dpu95_disp_irq0_handle`). The board check after 211ed16a polled the
+/// common-control word for 1 s and never saw the bit.
 pub const SEQ_COMPLETE0: u32 = 1 << 20;
 /// How long [`display_down`] waits for [`SEQ_COMPLETE0`]: Linux's 1 s
-/// (`HZ`), polled every `dpu::POLL_STEP_US`.
+/// (`HZ`, `DPU95_CRTC_WAIT_FOR_COMPLETION_TIMEOUT`), polled every
+/// `dpu::POLL_STEP_US`.
 pub const SEQ_COMPLETE_BUDGET_US: u32 = 1_000_000;
+
+/// The display engine 0 interrupt block, from the DPU's base: hal_nxp's
+/// BSD-3 `PERI_DISPLAY_SEERIS.h` for the i.MX 95 (`DISPIRQ0_LOCKUNLOCK`,
+/// offset 0x381000) and NXP's `dpu95-core.c` (`disp_irq0_reg =
+/// devm_ioremap(dev, dpu_base + 0x381000, SZ_64)`). The generated
+/// `regs::display_seeris` does not carry this block, so its three words
+/// are written here, in [`disp_irq`]. Nothing else of ours uses it.
+pub const DISP_IRQ0: u32 = 0x38_1000;
+
+/// The words of an interrupt block, group 0, from the block's base
+/// (`PERI_DISPLAY_SEERIS.h` `DISPIRQ0_*`; NXP's `dpu95.h`
+/// `INTERRUPTENABLE(n)` 0x8, `INTERRUPTCLEAR(n)` 0x20,
+/// `INTERRUPTSTATUS(n)` 0x2c). `INTERRUPTCLEAR0` is write-only (`__O`),
+/// `INTERRUPTSTATUS0` read-only (`__I`), `INTERRUPTENABLE0` read-write.
+pub mod disp_irq {
+    pub const INTERRUPTENABLE0: u32 = 0x08;
+    pub const INTERRUPTCLEAR0: u32 = 0x20;
+    pub const INTERRUPTSTATUS0: u32 = 0x2c;
+}
 
 /// The backlight as Linux runs it (module text): TPM5 channel 0, 150 Hz,
 /// low-true, 119 of 255.
@@ -142,9 +164,11 @@ pub enum Error {
     Display(display::Error),
     /// The down: FrameGen0's [`SEQ_COMPLETE0`] did not set within
     /// `waited_us` after `FGENABLE` was cleared; `irq` is the last
-    /// `IRQ_INTERRUPTSTATUS0`, `fg` FrameGen0's state then. The LDB's clocks
-    /// and the display's power were left on.
-    SeqTimeout { waited_us: u32, irq: u32, fg: dpu::FgStatus },
+    /// [`DISP_IRQ0`] `INTERRUPTSTATUS0`, `comctrl` the common-control
+    /// block's `IRQ_INTERRUPTSTATUS0` then (for the record), `fg`
+    /// FrameGen0's state. The LDB's clocks and the display's power were left
+    /// on.
+    SeqTimeout { waited_us: u32, irq: u32, comctrl: u32, fg: dpu::FgStatus },
     /// TPM5's clock over SCMI: the message (CLOCK_CONFIG_SET 0x07 or
     /// CLOCK_RATE_GET 0x06) and what came back; the picture is up, dark.
     BacklightClock { msg: u8, fault: Fault },
@@ -230,13 +254,28 @@ pub fn display_up<T: Transport>(t: &mut T, m: &impl Mmio, env: &impl Env, cfg: &
 }
 
 /// The backlight off, FrameGen0 stopped, the LDB down, then stream 0 and the
-/// display's power (the LDB PLL and DISPLAY). FrameGen0 ends the frame it is
-/// running after `FGENABLE` is cleared, and the pixel clock comes through
-/// the LDB, so the LDB's clocks stay until FrameGen0 reports its sequence
-/// complete ([`SEQ_COMPLETE0`], up to [`SEQ_COMPLETE_BUDGET_US`], as Linux
-/// waits before its bridge disable) and then reads stopped (`FGENSTS`). When
-/// the sequence does not complete nothing more is touched: the LDB and the
-/// power stay on and [`Error::SeqTimeout`] comes back. When it completes but
+/// display's power (the LDB PLL and DISPLAY).
+///
+/// FrameGen0 is stopped as Linux stops it (NXP's `dpu95-crtc.c`
+/// `dpu95_crtc_disable`; upstream `dc-crtc.c` `dc_crtc_atomic_disable` has
+/// the same steps for the i.MX 8QXP):
+/// 1. `enable_irq(dec_seq_complete_irq)`: [`SEQ_COMPLETE0`] enabled in the
+///    display engine 0 interrupt block ([`DISP_IRQ0`]), a stale one cleared
+///    first;
+/// 2. `dpu95_fg_disable`: `FGENABLE` = 0 and nothing else, no `FGSLR`
+///    shadow token (Linux writes that token only in `atomic_flush`, with
+///    the ExtDst and DomainBlend ones, never at the disable);
+/// 3. `DPU95_CRTC_WAIT_FOR_COMPLETION_TIMEOUT(dec_seq_complete_done)`: the
+///    bit polled in that block's `INTERRUPTSTATUS0`, up to
+///    [`SEQ_COMPLETE_BUDGET_US`], then cleared;
+/// 4. `disable_irq`: the bit masked again;
+/// 5. `dpu95_fg_disable_clock`: only then the pixel clock (the LDB) goes.
+///
+/// FrameGen0 ends the frame it is running after `FGENABLE` is cleared, and
+/// the pixel clock comes through the LDB, so the LDB's clocks stay until the
+/// sequence completes and FrameGen0 reads stopped (`FGENSTS`). When the
+/// sequence does not complete nothing more is touched: the LDB and the power
+/// stay on and [`Error::SeqTimeout`] comes back. When it completes but
 /// FrameGen0 still reads running, the LDB is still brought down and the
 /// first error is returned; the power stays on then.
 pub fn display_down<T: Transport>(
@@ -249,12 +288,25 @@ pub fn display_down<T: Transport>(
     backlight_off(t, m, cfg)?;
     let mut delay = |us: u32| env.busy_wait_us(us);
     let base = cfg.display.dpu;
-    let status = base + r::IRQ_INTERRUPTSTATUS0 as usize;
-    let clear = base + r::IRQ_INTERRUPTCLEAR0 as usize;
-    // a sequence complete left from before is not this stop's
+    let irq0 = base + DISP_IRQ0 as usize;
+    let enable = irq0 + disp_irq::INTERRUPTENABLE0 as usize;
+    let clear = irq0 + disp_irq::INTERRUPTCLEAR0 as usize;
+    let status = irq0 + disp_irq::INTERRUPTSTATUS0 as usize;
+    // 1: a sequence complete left from before is not this stop's; the event
+    // enabled as Linux's enable_irq leaves it (nothing else of ours is
+    // enabled in this block, so the word is written, not read back)
     m.write32(clear, SEQ_COMPLETE0);
-    dpu::stop(m, base);
-    // FrameGen0's sequence complete, polled as dpu's waits poll
+    m.write32(enable, SEQ_COMPLETE0);
+    // 2: FrameGen0 off, no shadow token
+    m.write32(base + r::DISENG_FRAMEGEN0_FGENABLE as usize, 0);
+    ylog!(
+        env,
+        Inf,
+        "verdin-imx95 LVDS down: FGENABLE 0 (no FGSLR token), waiting up to {} us for SeqComplete0 in DISPIRQ0 (DPU+{:#x} bit 20)",
+        SEQ_COMPLETE_BUDGET_US,
+        DISP_IRQ0 + disp_irq::INTERRUPTSTATUS0
+    );
+    // 3: FrameGen0's sequence complete, polled as dpu's waits poll
     let mut waited = 0;
     loop {
         let irq = m.read32(status);
@@ -263,22 +315,28 @@ pub fn display_down<T: Transport>(
             break;
         }
         if waited >= SEQ_COMPLETE_BUDGET_US {
+            // 4 also on the way out
+            m.write32(enable, 0);
+            let comctrl = m.read32(base + r::IRQ_INTERRUPTSTATUS0 as usize);
             let fg = dpu::fg_status(m, base);
             ylog!(
                 env,
                 Err,
-                "verdin-imx95 LVDS down: no SeqComplete0 in {} us (INTERRUPTSTATUS0 {:#010x}, FGENABLE {} FGENSTS {:#x} FGCHSTAT {:#x}); the LDB and the power stay on",
+                "verdin-imx95 LVDS down: no SeqComplete0 in {} us (DISPIRQ0 INTERRUPTSTATUS0 {:#010x}, COMCTRL IRQ_INTERRUPTSTATUS0 {:#010x}, FGENABLE {} FGENSTS {:#x} FGCHSTAT {:#x}); the LDB and the power stay on",
                 waited,
                 irq,
+                comctrl,
                 fg.fgenable,
                 fg.fgensts,
                 fg.fgchstat
             );
-            return Err(Error::SeqTimeout { waited_us: waited, irq, fg });
+            return Err(Error::SeqTimeout { waited_us: waited, irq, comctrl, fg });
         }
         delay(dpu::POLL_STEP_US);
         waited += dpu::POLL_STEP_US;
     }
+    // 4: masked again
+    m.write32(enable, 0);
     let stopped = dpu::wait_stopped(m, base, display::STOP_WAIT_US, &mut delay).map_err(display::Error::NotStopped);
     ylog!(
         env,
@@ -292,6 +350,7 @@ pub fn display_down<T: Transport>(
             Err(_) => 0,
         }
     );
+    // 5: the pixel clock goes
     ldb::down(m, cfg.ldb);
     // the pixel link off, the power; no second wait when the first failed
     match stopped {
