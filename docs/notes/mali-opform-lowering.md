@@ -366,3 +366,39 @@ at "a fragment varying load or conversion"; `rnd_splat18` at
   Mesa's per-read narrowing (section 5's note). `deqp_intrnd_dead_cond_fs`
   (`Mk@MulB` under a uniform's word, byte-equal with the gate off) is left
   to its own test's owner (`tests/mali_deqp_intrnd.rs`).
+
+## 10. Landed (plan #387, item `mali-train-3c`)
+
+HOST-ONLY: byte-compares against the Mesa references, no board run.
+
+### O4 (class MM)
+
+The rule the two references and three of `deqp_highpfs_pt_*` draw, in
+`nir_fs.rs`:
+
+- **Lanes of different conversions stay one lane each** (`split_minmax`,
+  the `min`/`max` form of `split_sum`): `min(v_in0.zxy, v_in1.yzx)` is
+  three `FMIN.v2f16` of one lane, and the colour's word is their `vec2`
+  (`Leaf::Pack`). `mates` no longer pairs two such lanes.
+- **Two lanes that share an aligned pair are one operation** (`mates`'
+  `shared` for an `fmin`/`fmax`: two lanes of one varying only in one
+  aligned pair of its components): `max(v_in0.zxy, v_in1.x)` pairs y and
+  z, the varying's x and y (`FMAX.v2f16 r1, r1^, r0.h00`), and leaves x
+  alone.
+- **A lane beside one that is paired with a third is packed**
+  (`mated_apart`): the `min` of x and y after that `max` reads
+  `MKVEC.v2i16 r0, r0^.h0, r1.h0`. The gate admits `Mk@AbsSrc` for this
+  form alone (a `vec2` of lanes computed apart as the first source of a
+  `min` or `max`); `abs` of a pair stays out.
+- **The bound may be one varying lane in both halves** (`Form::Splat`),
+  not only a constant pair.
+- A half of a two-lane operation in a `MKVEC.v2i16` is read at its own
+  half (`lane_srcs` and the `Leaf::Pack` operand: `MKVEC.v2i16 r1,
+  r1^.h1, u2.w0.h0`); it was read at `.h0`, which made
+  `deqp_highpfs_pt_min_vec3_float` compile with one wrong word before
+  this was fixed in the same step.
+
+Byte-equal now: `deqp_opform_min_vec3`, `deqp_opform_clamp_vec3_float`,
+`deqp_highpfs_pt_clamp_vec3`, `deqp_highpfs_pt_min_vec3`,
+`deqp_highpfs_pt_min_vec3_float`. `--lib mali::` and every
+`tests/mali_*.rs`: 1,410 passed, 0 failed.

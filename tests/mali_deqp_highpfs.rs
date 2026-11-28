@@ -29,8 +29,18 @@ mod mali_ref;
 
 /// The references that compile byte-equal at the tip, without the
 /// `deqp_highpfs_` prefix (the pair-tree forms step 4a already covers).
-const LOWERED: &[&str] =
-    &["pt_add_assign_vec3", "pt_add_vec3", "pt_mul_float_vec4", "pt_sub_assign_vec3", "pt_sub_vec3"];
+/// `pt_clamp_vec3`, `pt_min_vec3` and `pt_min_vec3_float` since plan #387
+/// mali-train-3c (opform O4, the note's step PT1's `min`/`max`/`clamp`).
+const LOWERED: &[&str] = &[
+    "pt_add_assign_vec3",
+    "pt_add_vec3",
+    "pt_mul_float_vec4",
+    "pt_sub_assign_vec3",
+    "pt_sub_vec3",
+    "pt_clamp_vec3",
+    "pt_min_vec3",
+    "pt_min_vec3_float",
+];
 
 /// The references that compile with other words than Mesa's (hazards): the
 /// mediump `vec3 * float` product, whose halves are paired and placed in
@@ -74,10 +84,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("pt_add_vec4", FORM),
     ("pt_add_vec4_float", FORM),
     ("pt_clamp_vec2_float_float", FORM),
-    ("pt_clamp_vec3", OPERAND),
     ("pt_max_vec4", FORM),
-    ("pt_min_vec3", OPERAND),
-    ("pt_min_vec3_float", OPERAND),
     ("pt_mul_assign_vec3", OPERAND),
     ("pt_mul_vec3", OPERAND),
     ("pt_mul_vec4", FORM),
@@ -411,7 +418,6 @@ fn pt_clamp_vec2_float_float() {
 
 /// `dEQP-GLES2.functional.shaders.operator.common_functions.clamp.mediump_vec3_fragment` (step PT1).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn pt_clamp_vec3() {
     mali_ref::assert_matches("deqp_highpfs_pt_clamp_vec3");
 }
@@ -425,14 +431,12 @@ fn pt_max_vec4() {
 
 /// `dEQP-GLES2.functional.shaders.operator.common_functions.min.mediump_vec3_fragment` (step PT1).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn pt_min_vec3() {
     mali_ref::assert_matches("deqp_highpfs_pt_min_vec3");
 }
 
 /// `dEQP-GLES2.functional.shaders.operator.common_functions.min.mediump_vec3_float_fragment` (step PT1).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn pt_min_vec3_float() {
     mali_ref::assert_matches("deqp_highpfs_pt_min_vec3_float");
 }

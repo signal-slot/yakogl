@@ -10537,7 +10537,28 @@ fn sums_pair(f: &Fs<'_>, sa: &[Val; 3], sb: &[Val; 3]) -> bool {
 /// or with another sum of the colour ([`sums_pair`]; deqp_arith_op_binary_add's
 /// `in0 + in1.yzx` pairs x with z, which stays refused).
 fn split_sum(f: &Fs<'_>, a: Val, b: Val) -> Result<bool, MaliError> {
-    let (Some((Alu::Fadd, sa)), Some((Alu::Fadd, sb))) = (f.alu_of(a), f.alu_of(b)) else { return Ok(false) };
+    split_op(f, a, b, Alu::Fadd)
+}
+
+/// [`split_sum`] of two `min`s or two `max`es: the same rule
+/// (deqp_opform_min_vec3's `min(v_in0.zxy, v_in1.yzx)`, `FMIN.v2f16 r1,
+/// r1^.h00, r2.h11` per lane, then `MKVEC.v2i16 r1, r1^.h0, r3^.h0`). A
+/// lane that pairs with another of the colour (a scalar bound,
+/// deqp_opform_clamp_vec3_float's `FMAX.v2f16 r1, r1^, r0.h00` of y and
+/// z) stays refused.
+fn split_minmax(f: &Fs<'_>, a: Val, b: Val) -> Result<bool, MaliError> {
+    match (f.alu_of(a), f.alu_of(b)) {
+        (Some((op @ (Alu::Fmin | Alu::Fmax), _)), Some((o2, _))) if o2 == op => split_op(f, a, b, op),
+        _ => Ok(false),
+    }
+}
+
+/// [`split_sum`] for operation `want` (`fadd`, `fmin` or `fmax`).
+fn split_op(f: &Fs<'_>, a: Val, b: Val, want: Alu) -> Result<bool, MaliError> {
+    let (Some((oa, sa)), Some((ob, sb))) = (f.alu_of(a), f.alu_of(b)) else { return Ok(false) };
+    if oa != want || ob != want {
+        return Ok(false);
+    }
     if a == b || !(split_lanes(f, sa[0], sb[0])? || split_lanes(f, sa[1], sb[1])?) || sums_pair(f, &sa, &sb) {
         return Ok(false);
     }
@@ -10556,7 +10577,7 @@ fn split_sum(f: &Fs<'_>, a: Val, b: Val) -> Result<bool, MaliError> {
         seen += 1;
         let c = stack[n];
         let Some((op, sc)) = f.alu_of(c) else { continue };
-        if op == Alu::Fadd && ((c != a && sums_pair(f, &sa, &sc)) || (c != b && sums_pair(f, &sb, &sc))) {
+        if op == want && ((c != a && sums_pair(f, &sa, &sc)) || (c != b && sums_pair(f, &sb, &sc))) {
             return Ok(false);
         }
         for &s in &sc[..op.arity()] {
@@ -10567,6 +10588,15 @@ fn split_sum(f: &Fs<'_>, a: Val, b: Val) -> Result<bool, MaliError> {
         }
     }
     Ok(true)
+}
+
+/// One of lanes `a` and `b` is paired by [`mates`] with a lane that is not
+/// the other: the two are no operation of two lanes.
+fn mated_apart(pr: &Pairs, a: Val, b: Val) -> bool {
+    let (Val::Lane(na, _), Val::Lane(nb, _)) = (a, b) else { return false };
+    let mate = |n: u16| pr.mate.get(n as usize).copied().flatten();
+    let other = |n: u16, o: u16| mate(n).is_some_and(|(lo, hi)| lo != o && hi != o);
+    other(na, nb) || other(nb, na)
 }
 
 /// Lanes `a` and `b`, one word of the colour, are sums, products and
@@ -10987,12 +11017,33 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
             let y = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
             P::Op(Alu::Fmul, [x, y, 0])
         }
+        /* a `min` or `max` whose two lanes read varying lanes of different
+         * conversions: each one lane, the word their `vec2`
+         * ([`split_minmax`]) */
+        (Some((Alu::Fmax | Alu::Fmin, _)), Some(_)) if split_minmax(f, a, b)? => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Pack { x, y })
+        }
         /* `max` / `min` of a pair and a constant pair (gm2_fsmisc_3); the
          * bound is the walk's constant ([`walk_nodes`]) */
+        /* two `min`s or `max`es of which one is paired with a third
+         * ([`mates`]): each its own lane, the paired one a half of its
+         * pair's operation, and the word their `vec2`
+         * (deqp_opform_clamp_vec3_float's `max` of x beside y, which z
+         * pairs: `FMAX.v2f16 r1, r1^, r0.h00` of y and z, `FMAX.v2f16 r0,
+         * r2^.h00, r0^.h00` of x, then `MKVEC.v2i16 r0, r0^.h0, r1.h0`) */
+        (Some((Alu::Fmax | Alu::Fmin, _)), Some(_)) if mated_apart(pr, a, b) => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Pack { x, y })
+        }
         (Some((op @ (Alu::Fmax | Alu::Fmin), sa)), Some((o2, sb))) if o2 == op => {
             let x = vectorise(f, pr, sa[0], sb[0], pair, ubo)?;
             let y = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
-            if pr.form(y) != Form::Const {
+            /* the bound a constant pair, or one varying lane in both
+             * halves (the same reference's scalar bounds, `r0.h00`) */
+            if !matches!(pr.form(y), Form::Const | Form::Splat) {
                 return Err(MaliError::FsOperandForm);
             }
             P::Op(op, [x, y, 0])
@@ -11838,7 +11889,11 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
          * lanes, nor a pair of sums kept one lane each ([`split_sum`]):
          * each lane its own tree, below */
         let split = f.is_split(lanes[2 * h]) && f.is_split(lanes[(2 * h + 1) & 3]);
-        if 2 * h + 1 < w && !split && !split_sum(f, lanes[2 * h], lanes[2 * h + 1])? {
+        if 2 * h + 1 < w
+            && !split
+            && !split_sum(f, lanes[2 * h], lanes[2 * h + 1])?
+            && !split_minmax(f, lanes[2 * h], lanes[2 * h + 1])?
+        {
             let (a, b) = (lanes[2 * h], lanes[2 * h + 1]);
             let x = pair_node(f, pr, a, b, h as u8, ubo)?;
             return lone_node(pr, P::Leaf(Leaf::Part { x, h: (i % 2) as u8 }), place);
@@ -12094,7 +12149,12 @@ fn mates(f: &Fs<'_>, mate: &mut [Option<(u16, u16)>; MAX_NODES]) {
             && matches!(nd.kind, Kind::Alu(Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fmin | Alu::Fmax))
             && f.pair_lane(Val::Lane(n as u16, 0), None).is_none()
     };
-    let shared = |a: Val, b: Val| match (a, b) {
+    /* `minmax`: the sources of an `fmin` or `fmax`, where two lanes of
+     * one varying are shared only in one aligned pair of its components
+     * (`alu_srcs_equal`'s `swizzle[0] & ~1`; deqp_opform_clamp_vec3_float's
+     * `max(v_in0.zxy, v_in1.x)`: y and z, the varying's x and y, are one
+     * `FMAX.v2f16 r1, r1^, r0.h00`, x is alone) */
+    let shared = |a: Val, b: Val, minmax: bool| match (a, b) {
         (Val::Const(_), Val::Const(_)) => true,
         _ if a == b => true,
         /* an fp16 uniform's two components of one word of the block, in
@@ -12113,7 +12173,7 @@ fn mates(f: &Fs<'_>, mate: &mut [Option<(u16, u16)>; MAX_NODES]) {
         }
         _ => match (f.input_lane(a), f.input_lane(b)) {
             (Some((v, i)), Some((w, j))) => {
-                matches!((index(f, v, i), index(f, w, j)), (Ok((k, _)), Ok((e, _))) if k == e)
+                matches!((index(f, v, i), index(f, w, j)), (Ok((k, c)), Ok((e, d))) if k == e && (!minmax || c / 2 == d / 2))
             }
             _ => false,
         },
@@ -12133,8 +12193,11 @@ fn mates(f: &Fs<'_>, mate: &mut [Option<(u16, u16)>; MAX_NODES]) {
             let nu = f.nir.nodes[u as usize];
             mate[u as usize].is_none()
                 && nu.kind == nv.kind
-                && (0..op.arity()).all(|s| shared(nu.src[s], nv.src[s]))
+                && (0..op.arity()).all(|s| shared(nu.src[s], nv.src[s], matches!(op, Alu::Fmin | Alu::Fmax)))
                 && (0..op.arity()).any(|s| nu.src[s] != nv.src[s])
+                /* two `min`s or `max`es on lanes of different conversions
+                 * stay one lane each ([`split_minmax`]) */
+                && !split_minmax(f, Val::Lane(u, 0), Val::Lane(v as u16, 0)).unwrap_or(false)
         });
         if let Some(u) = found {
             mate[u as usize] = Some((u, v as u16));
@@ -12514,6 +12577,21 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         });
     let admitted =
         if column_sums { admitted | prod(Form::Op, Place::AddB) | prod(Form::Splat, Place::NegSrc) } else { admitted };
+    /* a `min` or `max` of two lanes whose first source is the `vec2` of two
+     * lanes computed apart ([`vectorise`]'s `mated_apart` arm):
+     * deqp_opform_clamp_vec3_float's `MKVEC.v2i16 r0, r0^.h0, r1.h0`, then
+     * `FMIN.v2f16 r0, r0^, r2^.h00`. A `vec2` under another operation of
+     * that place (`abs`, deqp_arith_op_common_abs_fs_mediump) is not drawn
+     * so */
+    let packed = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::Pack { .. }));
+    let other_place = |op: Alu| !matches!(op, Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fneg);
+    let mk_first = |n: &P| matches!(*n, P::Op(op, [x, ..]) if other_place(op) && pr.form(x) == Form::Mk);
+    let minmax_pack = pr.nodes[..pr.n].iter().any(mk_first)
+        && pr.nodes[..pr.n]
+            .iter()
+            .filter(|n| mk_first(n))
+            .all(|n| matches!(*n, P::Op(Alu::Fmin | Alu::Fmax, [x, ..]) if packed(x)));
+    let admitted = if minmax_pack { admitted | prod(Form::Mk, Place::AbsSrc) } else { admitted };
     if f.prods & !admitted != 0 || roots.iter().any(|&r| splat(r)) {
         return Err(MaliError::FsOperandForm);
     }
@@ -13223,6 +13301,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                     P::Leaf(Leaf::Half { swz: Swz::H11, .. }) => Swz::H11,
                     P::Leaf(Leaf::Uniform { swz: Swz::H11, .. }) => Swz::H11,
                     P::Leaf(Leaf::TexLane(_, c)) if c % 2 == 1 => Swz::H11,
+                    P::Leaf(Leaf::Part { h: 1, .. }) => Swz::H11,
                     _ => Swz::H00,
                 };
                 let s = [operand(&pr, x, &lv, &val)?.swz(half(x)), operand(&pr, y, &lv, &val)?.swz(half(y))];
@@ -16616,6 +16695,10 @@ fn lane_srcs(
     let v = operand(pr, x, lv, val)?;
     let v = match pr.nodes[x as usize] {
         P::Leaf(Leaf::Uniform { .. }) => v,
+        /* a half of an operation of two lanes, its own half
+         * (deqp_highpfs_pt_min_vec3_float's z, the high lane of y and z's
+         * `FMIN.v2f16`: `MKVEC.v2i16 r1, r1^.h1, u2.w0.h0`) */
+        P::Leaf(Leaf::Part { .. }) => v,
         _ => v.swz(Swz::H00),
     };
     let k = Src::of(Idx::Const(half as u32)).swz(Swz::H00);
@@ -16704,7 +16787,12 @@ fn op(
              * `MKVEC.v2i16 r1, r1^.h0, r3^.h0`, then `FMA.v2f16 r1, r1^,
              * ..`) */
             P::Leaf(Leaf::Pack { x: u, y: w }) if val[*y as usize].is_none() => {
-                let s = [operand(pr, u, lv, val)?.swz(Swz::H00), operand(pr, w, lv, val)?.swz(Swz::H00)];
+                /* a half of an operation of two lanes, its own half */
+                let half = |n: u8| match pr.nodes[n as usize] {
+                    P::Leaf(Leaf::Part { h: 1, .. }) => Swz::H11,
+                    _ => Swz::H00,
+                };
+                let s = [operand(pr, u, lv, val)?.swz(half(u)), operand(pr, w, lv, val)?.swz(half(w))];
                 val[*y as usize] = Some(Src::ssa(row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?));
             }
             _ => {}

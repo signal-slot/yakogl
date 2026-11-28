@@ -34,18 +34,21 @@ mod mali_ref;
 /// `HalfSwapped` at `MulB` is admitted, and a vector local assigned a
 /// varying's swizzle is grafted into its read (nir_fs.rs `ADMITTED`,
 /// `grafted_locals`).
-const LOWERED: &[&str] = &["matadd_uniform", "matsub_uniform", "mul_float_vec4"];
+/// `min_vec3` and `clamp_vec3_float` since plan #387 mali-train-3c (opform
+/// O4, class MM): a `min` or `max` on lanes of different conversions is one
+/// lane each, two that share an aligned pair are one operation of two
+/// lanes, and the bound may be a varying's lane in both halves (nir_fs.rs
+/// `split_minmax`, `mates`, `mated_apart`).
+const LOWERED: &[&str] = &["matadd_uniform", "matsub_uniform", "mul_float_vec4", "min_vec3", "clamp_vec3_float"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    ("clamp_vec3_float", TEXT_OPERAND),
     ("conv_vec3", TEXT_OPERAND),
     ("matmul_const", TEXT_OPERAND),
     ("matneg_mat3", TEXT_OPERAND),
-    ("min_vec3", TEXT_OPERAND),
     ("ret_dynamic", TEXT_OPERAND),
     ("ret_never", TEXT_OPERAND),
     ("rnd_constneg85", TEXT_OPERAND),
@@ -74,7 +77,6 @@ const FS_WORDS: &[(&str, usize)] = &[
 /// `clamp(v_in0.zxy, v_in1.x, v_in2.y)`: a vec3 clamp to two scalar
 /// varying bounds (class MM, `vectorise`'s `Fmax | Fmin` arm).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn clamp_vec3_float() {
     mali_ref::assert_matches("deqp_opform_clamp_vec3_float");
 }
@@ -119,7 +121,6 @@ fn matsub_uniform() {
 
 /// `min(v_in0.zxy, v_in1.yzx)`: a vec3 min of two varying lanes (class MM).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn min_vec3() {
     mali_ref::assert_matches("deqp_opform_min_vec3");
 }
