@@ -119,7 +119,8 @@ Notes on the steps:
    has not been touched. Build every image from one origin/main commit.
    `preflight.sh <image-dir>` touches no board and no network and prints
    no environment value; one `ok` or `FAIL` line per check: (a) `T6_UART`
-   and `T6_HAND` are set; (b) python3 imports what `prompt-go.py` and
+   (or `T6_CONSOLE=lease`: the lease's serial tools carry the console) and
+   `T6_HAND` (or `T6_HAND=none`: no one at the power switch) are set; (b) python3 imports what `prompt-go.py` and
    `t6-uart-rfc2217.py` import; (c) the image directory (below); (d)
    `records/` is gitignored; (e) the `console-check.sh` command is printed,
    not run. Check (c) needs a local `origin/main` ref (`git fetch` is not

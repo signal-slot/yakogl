@@ -132,8 +132,40 @@ check "row dir with <LABEL>.log beside <LABEL>.built: exit 0 (rc $rc)" "$rc"
 run "$W/rows_orphan" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
 has 'FAIL c: top-level file of a row image directory'; check "row dir with an orphan X.log: FAIL c" $?
 grep -q 'directory.*: X.log' <<<"$out"; check "orphan X.log is named" $?
+# T6_CONSOLE=lease and T6_HAND=none
+run "$W/good" T6_CONSOLE=lease T6_HAND=$S2; ALL="$ALL$out"
+check "T6_CONSOLE=lease without T6_UART: exit 0 (rc $rc)" "$rc"
+grep -qF "ok   a: console through the lease's serial tools (T6_CONSOLE=lease); T6_UART not used" <<<"$out"; check "lease: the line" $?
+run "$W/good" T6_UART=$S1 T6_HAND=none; ALL="$ALL$out"
+check "T6_HAND=none: exit 0 (rc $rc)" "$rc"
+grep -qF 'ok   a: T6_HAND=none: no one at the power switch; a board that does not come back is reported as needing a person and not retried' <<<"$out"; check "hand none: the line" $?
+run "$W/good" T6_CONSOLE=lease T6_HAND=none; ALL="$ALL$out"
+check "lease and none together: exit 0 (rc $rc)" "$rc"
+run "$W/good" T6_CONSOLE=lease T6_HAND=; ALL="$ALL$out"
+has 'FAIL a: not set: T6_HAND'; check "T6_HAND empty: FAIL a" $?
+run "$W/good" T6_CONSOLE=other T6_HAND=none; ALL="$ALL$out"
+has 'FAIL a: not set: T6_UART'; check "T6_CONSOLE not lease, no T6_UART: FAIL a" $?
+run "$W/good" T6_UART= T6_HAND=none; ALL="$ALL$out"
+has 'FAIL a: not set: T6_UART'; check "T6_UART empty, no lease: FAIL a" $?
 run "$W/none" T6_UART=$S1 T6_HAND=$S2
 [ "$rc" = 2 ]; check "missing dir: usage exit 2 (rc $rc)" $?
+
+# c: the main ref fallbacks, named in the line
+grep -q 'ok   c: build commit .* is reachable from origin/main' <<<"$ALL"; check "c names origin/main" $?
+for r in refs/connected/origin/remotes/origin/main refs/remotes/origin/main; do
+	git -C "$R" update-ref "$r" "$C1"
+done
+git -C "$R" update-ref -d refs/remotes/origin/main
+run "$W/good" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
+grep -q "ok   c: build commit .* is reachable from refs/connected/origin/remotes/origin/main" <<<"$out"; check "fallback 1: connected ref named" $?
+run "$W/unreach" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
+has 'FAIL c: build commit .* not reachable from refs/connected/origin/remotes/origin/main'; check "fallback 1: FAIL names the ref" $?
+git -C "$R" update-ref -d refs/connected/origin/remotes/origin/main
+run "$W/good" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
+has 'FAIL c: no main ref here'; check "no main ref at all: FAIL c" $?
+git -C "$R" update-ref refs/remotes/origin/main "$C1"
+run "$W/good" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
+grep -q 'reachable from origin/main' <<<"$out"; check "refs/remotes/origin/main is what origin/main resolves to" $?
 
 # d: a repository that does not ignore records/
 : >"$R/.gitignore"
