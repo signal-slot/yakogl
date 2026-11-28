@@ -59,14 +59,30 @@ pub mod ident71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 pub mod limits71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod mip71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 pub mod prim71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 pub mod record71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 #[allow(clippy::eq_op)]
 pub mod rt71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod sampler71;
 #[cfg(feature = "gpu-v3d71")]
 pub mod table71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod texfill71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod texglue71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod texstate71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod texture71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod texuni71;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod tfuplan71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 pub mod uniform71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
