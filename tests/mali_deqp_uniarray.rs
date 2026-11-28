@@ -100,7 +100,7 @@ fn loop_vec4_fs() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (compare_float's arithmetic), owned by constop"]
+#[ignore = "refused: an integer or boolean value (the vertex shader's product chain of compare_vec4 products)"]
 fn struct_array() {
     mali_ref::assert_matches("deqp_uniarray_struct");
 }
@@ -155,7 +155,11 @@ const REFUSALS: &[(&str, &str)] = &[
     /* the elements' halves of two words are one pair since plan #377
      * spike-uniform-rest3 (nir_fs.rs `vectorise`); the colour next */
     ("api_float", "a gl_FragColor lane other than the varying's own lane or a constant"),
-    ("struct", "a gl_FragColor lane other than the varying's own lane or a constant"),
+    /* the vertex shader's product chain of eight factors, four of them
+     * `compare_vec4`'s own products (nir.rs `vs_chain_step` holds no model
+     * of that order; the words it compiled to before plan #387
+     * mali-train-3b were not Mesa's) */
+    ("struct", "an integer or boolean value"),
 ];
 
 #[test]

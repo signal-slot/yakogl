@@ -4584,6 +4584,313 @@ fn vs_b2f_and(vs: &mut Nir<'_>, m: &Module<'_>, p: Val, q: Val) -> Result<Val, M
     vs.alu(Alu::B2f, c, u, u)
 }
 
+/// A factor's condition in a product of dEQP's compare results that
+/// separate statements build (`v = 1.0; v *= compare_a(..); v *=
+/// compare_b(..)`, uniform_api's vertex shaders), as [`vs_mask_tree`] joins
+/// them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Mask {
+    /// `flt(fabs(x), c)` at 16 bits ([`vs_cmp_side`]): the fp16 value, true
+    /// while its `fabs` is still to make, `c` as a half.
+    Cmp16(Val, bool, u16),
+    /// `ieq(x, 0)` of a 32-bit word ([`vs_zero_test`]).
+    Zero(Val),
+    /// `inot(a)` of a 32-bit boolean, the `inot` still to make.
+    Neg(Val),
+    /// A 32-bit boolean.
+    Pos(Val),
+}
+
+/// The most factors of one product [`MaskChain`] holds.
+const MAX_MASK_CHAIN: usize = 32;
+
+/// The product the walk is in ([`vs_chain_step`]): the local that carries
+/// it, the block, the value it has so far and each factor's condition in
+/// statement order.
+#[derive(Clone, Copy)]
+struct MaskChain {
+    local: u32,
+    block: u8,
+    root: Val,
+    n: usize,
+    leaf: [Mask; MAX_MASK_CHAIN],
+    /// A factor [`vs_mask_tree`]'s model does not hold (see
+    /// [`vs_chain_step`]): up to three factors keep the pairwise rules,
+    /// more are refused.
+    poisoned: bool,
+    /// The nodes that made `root` the float of its condition
+    /// ([`vs_mask_value`]): Mesa has them once, after the last factor, so
+    /// the next statement takes them out of the order again.
+    prov: [u16; 4],
+    nprov: usize,
+    /// A factor is a vector's `==`.
+    vector: bool,
+}
+
+impl MaskChain {
+    const NONE: MaskChain = MaskChain {
+        local: u32::MAX,
+        block: 0,
+        root: Val::Undef,
+        n: 0,
+        leaf: [Mask::Pos(Val::Undef); MAX_MASK_CHAIN],
+        poisoned: false,
+        prov: [0; 4],
+        nprov: 0,
+        vector: false,
+    };
+}
+
+/// The condition of a lane `v` that is the float of a compare, or None:
+/// [`vs_cmp_side`]'s, [`vs_zero_test`]'s or [`vs_b2f_mask`]'s, in the order
+/// the product arms of the walk try them.
+fn vs_mask_of(vs: &Nir<'_>, m: &Module<'_>, v: Val) -> Option<Mask> {
+    if let Some((x, leaf, c)) = vs_cmp_side(vs, v) {
+        return Some(Mask::Cmp16(x, leaf, c));
+    }
+    if let Some(x) = vs_zero_test(vs, v) {
+        return Some(Mask::Zero(x));
+    }
+    match vs_b2f_mask(vs, m, v)? {
+        (true, a) => Some(Mask::Pos(a)),
+        (false, a) => Some(Mask::Neg(a)),
+    }
+}
+
+/// The 32-bit boolean of a condition: a 16-bit compare's mask widened
+/// (`S16_TO_S32`, as `pan_nir_lower_bool_to_bitsize` converts it where a
+/// 32-bit `iand` reads it), a zero test's `ieq`, a negation's `inot`.
+fn vs_mask32(vs: &mut Nir<'_>, k: Mask) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    match k {
+        Mask::Cmp16(x, leaf, c) => {
+            let x = if leaf { vs.alu_sized(Alu::Fabs, 16, x, u, u)? } else { x };
+            let k = vs.alu_sized(Alu::Fcmp(Cmpf::Lt), 16, x, Val::Const(u32::from(c) * 0x1_0001), u)?;
+            vs.alu(Alu::I2i32, k, u, u)
+        }
+        Mask::Zero(x) => vs.alu(Alu::Icmp(Cmpf::Eq), x, Val::Const(0), u),
+        Mask::Neg(a) => vs.alu(Alu::Inot, a, u, u),
+        Mask::Pos(a) => Ok(a),
+    }
+}
+
+/// `iand(outer, inner)` of two conditions as nir_opt_algebraic.py leaves
+/// it: two 16-bit `flt`s of one constant are `flt(fmax(a, b), c)` (:1159),
+/// two zero tests `ieq(umax(a, b), 0)` (:1381), two negations the `inot`
+/// of their `ior` (De Morgan), anything else the `iand` of the two 32-bit
+/// booleans. The nodes it makes stand after the last value they read
+/// (Mesa makes the `iand` where the outer factor's select stood).
+fn vs_mask_join(vs: &mut Nir<'_>, outer: Mask, inner: Mask) -> Result<Mask, MaliError> {
+    let u = Val::Undef;
+    let len0 = vs.len;
+    let joined = match (outer, inner) {
+        (Mask::Cmp16(x, xl, c), Mask::Cmp16(y, yl, d)) if c == d => {
+            let x = if xl { vs.alu_sized(Alu::Fabs, 16, x, u, u)? } else { x };
+            let y = if yl { vs.alu_sized(Alu::Fabs, 16, y, u, u)? } else { y };
+            Mask::Cmp16(vs.alu_sized(Alu::Fmax, 16, x, y, u)?, false, c)
+        }
+        (Mask::Zero(x), Mask::Zero(y)) => Mask::Zero(vs.alu(Alu::Umax, x, y, u)?),
+        (Mask::Neg(a), Mask::Neg(b)) => Mask::Neg(vs.alu(Alu::Ior, a, b, u)?),
+        _ => {
+            let a = vs_mask32(vs, outer)?;
+            let b = vs_mask32(vs, inner)?;
+            Mask::Pos(vs.alu(Alu::Iand, a, b, u)?)
+        }
+    };
+    /* the new nodes, after the last node they read */
+    let new = vs.len - len0;
+    if new != 0 {
+        let fresh = |vs: &Nir<'_>, id: u16| vs.order[len0..vs.len].contains(&id);
+        let mut last = None;
+        for k in len0..vs.len {
+            for v in vs.nodes[vs.order[k] as usize].src {
+                if let Val::Lane(id, _) | Val::Pair(id, _) = v {
+                    if !fresh(vs, id) {
+                        let at = vs.order[..len0].iter().position(|&x| x == id);
+                        last = last.max(at);
+                    }
+                }
+            }
+        }
+        if let Some(at) = last.filter(|&at| at + 1 < len0) {
+            vs.order[at + 1..vs.len].rotate_right(new);
+        }
+    }
+    Ok(joined)
+}
+
+/// The float of a condition (what the product's next reader takes): the
+/// forms [`vs_mask_of`] reads back.
+fn vs_mask_value(vs: &mut Nir<'_>, k: Mask) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    match k {
+        Mask::Neg(a) => vs.alu(Alu::Bcsel, a, Val::Const(F32_ZERO), Val::Const(F32_ONE)),
+        _ => {
+            let c = vs_mask32(vs, k)?;
+            vs.alu(Alu::B2f, c, u, u)
+        }
+    }
+}
+
+/// The condition of a product of compare results that separate statements
+/// build, `leaf` its factors' conditions in statement order, as Mesa's
+/// passes leave it. Each `fmul(v, b2f(c))` is `bcsel(c, v, 0.0)`
+/// (nir_opt_algebraic.py), so the product is a nest of selects, the last
+/// statement's outermost, and `bcsel(a, bcsel(b, x, 0.0), 0.0)` is
+/// `bcsel(iand(a, b), x, 0.0)`. nir_opt_algebraic visits the last
+/// instruction first (nir_search.c `nir_algebraic_impl`) and does not
+/// visit a select it has just made again, so one run joins the selects in
+/// pairs from the outermost, and the next run the pairs. In the first run
+/// the second factor's select joins the first's at once (nothing stands
+/// between them), and the third then joins that pair when the factors are
+/// an odd number; every later select waits for the `fcanonicalize` under
+/// it to go. Measured on Mesa 26.2.1's drm-shim with `NIR_DEBUG=print`
+/// (deqp_vsuarr_init_multi, nine factors: `iand(iand(iand(c9, c8),
+/// iand(c7, c6)), iand(iand(c5, c4), iand(c3, iand(c2, c1))))`).
+fn vs_mask_tree(vs: &mut Nir<'_>, leaf: &[Mask]) -> Result<Mask, MaliError> {
+    let n = leaf.len();
+    if n == 0 || n > MAX_MASK_CHAIN {
+        return Err(MaliError::Defect(Defect::IrIndex));
+    }
+    if n == 1 {
+        return Ok(leaf[0]);
+    }
+    /* the groups, innermost first */
+    let mut g = [leaf[0]; MAX_MASK_CHAIN];
+    let mut ng = 0;
+    let first = vs_mask_join(vs, leaf[1], leaf[0])?;
+    let mut k = if n % 2 == 1 {
+        g[0] = vs_mask_join(vs, leaf[2], first)?;
+        3
+    } else {
+        g[0] = first;
+        2
+    };
+    ng += 1;
+    while k + 1 < n {
+        g[ng] = vs_mask_join(vs, leaf[k + 1], leaf[k])?;
+        ng += 1;
+        k += 2;
+    }
+    while ng > 1 {
+        let mut h = [leaf[0]; MAX_MASK_CHAIN];
+        let mut nh = 0;
+        let mut i = ng;
+        /* from the outermost; an odd one out is the innermost */
+        let mut pairs = [(0usize, 0usize); MAX_MASK_CHAIN];
+        let mut np = 0;
+        while i >= 2 {
+            pairs[np] = (i - 1, i - 2);
+            np += 1;
+            i -= 2;
+        }
+        if i == 1 {
+            h[nh] = g[0];
+            nh += 1;
+        }
+        let mut made = [leaf[0]; MAX_MASK_CHAIN];
+        for (j, &(o, inn)) in pairs[..np].iter().enumerate() {
+            made[j] = vs_mask_join(vs, g[o], g[inn])?;
+        }
+        for j in (0..np).rev() {
+            h[nh] = made[j];
+            nh += 1;
+        }
+        g = h;
+        ng = nh;
+    }
+    Ok(g[0])
+}
+
+/// A product statement `v = v * f` of the walk, `f` the float of a compare
+/// (dEQP's `v_vtxOut *= compare_ivec4(..)`): the chain it continues, and
+/// the product's value by [`vs_mask_tree`], or None for the walk's other
+/// product arms. The chain starts at `1.0 * f`. A factor the model does
+/// not hold poisons it: a `bool == false` (its `inot` is there before the
+/// product is a select, and `bcsel(inot(a), b, c)` swaps the arms, which
+/// joins in another order: deqp_vsuarr_init_bool) and a factor that is
+/// itself a product (a `compare_vec3`'s, which Mesa makes one condition in
+/// a later run). A poisoned chain of up to three factors keeps the
+/// pairwise arms; a longer one has no reference and is refused.
+fn vs_chain_step(
+    vs: &mut Nir<'_>,
+    m: &Module<'_>,
+    chain: &mut MaskChain,
+    s: &[ir::Src; 3],
+    x0: Val,
+    x1: Val,
+) -> Result<Option<Val>, MaliError> {
+    let Some(&IrOp::LoadLocal { local, index: None, .. }) = m.def(s[0].val) else {
+        return Ok(None);
+    };
+    let Some(k) = vs_mask_of(vs, m, x1) else {
+        if chain.local == local.0 {
+            *chain = MaskChain::NONE;
+        }
+        return Ok(None);
+    };
+    /* a factor that is a compare's own select; a scalar `bool == false` */
+    let simple = matches!(m.def(s[1].val), Some(IrOp::Alu(AluOp::Bcsel, _)));
+    /* the factor is a vector's `==` ([`vs_reduce`]) */
+    let vector = matches!(m.def(s[1].val), Some(IrOp::Alu(AluOp::Bcsel, c))
+        if matches!(m.def(c[0].val), Some(IrOp::Alu(AluOp::Ball | AluOp::Bany, _))));
+    let word = |v: Val| matches!(v, Val::Lane(n, _) if matches!(vs.nodes[n as usize].kind, Kind::Uniform { .. }));
+    let odd = !simple || matches!(k, Mask::Neg(a) if word(a));
+    if x0 == Val::Const(F32_ONE) {
+        *chain = MaskChain { local: local.0, block: vs.cur, root: x1, n: 1, poisoned: odd, vector, ..MaskChain::NONE };
+        chain.leaf[0] = k;
+        return Ok(None);
+    }
+    if chain.local != local.0 || chain.block != vs.cur || (!chain.poisoned && chain.root != x0) {
+        if chain.local == local.0 {
+            *chain = MaskChain::NONE;
+        }
+        return Ok(None);
+    }
+    if chain.n == MAX_MASK_CHAIN {
+        return Err(MaliError::IntValue);
+    }
+    chain.leaf[chain.n] = k;
+    chain.n += 1;
+    chain.poisoned |= odd;
+    chain.vector |= vector;
+    if chain.poisoned {
+        /* beside a vector's `==` the pairwise arms have no reference
+         * either (deqp_vsuniarr2_bvec3_part's `compare_vec3` and two
+         * `compare_bvec3`) */
+        return if chain.n > 3 || chain.vector { Err(MaliError::IntValue) } else { Ok(None) };
+    }
+    /* the last statement's value is read here alone */
+    for k in (0..chain.nprov).rev() {
+        let id = chain.prov[k];
+        if vs.uses(id).any(|(u, _)| !chain.prov[..chain.nprov].contains(&u)) {
+            return Err(MaliError::IntValue);
+        }
+    }
+    for k in 0..chain.nprov {
+        let id = chain.prov[k];
+        if let Some(at) = vs.order[..vs.len].iter().position(|&x| x == id) {
+            vs.order.copy_within(at + 1..vs.len, at);
+            vs.len -= 1;
+        }
+    }
+    chain.nprov = 0;
+    let n = chain.n;
+    let leaf = chain.leaf;
+    let t = vs_mask_tree(vs, &leaf[..n])?;
+    let len0 = vs.len;
+    let v = vs_mask_value(vs, t)?;
+    if vs.len - len0 > chain.prov.len() {
+        return Err(MaliError::Defect(Defect::IrIndex));
+    }
+    for k in len0..vs.len {
+        chain.prov[chain.nprov] = vs.order[k];
+        chain.nprov += 1;
+    }
+    chain.root = v;
+    Ok(Some(v))
+}
+
 /// The node a lane `v` is of.
 fn lane_node(v: Val) -> Option<u16> {
     match v {
@@ -4614,6 +4921,23 @@ fn vs_cmp_and(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Option<Val>, MaliError
     let k = vs.alu_sized(Alu::Fcmp(Cmpf::Lt), 16, mx, Val::Const(u32::from(h) * 0x1_0001), u)?;
     let m = vs.alu(Alu::I2i32, k, u, u)?;
     Ok(Some(vs.alu(Alu::B2f, m, u, u)?))
+}
+
+/// `inot(p)` where a reduction's chain reads it: the lane's own `ieq(b,
+/// false)` the walk made in lane order is this node, unread until now, and
+/// Mesa's stands where `lower_reduction` cuts the lane out (after the
+/// lanes above it): an unread one moves to the end of the order.
+fn vs_inot_here(vs: &mut Nir<'_>, p: Val) -> Result<Val, MaliError> {
+    let v = vs.alu(Alu::Inot, p, Val::Undef, Val::Undef)?;
+    if let Val::Lane(id, 0) = v {
+        if vs.is_alu(v, Alu::Inot) && vs.uses(id).next().is_none() {
+            if let Some(k) = vs.order[..vs.len].iter().position(|&x| x == id) {
+                vs.order.copy_within(k + 1..vs.len, k);
+                vs.order[vs.len - 1] = id;
+            }
+        }
+    }
+    Ok(v)
 }
 
 /// A vertex `any` / `all` of a compare vector, as Mesa's passes leave the
@@ -4709,57 +5033,116 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
             v
         })
     };
-    /* `all(b == bvec3(false))` of booleans (a bool uniform's words, 0 /
-     * ~0): `inot(ior(ior(b.y, b.x), b.z))`, the `ball_iequal3` of `ieq(b,
-     * false)` lanes De Morgan's (nir_opt_algebraic.py), whose `bcsel` is
-     * the `CSEL.u32.eq` of the OR against 0 (deqp_unitype_vsbvec3:
-     * `LSHIFT_OR.i32 r0, u6.w0, 0x0.b00, r0^` of y and x, then of z,
-     * then `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`); a true of 1 or
-     * ~0 is the same bytes. Other widths have no reference */
-    if a == AluOp::Ball && op == AluOp::Ieq && n == 3 {
-        let mut b = [u; 3];
-        for (i, x) in b.iter_mut().enumerate() {
-            let j = s.swizzle[i] as usize;
-            *x = match (lane(w, cs[0], j), lane(w, cs[1], j)) {
-                (p, Val::Const(0)) | (Val::Const(0), p)
-                    if vs_is_bool(vs, m, p) && !matches!(p, Val::Const(_)) && !vs_is_mask16(vs, p) =>
-                {
-                    p
-                }
-                _ => return Err(MaliError::Arithmetic),
-            };
+    /* `b == bvecN(c0, ..)` of booleans (a bool uniform's words, 0 / ~0)
+     * against a constant of true and false lanes: `ball_iequalN` is cut
+     * into its lanes last lane first (`lower_reduction`'s reverse order,
+     * nir_lower_alu_width.c:228), `iand(iand(iand(w, z), y), x)`; a lane's
+     * `ieq(b, true)` is `b` and `ieq(b, false)` `inot(b)`, and an `iand`
+     * of two `inot`s is the `inot` of their `ior` (nir_opt_algebraic.py's
+     * De Morgan rule), so a run of false lanes from the last one is one
+     * `ior` chain negated once. deqp_unitype_vsbvec3's `bvec3(false)`:
+     * `LSHIFT_OR.i32 r0, u6.w0, 0x0.b00, r0^`, then the third word, then
+     * `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0` (the words' FAU slots are
+     * `bi_opt_reorder_push`'s: the pair one instruction reads first);
+     * deqp_unif2_vs_bool_uniform's `bvec2(false, true)`: `LSHIFT_OR.i32 r0,
+     * 0x0, 0x0.b00, u5.w1.not`, `LSHIFT_AND.i32 r0, u6.w0, 0x0.b00, r0^`;
+     * deqp_vsuniarr_bvec4's `bvec4(false, true, true, false)`: `.not` of
+     * w, `LSHIFT_AND.i32` of z and of y, `.not` of x and its
+     * `LSHIFT_AND.i32`. A true of 1 or ~0 is the same bytes */
+    let bool_lane = |i: usize| -> Option<(Val, bool)> {
+        let j = s.swizzle[i] as usize;
+        match (lane(w, cs[0], j), lane(w, cs[1], j)) {
+            (p, Val::Const(c @ (0 | u32::MAX))) | (Val::Const(c @ (0 | u32::MAX)), p)
+                if vs_is_bool(vs, m, p) && !matches!(p, Val::Const(_)) && !vs_is_mask16(vs, p) =>
+            {
+                Some((p, c == u32::MAX))
+            }
+            _ => None,
         }
-        let zy = vs.alu(Alu::Ior, b[2], b[1], u)?;
-        let any = vs.alu(Alu::Ior, zy, b[0], u)?;
-        return vs.alu(Alu::Inot, any, u, u);
+    };
+    let mut bools = [None; 4];
+    for (i, b) in bools.iter_mut().enumerate().take(n) {
+        *b = bool_lane(i);
     }
-    /* `b == bvec2(c0, c1)` of booleans against a constant of true and
-     * false lanes: each lane's `ieq(b, true)` is `b` and `ieq(b, false)`
-     * `inot(b)` (nir_opt_algebraic.py), ANDed y first
-     * (deqp_unif2_vs_bool_uniform's `bvec2(false, true)`: `LSHIFT_OR.i32
-     * r0, 0x0, 0x0.b00, u5.w1.not`, `LSHIFT_AND.i32 r0, u6.w0, 0x0.b00,
-     * r0^`, then the `CSEL.u32.eq`). Other widths have no reference */
-    if a == AluOp::Ball && op == AluOp::Ieq && n == 2 {
-        let mut b = [(u, false); 2];
-        for (i, x) in b.iter_mut().enumerate() {
-            let j = s.swizzle[i] as usize;
-            *x = match (lane(w, cs[0], j), lane(w, cs[1], j)) {
-                (p, Val::Const(c @ (0 | u32::MAX))) | (Val::Const(c @ (0 | u32::MAX)), p)
-                    if vs_is_bool(vs, m, p) && !matches!(p, Val::Const(_)) && !vs_is_mask16(vs, p) =>
-                {
-                    (p, c == u32::MAX)
+    if a == AluOp::Ball && op == AluOp::Ieq && (2..=4).contains(&n) && bools[..n].iter().all(|b| b.is_some()) {
+        /* `acc`: the chain so far; `neg`: it is the `inot`, still to make,
+         * of this `ior` chain */
+        let (mut acc, mut neg) = (u, None);
+        for i in (0..n).rev() {
+            let (p, tr) = bools[i].ok_or(MaliError::Defect(Defect::IrIndex))?;
+            if i == n - 1 {
+                if tr {
+                    acc = p;
+                } else {
+                    neg = Some(p);
                 }
-                _ => return Err(MaliError::Arithmetic),
-            };
+                continue;
+            }
+            match (neg, tr) {
+                (Some(x), false) => neg = Some(vs.alu(Alu::Ior, x, p, u)?),
+                (Some(x), true) => {
+                    let nx = vs_inot_here(vs, x)?;
+                    acc = vs.alu(Alu::Iand, nx, p, u)?;
+                    neg = None;
+                }
+                (None, true) => acc = vs.alu(Alu::Iand, acc, p, u)?,
+                (None, false) => {
+                    let np = vs_inot_here(vs, p)?;
+                    acc = vs.alu(Alu::Iand, acc, np, u)?;
+                }
+            }
         }
-        if b.iter().all(|&(_, t)| !t) {
+        return match neg {
+            Some(x) => vs_inot_here(vs, x),
+            None => Ok(acc),
+        };
+    }
+    /* `i == ivecN(c0, ..)` of 32-bit integers (an int uniform's words)
+     * against a constant: the same lanes, last first. Against zeros each
+     * `iand(ieq(a, 0), ieq(b, 0))` is `ieq(umax(a, b), 0)`
+     * (nir_opt_algebraic.py:1381), one `umax` chain and one compare
+     * (deqp_vsuarr_init_ivec4: `CSEL.u32.gt r0, u6.w0, r0^, u6.w0, r0^` of
+     * w and z, then y, then x); against non-zero constants the `ieq`s'
+     * `iand` chain (deqp_vsuniarr_ivec4: `ICMP_OR.u32.eq.m1` of z,
+     * `ICMP_AND.u32.eq.m1` of w, then y's and x's compares and their
+     * `LSHIFT_AND.i32`). A constant of zero and non-zero lanes has no
+     * reference */
+    let int_lane = |i: usize| -> Option<(Val, u32)> {
+        let j = s.swizzle[i] as usize;
+        match (lane(w, cs[0], j), lane(w, cs[1], j)) {
+            (p @ Val::Lane(nd, _), Val::Const(c)) | (Val::Const(c), p @ Val::Lane(nd, _))
+                if vs.nodes[nd as usize].bits == 32 && !vs_is_bool(vs, m, p) =>
+            {
+                Some((p, c))
+            }
+            _ => None,
+        }
+    };
+    let mut ints = [None; 4];
+    for (i, b) in ints.iter_mut().enumerate().take(n) {
+        *b = int_lane(i);
+    }
+    if a == AluOp::Ball && op == AluOp::Ieq && (2..=4).contains(&n) && ints[..n].iter().all(|b| b.is_some()) {
+        let l = |i: usize| ints[i].ok_or(MaliError::Defect(Defect::IrIndex));
+        let zeros = ints[..n].iter().filter(|b| matches!(b, Some((_, 0)))).count();
+        if zeros == n {
+            let mut mx = l(n - 1)?.0;
+            for i in (0..n - 1).rev() {
+                mx = vs.alu(Alu::Umax, mx, l(i)?.0, u)?;
+            }
+            return vs.alu(Alu::Icmp(Cmpf::Eq), mx, Val::Const(0), u);
+        }
+        if zeros != 0 {
             return Err(MaliError::Arithmetic);
         }
-        let mut t = [u; 2];
-        for (o, &(p, tr)) in t.iter_mut().zip(b.iter()) {
-            *o = if tr { p } else { vs.alu(Alu::Inot, p, u, u)? };
+        let (p, c) = l(n - 1)?;
+        let mut acc = vs.alu(Alu::Icmp(Cmpf::Eq), p, Val::Const(c), u)?;
+        for i in (0..n - 1).rev() {
+            let (p, c) = l(i)?;
+            let e = vs.alu(Alu::Icmp(Cmpf::Eq), p, Val::Const(c), u)?;
+            acc = vs.alu(Alu::Iand, acc, e, u)?;
         }
-        return vs.alu(Alu::Iand, t[1], t[0], u);
+        return Ok(acc);
     }
     match (a, op, n) {
         (AluOp::Ball, AluOp::Feq, 2) => {
@@ -6352,6 +6735,8 @@ fn walk<'s>(
     let mut outer = [VsLoop::None; 4];
     let mut nouter = 0;
     let mut kept_loop: Option<KeptLoop> = None;
+    /* the product of compare results the walk is in ([`vs_chain_step`]) */
+    let mut mask_chain = MaskChain::NONE;
     let steps = vs_steps(m, scratch)?;
     vs_ir_dead(m, steps, scratch, vs.ir_dead)?;
     let exact_values = invariant_values(m, scratch)?;
@@ -6971,6 +7356,13 @@ fn walk<'s>(
                                 *o = Val::Const(c);
                                 continue;
                             }
+                        }
+                    }
+                    /* a statement of a product of compare results */
+                    if a == AluOp::Fmul && l == 0 && width <= 1 {
+                        if let Some(v) = vs_chain_step(&mut vs, m, &mut mask_chain, &s, x(0), x(1))? {
+                            *o = v;
+                            continue;
                         }
                     }
                     *o = match a {
@@ -8282,6 +8674,15 @@ fn walk<'s>(
      * before the operation that reads it (deqp_intval_opvs_mul_ivec3_mediump:
      * each `MKVEC.v2i16` before its `FMA.v2f16`) */
     move_compares(&mut vs, scratch, true)?;
+    /* an `inot` is a comparison to the pass too (`nir_alu_instr_is_comparison`,
+     * nir.c:3313), and the pass runs twice on a vertex shader, before and
+     * after `pan_nir_lower_bool_to_bitsize` (bifrost_nir.c:381 and the
+     * link's run; measured on Mesa 26.2.1's per-pass NIR of
+     * deqp_vsuarr_init_multi): the `inot` an `iand` reads beside a compare
+     * ends up after that compare, `ior`, `ieq`, `inot`, `iand`
+     * (`ICMP_OR.u32.eq.m1` then `LSHIFT_OR.i32 r2, 0x0, 0x0.b00, r2^.not`
+     * before their `LSHIFT_AND.i32`) */
+    move_before_users(&mut vs, scratch, |k| matches!(k, Kind::Alu(Alu::Inot)))?;
     Ok(vs)
 }
 

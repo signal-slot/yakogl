@@ -130,14 +130,14 @@ fn vs16ref_or_bool() {
     mali_ref::assert_matches("deqp_vs16ref_or_bool");
 }
 
+/// Plan #387 mali-train-3b: a `bvecN ==` against a constant of true and
+/// false lanes, cut last lane first (nir.rs `vs_reduce`).
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
 fn vs16ref_uapi_bvec3_mix() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_bvec3_mix");
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
 fn vs16ref_uapi_bvec4_mix() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_bvec4_mix");
 }
@@ -176,8 +176,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_vs16ref_bcmp_eq_bvec4", ARITH),
     ("deqp_vs16ref_bcmp_ne_bvec4", ARITH),
     ("deqp_vs16ref_eq_mediump_vec4", ARITH),
-    ("deqp_vs16ref_uapi_bvec3_mix", ARITH),
-    ("deqp_vs16ref_uapi_bvec4_mix", ARITH),
     ("deqp_vs16ref_uapi_struct_int_ivec4", INT),
 ];
 
@@ -202,6 +200,9 @@ const MATCHED: &[&str] = &[
     "deqp_vs16ref_bcmp_eq_bvec3",
     "deqp_vs16ref_bcmp_ne_bvec3",
     "deqp_vs16ref_or_bool",
+    /* plan #387 mali-train-3b: `bvecN ==` against true and false lanes */
+    "deqp_vs16ref_uapi_bvec3_mix",
+    "deqp_vs16ref_uapi_bvec4_mix",
     /* vs16-2: an int / ivec uniform read as its words, `compare_ivec3`'s
      * product the `CSEL.u32.gt` chain */
     "deqp_vs16ref_uapi_int",
