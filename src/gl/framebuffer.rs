@@ -994,7 +994,46 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
     {
         return GL_FRAMEBUFFER_UNSUPPORTED;
     }
+    #[cfg(feature = "gpu-powervr")]
+    if !pvr_output_regs_fit(c, fb) {
+        return GL_FRAMEBUFFER_UNSUPPORTED;
+    }
     GL_FRAMEBUFFER_COMPLETE
+}
+
+/// Do the colour attachments of `fb` fit the PowerVR pixel's four 32-bit
+/// output registers? The list is the back end's: the attached colour
+/// attachments in attachment order, each as many dwords as
+/// `surf_out_dwords` gives its surface, placed by
+/// `mrt_layout::register_layout`. An over-budget layout is
+/// GL_FRAMEBUFFER_UNSUPPORTED (docs/notes/mrt4-v3d-pvr.md section 2.3); the
+/// back end would draw it short. Completeness does not depend on the draw
+/// buffers, so every attached colour image counts. A frame of up to three
+/// attachments is not asked: its last target already goes through a tile
+/// buffer (`eot3_tb`, the back end's emit loop), which stays what it was.
+#[cfg(feature = "gpu-powervr")]
+fn pvr_output_regs_fit(c: &GlContext, fb: &GlFramebuffer) -> bool {
+    let fmts: Vec<u8> = (0..=fb.color_n.len() as u8)
+        .filter(|&n| color_attachment(fb, n).is_some_and(|a| a.type_ != GL_NONE))
+        .map(|n| fb_attachment_format(c, fb, n))
+        .collect();
+    // An sRGB attachment beside another is drawn as RGBA8 bytes the PBE
+    // encodes (`srgb_beside_other_as_rgba8`): one register, not its halves' two.
+    let dwords: Vec<u8> = fmts
+        .iter()
+        .map(|&f| {
+            if fmts.len() > 1 && crate::backend::gles_surf_is_srgb(f) {
+                1
+            } else {
+                crate::pvr::backend::surf_out_dwords(f) as u8
+            }
+        })
+        .collect();
+    dwords.len() < 4
+        || !matches!(
+            crate::pvr::mrt_layout::register_layout(&dwords),
+            Err(crate::pvr::mrt_layout::LayoutError::OutputRegs { .. })
+        )
 }
 
 /// The one sample count of `fb`'s attached images (a texture's is 0, a
@@ -1087,7 +1126,16 @@ pub fn fb_target_format_n(c: &GlContext, n: u8) -> u8 {
     if c.bound_framebuffer == 0 {
         return c.default_format;
     }
-    if let Some(fb) = c.framebuffer_ref(c.bound_framebuffer) {
+    match c.framebuffer_ref(c.bound_framebuffer) {
+        Some(fb) => fb_attachment_format(c, fb, n),
+        None => GLES_SURF_RGBA8888,
+    }
+}
+
+/// [`fb_target_format_n`] for colour attachment `n` of the framebuffer
+/// object `fb` (bound or not).
+fn fb_attachment_format(c: &GlContext, fb: &GlFramebuffer, n: u8) -> u8 {
+    {
         let Some(a) = color_attachment(fb, n) else { return GLES_SURF_RGBA8888 };
         if a.type_ == GL_TEXTURE {
             if let Some(surf) = c.texture_ref(a.name).and_then(|t| {
