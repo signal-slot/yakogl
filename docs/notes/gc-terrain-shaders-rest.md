@@ -14,6 +14,22 @@ the differences with that model.
 
 ## Answer in short
 
+- **Today (`3df3adfc9`, plan #421) the ten shaders are 234 instructions
+  against etnaviv's 279** (475 at `723a75c8`, 338 at `85afd0cf`), pinned by
+  `tests/gc_terrain_shader_count.rs`. Instructions (temporaries), ours then
+  etnaviv: terrain.frag 75 (12) / 72 (11), terrain.vert 40 (9) / 39 (9),
+  tilt_h and tilt_v 29 (10) each / 46 (5), bloom_h and bloom_v 16 (6) each /
+  24 (5), normalmap 17 (6) / 21 (4), quad.vert 4 / 4, luminance 6 / 3,
+  overlay 2 / 2. The tilt and bloom blurs are shorter than etnaviv's; the
+  two heavy shaders are 3 and 1 above it.
+- The model's GPU time of the drawn ones is **50.2 ms** (101.5 at
+  `723a75c8`, 70.1 at `85afd0cf`, etnaviv's 59.6), at 0.6 ns, cover x
+  overdraw 1.0. Not measured: terrain's frame on the Armadillo-X2 (standing
+  in for the Verdin i.MX8MP) is 162.0 ms at `85afd0cf`; the after row is not
+  measured (`gc-slow-terrain.md`, "Plan #421").
+- All five ranks below landed (state column of the ranked table). The text
+  from here on, up to "Landed", is the state at `723a75c8`.
+
 - Ours is longer in every shader with real arithmetic: **terrain.frag 148
   against 72 (2.06x)**, terrain.vert 56 against 39 (1.44x), tilt-shift 66 and
   75 against 46 (1.43x, 1.63x), the two bloom blurs 42 and 47 against 24
@@ -107,7 +123,7 @@ bloom and normal-map passes, 393 216 vertices for terrain at cover x overdraw
 `gc-shadow-refract-shaders.md`'s patch (copy fold and scalar lane merge,
 `src/shaderc/online/vivante/peephole.rs`), recounted by item
 terrain-compiler-fix at main `abfac1ed` and landed by item
-x2-tiled-probe-run ("What to do" below);
+x2-tiled-probe-run ("Landed" below);
 `tests/gc_terrain_shader_count.rs` pins the column of the latest landed
 change and carries etnaviv's and the earlier counts as comments.
 
@@ -279,14 +295,14 @@ ms below are the instructions removed from the listings above, by cause,
 times those costs; the causes overlap by a few instructions, the total does
 not (41.9 ms with the 0.6 ms that is in none).
 
-| rank | change | removes | ms a frame (terrain) |
-|---:|---|---|---:|
-| 1 | **Unroll constant-count loops on the GC7000 and resolve the constant-index uniform arrays** (`select.rs:2943` `loop_convert`; the shared `src/shaderc/online/powervr/unroll.rs:218`; `select.rs:2455-2530`) | terrain.frag 54 (14 loop control + 40 array reads) | **15.6** (12.4 to 18.7 over cover 0.8 to 1.2) |
-| 2 | **Copy propagation for partial write masks, a coalescer that works past a branch, direct writes to the output registers** (`select.rs:3422-3436`, `alloc.rs:5595-5607`, `alloc.rs` `build_one`) | terrain.frag 12, terrain.vert 9, tilt_v 8, bloom 11 + normalmap 3 | **8.4** |
-| 3 | **`mul` + `add` -> `mad` fusion** in the selection (nothing today beyond `lower.rs:6140`) | tilt 8 + 8, terrain.frag 4, terrain.vert 2, bloom 8 | **6.6** |
-| 4 | **Float constant folding in the GC7000 selection** (`fold.rs:24` `fold_float`, used by `src/shaderc/online/powervr/select.rs:3865` and `src/shaderc/online/v3d/prepare.rs:729`, not by `select.rs`): `mat * vec4(v, 1.0)`, `abs(1.0 - TiltShift)`, `x * 2.0 - 1.0` | terrain.vert 8, tilt 5 + 5, bloom 10, terrain.frag 4 | **6.4** |
-| 5 | **Vector packing of the blur's per-tap offsets** (one vec4 `mul` for four scalar taps) | tilt 7 + 7, bloom 6 | **4.2** |
-| | all five (2 more instructions of terrain.frag are in none: 0.6) | | **41.2** (37 at cover 0.8) |
+| rank | change | removes | ms a frame (terrain) | state |
+|---:|---|---|---:|---|
+| 1 | **Unroll constant-count loops on the GC7000 and resolve the constant-index uniform arrays** (`select.rs:2943` `loop_convert`; the shared `src/shaderc/online/powervr/unroll.rs:218`; `select.rs:2455-2530`) | terrain.frag 54 (14 loop control + 40 array reads) | **15.6** (12.4 to 18.7 over cover 0.8 to 1.2) | landed `f62bcfe1` (terrain.frag 127 -> 81) |
+| 2 | **Copy propagation for partial write masks, a coalescer that works past a branch, direct writes to the output registers** (`select.rs:3422-3436`, `alloc.rs:5595-5607`, `alloc.rs` `build_one`) | terrain.frag 12, terrain.vert 9, tilt_v 8, bloom 11 + normalmap 3 | **8.4** | landed: `3ac0d82d` (copy fold), `965d678b` (partial-mask copies P, producers R, outputs B); the coalescer past a branch has no member after the unroll |
+| 3 | **`mul` + `add` -> `mad` fusion** in the selection (nothing today beyond `lower.rs:6140`) | tilt 8 + 8, terrain.frag 4, terrain.vert 2, bloom 8 | **6.6** | landed `02b3bc2b` |
+| 4 | **Float constant folding in the GC7000 selection** (`fold.rs:24` `fold_float`, used by `src/shaderc/online/powervr/select.rs:3865` and `src/shaderc/online/v3d/prepare.rs:729`, not by `select.rs`): `mat * vec4(v, 1.0)`, `abs(1.0 - TiltShift)`, `x * 2.0 - 1.0` | terrain.vert 8, tilt 5 + 5, bloom 10, terrain.frag 4 | **6.4** | landed `6e498505`, `27f2a036` |
+| 5 | **Vector packing of the blur's per-tap offsets** (one vec4 `mul` for four scalar taps) | tilt 7 + 7, bloom 6 | **4.2** | landed as rank 5' `148091b1`: one `mad` a tap, not a vec4 `mul` |
+| | all five (2 more instructions of terrain.frag are in none: 0.6) | | **41.2** (37 at cover 0.8) | |
 
 How sure each is:
 
@@ -314,73 +330,54 @@ How sure each is:
   shader's 840 against 414 is the next: 426 instructions x 0.039 ms =
   16.7 ms, item noise-shader-count's).
 
-## What to do: terrain-compiler-fix (no code change could land here)
+## What landed after the sr patch and the unroll
 
-Plan #328, item terrain-compiler-fix, at main `abfac1ed`. The item could
-edit only `src/shaderc/online/vivante/`, not the shared compiler files
-(`select.rs`, `lower.rs`, `fold.rs`, `codegen.rs`, `loop_count.rs`,
-`src/shaderc/online/powervr/unroll.rs`) or `tests/fixtures/` and `tests/reference/`, and had to
-stop if a pinned fixture moved. **No compiler code was committed**, for two
-reasons that hold for every rank:
+Instructions and temporaries, before to after each commit (plan #421);
+etnaviv in brackets:
 
-- **Where the causes are.** Rank 1 (the unroll before the selection reads
-  the index, `select.rs` `loop_convert` and the run-time array read of
-  `select.rs:2455-2530`), the partial-mask half of rank 2
-  (`select.rs` `propagate_copies`), rank 4 (`fold::fold_float` called from
-  the GC `select_blocks`) and rank 5 (a vectorising pass over the IR) all
-  change shared files. Rank 3 (`mad` contraction) can be paired in
-  `vivante/`, but it needs the `invariant` outputs handed to the GC passes
-  from `codegen.rs` `assemble_from_ir_blocks` (`gc-terrain-shaders.md`, "What
-  to do"). Only the coalescer half of rank 2 (`alloc.rs` `coalesce_copies`
-  past a branch) and the copy fold of sr-compiler-fix lie wholly inside
-  `vivante/`.
-- **The shared pin.** Any shortening inside `vivante/` also shortens the
-  GC offline-table programs, so it moves `tests/fixtures/precompile_counts.txt`
-  (every `gc7000` line), as noise-compiler-fix and sr-compiler-fix measured.
-  Their patches are not landed for that reason, and a third pass in the same
-  allocator would move the same lines.
+| commit | change | terrain.vert | terrain.frag | tilt_h, tilt_v | bloom_h, bloom_v | normalmap | the ten | noise |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `f62bcfe1`, `6e498505`, `a0497f7e`, `27f2a036` (with `3ac0d82d`) | unroll, float folds, constant lanes | 44 / 9 | 80 / 12 | 57 / 12 each | 32 / 8 each | 20 / 6 | 338 | 556 / 14 |
+| `02b3bc2b` | rank 3: a `mul` read once by an `add` is one `mad` | 42 / 9 | 76 / 12 | 49 / 12 | 28 / 8 | 19 / 6 | 305 | 509 / 14 |
+| `965d678b` | rank 2, rest: P, R, B (below) | 40 / 9 | 75 / 12 | 48 / 12 | 27 / 8 | 17 / 6 | 294 | 471 / 14 |
+| `148091b1` | rank 5': a blur tap's offset is one `mad` | 40 / 9 | 75 / 12 | 29 / 10 | 16 / 6 | 17 / 6 | **234** | 471 / 14 |
+| etnaviv | | [39 / 9] | [72 / 11] | [46 / 5] | [24 / 5] | [21 / 4] | [279] | [414 / 12] |
 
-What the item measured instead: sr-compiler-fix's patch
-(`gc-shadow-refract-shaders.md`, "The patch", applies as is to `abfac1ed`)
-on terrain's ten shaders, the "sr patch" column of the table. The ten go
-from **475 to 428 instructions** (etnaviv 279): terrain.frag 148 to 127
-(temporaries 19 to 16), terrain.vert 56 to 48, tilt 66 and 75 to 62 and 71,
-bloom 42 and 47 to 38 and 43, normal map 25 to 23. At the model's cost
-(above) that is about **10.6 ms a frame** (terrain.frag 21 x 0.288 = 6.0,
-terrain.vert 8 x 0.236 = 1.9, tilt 8 x 0.288 = 2.3, bloom and normal map
-0.4), taken from the copies of ranks 2 and 4 (8.4 and 6.4 ms in the
-ranking): the fold reads the `mov -x` and the partial-mask copies through,
-and the merge joins the per-lane `rcp`/`rsq`.
-tilt_v keeps its 9 more than tilt_h with the patch (71 against 62): the
-per-tap `vec2(0.0, k * stepY)` copies survive it. Why is read out of the
-listing in "Landed: x2-tiled-probe-run" below.
+- **Rank 3, `Sel::fuse_mul_add`** (`select.rs`, after `propagate_copies`):
+  an F32 `mul` written once and read once by an `add` in the same straight
+  line becomes `mad` at the add's place; the add's swizzle is composed into
+  the product's sources. Refused: a product read twice, a branch or write of
+  a product source between, sources over `within_caps`, and every pair of a
+  shader with an `invariant` output (shader-wide; `IoDecl::is_invariant`, so
+  the pragma counts). The host's `mad` is multiply then add, so the values
+  are bit for bit; the GC7000's own rounding is not measured.
+- **Rank 2, rest** (all in `src/shaderc/online/vivante/`): B (`alloc.rs`
+  `copy_source_dying_here`) gives a value born by a plain `mov` of a source
+  that dies there the source's register, so the copy becomes a self-copy;
+  P (`peephole.rs` `fold_copies`) reads a sole-writer partial copy through
+  a reader that consumes lanes outside the copy's mask; R
+  (`peephole::retarget_producers`) makes the producer of a copied value
+  write the copy's lane. The "coalescer past a branch" has no member: after
+  the unroll no terrain shader has a branch.
+- **Rank 5', `Sel::fuse_tap_offsets`** (`select.rs`, after `fuse_mul_add`):
+  `coord + vec2(k * s, 0.0)` is `mad d, s.xxxx, (k, 0), coord` with the k
+  vector a constant-file literal. A zero lane `s * 0.0 + c` equals
+  `c + 0.0` only for `s >= +0`, so `s` must be provably non-negative (an
+  `abs` read, a non-negative finite literal, or a copy or product of those);
+  k finite and non-zero; the slot needs a zero lane. normalmap's
+  `s = 1 / resolution` has no sign proof and stays at 17 (a rule without the
+  proof would save about 3 but change bits). Tap 0 reads the coordinate
+  directly when only `texld` reads it.
+- Pins moved with them: `tests/fixtures/precompile_counts.txt` (GC lines),
+  `tests/gc_sr_shader_count.rs`, `tests/gc_select_fold.rs`; no PowerVR, V3D
+  or `tests/reference/` file.
 
-The micro-shaders of `tests/gc_terrain_shader_count.rs`, ours and with the
-patch: t1 (rank 1, a one-iteration loop over `uniform vec4 P[1]`) 23 and 19;
-t3 (rank 3, `texture2D(T, a.xy) * 0.25 + b`) 3 and 3; t4 (rank 4,
-`abs(S - a.y) / abs(1.0 - S)` with `const float S = 0.5`) 9 and 5; t5 (rank
-5, two taps' offsets from one scalar) 8 and 8. Ranks 1, 3 and 5 are
-untouched by anything inside `vivante/`; t4 shrinks only by the copies.
-
-What landing the terrain part needs, in this order:
-
-1. sr-compiler-fix's patch with its re-pins (`precompile_counts.txt`,
-   `lane_move_equivalence.rs`, `gc_sr_shader_count.rs`, the
-   `gc_terrain_shader_count.rs` pins to the "patch" comments): the 10.6 ms
-   above, by one item allowed to move the fixture. Landed by item
-   x2-tiled-probe-run ("Landed" below).
-2. Rank 1 in `select.rs`: call the shared unroller (`src/shaderc/online/powervr/unroll.rs`
-   `unroll`, the count from `loop_count.rs` `constant_loop_entries`, limit 32
-   as etnaviv's) on the GC path before `loop_convert`, so the array index is
-   a constant and `lower.rs`'s constant-index path reads the constant file.
-   terrain.frag's 54 instructions, 15.6 ms; t1 to 1 or 2. Landed with step 1
-   by item x2-tiled-probe-run ("Landed" below: 46 instructions, t1 to 1).
-3. Rank 4 in the GC `select_blocks`: `fold::fold_float` on constant
-   operands. t4 to 2; terrain.vert's `vec4(p, 1.0)` product 8.
-4. Rank 3: `codegen.rs` hands the `invariant` output registers to the GC
-   passes, then a `mul` + `add` to `mad` pairing in `vivante/`. t3 to 2.
-5. Rank 5: a lane-packing pass of the per-tap offsets (shared IR). t5 to 1
-   `mul`.
+The blur passes are now shorter than etnaviv's (9 `texld` in 29
+instructions), so they are likely texture-unit bound and the model
+overstates what rank 5' gains there. What is left is in
+`gc-terrain-shaders.md` (noise, 57 above etnaviv) and about 4 instructions
+in terrain.frag and terrain.vert: about 3 ms of a frame at the model's
+cost. The "Not done" list below keeps its open ends.
 
 ## Landed: x2-tiled-probe-run
 
@@ -458,10 +455,12 @@ checked on the X2. terrain.frag is now 9 instructions from etnaviv's 72.
 
 ## Not done, and what would settle the open ends
 
-- No board run: the X2 is not touched by this item. The prediction to check
-  after a change is terrain's ms a frame on the X2 (`tools/cts/x2-glmark2-scenes.sh`
-  once plan #323's configuration is on main), expected 40 to 45 ms lower for all
-  five, and the per-pass GPU time from the PERF pages of fb-counters.
+- The after row of the compiler changes is not measured on the board.
+  Terrain on the Armadillo-X2 (standing in for the Verdin i.MX8MP) is 162.0
+  ms a frame at `85afd0cf`, before ranks 3, 2 (rest) and 5'; the model puts
+  the three at about 23 ms (`gc-slow-terrain.md`, "Plan #421"). The GC7000's
+  `mad` rounding is read from the frames, not from the host. The per-pass GPU
+  time from the PERF pages of fb-counters is the other check.
 - The costs assume 0.6 ns an instruction and one instruction per clock
   from every kind (`texld`, `branch`, `rcp` as `mul`). The vertex stage's cost
   per instruction is the least known term (`gc-slow-terrain.md`, "Not

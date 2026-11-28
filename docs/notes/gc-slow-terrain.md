@@ -9,6 +9,15 @@ at `964f50f0`; glmark2 at the pinned `22c527cb` (`$GLMARK2_SRC`).
 question; this note replaces its terrain half with counts taken from the
 running code.
 
+**Status at `3df3adfc9` (plan #421).** The instruction counts and GPU
+estimates of the sections below are those of `964f50f0` (noise 840, terrain
+fragment 148, ...). The compiler changes since then are in "Plan #421: what
+landed, what did not, and the X2 rows" (before `## Plan #355`): the noise
+shader is 471 instructions (etnaviv 414) and the ten other shaders are 234
+(etnaviv 279). On the Armadillo-X2 (standing in for the Verdin i.MX8MP, which
+is away) terrain measured 162.0 ms a frame (7 FPS) at `85afd0cf`, before the
+last three compiler commits; the after row is not measured.
+
 ## Answer in short
 
 - **Terrain is GPU-bound.** The frame is 52 kicks. At the GPU cost
@@ -318,7 +327,7 @@ v1 (frame us) = 0xffff (saturated).
 
 | rank | cause | est ms a frame | fix (owner) | X2 record that confirms it |
 |---|---|---:|---|---|
-| 1 | **GPU shading of the 9 passes**: noise height map 33 to 44, terrain 50 to 75 (vertex 13 to 18 of it), tilt-shift 44 to 58, the rest about 10 | 140 to 205 | Largest parts first. (a) Terrain's fragment shader runs on every fragment because linear targets have no early depth (`backend.rs:1754-1783`): a tiled colour target with early depth and tile-status fast clear (`imx8mp-frame-floor.md` F4; also turns the 8 clear quads, about 9 ms, into fast clears). (b) The noise shader's 840 instructions: compare with Mesa etnaviv's count for the same text (`tools/vivante/etna_shc.c`, `glsl2vivante.py`). If ours is much longer, the online compiler's vec4 packing of `permute` and `mod` is the fix. Not done here (needs a built Mesa tree). (c) The 393 216 non-indexed vertices are glmark2's, not ours. | page 1 v2 (`gc_render_wait` sleeps per 100 frames) **10 000 to 17 000**: the CPU sleeps through 110 to 180 ms of each frame waiting on the GPU. Page 1 v1 (waits per 100 frames) 600 to 800. Page 1 v0 and v3 = 0xffff. Page 3 v1 (HI idle kcycles an interval) **16 000 to 40 000** (the GPU idle 20 to 50 ms a frame) while v0 = 0xffff. Page 0 v2 (gl) = 0xffff: the CPU waits inside GL calls. Page 0 v3 (swap) 12 500 to 30 000 us. If instead page 3 v1 reads over 80 000 (the GPU idle 100 ms or more), rank 1 is wrong and the time is on the CPU. |
+| 1 | **GPU shading of the 9 passes**: noise height map 33 to 44, terrain 50 to 75 (vertex 13 to 18 of it), tilt-shift 44 to 58, the rest about 10 | 140 to 205 | Largest parts first. (a) Terrain's fragment shader runs on every fragment because linear targets have no early depth (`backend.rs:1754-1783`): a tiled colour target with early depth and tile-status fast clear (`imx8mp-frame-floor.md` F4; also turns the 8 clear quads, about 9 ms, into fast clears). (b) The noise shader's 840 instructions: etnaviv compiles the same text to 414 (`gc-terrain-shaders.md`), and the compiler changes of plan #421 took ours to 471 (`gc-terrain-shaders-rest.md` for the other ten; ranks and what did not land in "Plan #421" below). (c) The 393 216 non-indexed vertices are glmark2's, not ours. | page 1 v2 (`gc_render_wait` sleeps per 100 frames) **10 000 to 17 000**: the CPU sleeps through 110 to 180 ms of each frame waiting on the GPU. Page 1 v1 (waits per 100 frames) 600 to 800. Page 1 v0 and v3 = 0xffff. Page 3 v1 (HI idle kcycles an interval) **16 000 to 40 000** (the GPU idle 20 to 50 ms a frame) while v0 = 0xffff. Page 0 v2 (gl) = 0xffff: the CPU waits inside GL calls. Page 0 v3 (swap) 12 500 to 30 000 us. If instead page 3 v1 reads over 80 000 (the GPU idle 100 ms or more), rank 1 is wrong and the time is on the CPU. |
 | 2 | **52 kicks through a 4-slot ring with 1 ms polls**: the CPU blocks behind each long pass, wakes late, then feeds the one-level mipmap kicks slower than the GPU runs them | 7 to 10 | One kick per chain: all levels of a chain in one stream (`mipmap.rs:270-278`, `backend.rs:2222-2260`; `imx8mp-glmark2-gap.md` item 3). With it or instead, more stream slots (`GC_FRAMES`, `backend.rs:77`). | Page 1 v1 600 to 800, and page 4 v2 **6 to 8 a frame**: 5 to 7 in `frame_open`, 1 from rank 3. After the fix: kicks 52 -> 9 a frame (page 1 v4, 5 200 -> 900 per 100 frames, readable only on boards that store w3). The blocking waits stay about as many, because the CPU still waits behind the long passes; what goes is the GPU's idle time between them. So page 3 v1 falls by about 5 000 kcycles (about 7 ms) and page 0 v0 rises by 1 to 2 frames. |
 | 3 | **Mid-frame `finish()` and the CPU tiled copies of the height and normal maps** (the vertex stage cannot read linear storage, `tiled_copy.rs:170-180`) | 4 to 6 | Tile the two maps on the GPU instead of the CPU: a resolve-engine (RS) copy into the tiled copy, ordered in the stream after the render that wrote the map. That removes the `finish()` and the 1.5 MB of non-cacheable CPU traffic. Or render the two maps into tiled storage directly (`gc-terrain-tiled-copy.md`, "Not done"). | Page 4 v2 includes **1 a frame** from `tiled_copy.rs:371`. Page 4 v3 about **1 536 KiB a frame**: 512 read + 1 024 written, or 1 024 KiB if the zero fill is not counted; the streams and arenas add 91 KiB if counted. After the fix: v3 about 0 to 91, v2 one less, page 0 v0 up about 1 frame. |
 | 4 | **The 1 ms sleep poll** in `gc_render_wait` (`gc_render.c:969`) | 2 to 4 | Wake the wait from the interrupt (plan #328 item fence-irq). | Page 1 v2 / v1 = 15 to 25 sleeps a blocking wait. After the fix: page 1 v2 near 0 with the same v1, page 0 v0 up 0 to 1 frame. |
@@ -333,7 +342,9 @@ ranks 2 and 3 (about 12 to 16 ms together, both host-testable), then
 rank 4 (fence-irq, already an item). Even with ranks 2 to 4 all done the
 frame stays at about 160 to 220 ms. Terrain reaches the panel's rate only
 when the GPU work itself is cut, by early depth, fast clears and a
-shorter noise shader.
+shorter noise shader. (Since `964f50f0` the shader work has shrunk by about
+65 ms of the model, see "Plan #421"; the board's frame has to be read again
+with it.)
 
 ## What this does not show
 
@@ -342,14 +353,114 @@ shorter noise shader.
   brackets the board's 200 to 250 but does not prove the split.
 - The vertex stage's cost per instruction and the cost of `pow`,
   `normalize` and `mod` sequences were not measured on this GPU.
-- Etnaviv's instruction count for `terrain-noise.frag` was not taken. The
-  Mesa 26.2.1 tree in the dependency cache could not be copied for
-  `etna_shc` in this session, and patching the shared copy in place would
-  have changed another item's dependency.
+- Etnaviv's instruction count for `terrain-noise.frag` is 414 (taken later:
+  `gc-terrain-shaders.md`); no GPU time of either listing exists.
 - The page 3 KiB values (GPU traffic) are not predicted closely here.
   About 17 MB a frame is the terrain mesh alone (393 216 x 44 bytes), so
   expect page 3 v2 of about 25 000 to 50 000 KiB and v3 of about 15 000 to
   25 000 KiB. They do not separate the candidates.
+
+## Plan #421: what landed, what did not, and the X2 rows
+
+Counts are instructions, then temporaries, from
+`tests/gc_terrain_shader_count.rs` (header features `host-test,gpu-vivante,
+shaderc-online`, `GLMARK2_SRC` set) run at `3df3adfc9`; "etna" is Mesa
+26.2.1's `etna_shc`. The GPU model is the note's own (0.6 ns an instruction
+a pixel or vertex, cover x overdraw 1.0): 0.288 ms an instruction in an
+800x600 pass, 0.236 in the terrain vertex stage, 0.039 in a 256x256 pass.
+Model figures are not measurements.
+
+| shader | `964f50f0` | `85afd0cf` (the X2 before image) | `3df3adfc9` | etna |
+|---|---:|---:|---:|---:|
+| terrain-noise.frag | 840 | 556 / 14 | **471 / 14** | 414 / 12 |
+| terrain.frag | 148 | 80 / 12 | **75 / 12** | 72 / 11 |
+| terrain.vert | 56 | 44 / 9 | **40 / 9** | 39 / 9 |
+| tilt_h.frag, tilt_v.frag | 66, 75 | 57 / 12, 57 / 12 | **29 / 10**, **29 / 10** | 46, 46 |
+| bloom_h.frag, bloom_v.frag | 42, 47 | 32 / 8, 32 / 8 | **16 / 6**, **16 / 6** | 24, 24 |
+| normalmap.frag | 25 | 20 / 6 | **17 / 6** | 21 |
+| quad.vert, luminance.frag, overlay.frag | 7, 7, 2 | 7, 7, 2 | **4, 6, 2** | 4, 3, 2 |
+| the ten (without noise) | 475 | 338 | **234** | 279 |
+
+Model GPU time of the drawn shaders, ten without noise: 101.5 ms
+(`964f50f0`), 70.1 (`85afd0cf`), **50.2** (today; etnaviv's 59.6). Noise
+pass: 32.8, 21.7, **18.4** ms. From the X2 before image to today the model
+gives **about 23 ms** a frame (ten 19.9, noise 3.3), from `964f50f0` about
+66 ms.
+
+### Which ranks landed
+
+| rank (`gc-terrain-shaders-rest.md`) | commit | result | state |
+|---|---|---|---|
+| copy fold and scalar lane merge (the sr patch) | `3ac0d82d` | ten 475 -> 428 | landed |
+| 1: unroll constant-count loops of 1 to 32 passes, uniform-array reads constant | `f62bcfe1` | terrain.frag 127 -> 81, ten 428 -> 382 | landed |
+| 4a, 4b: float constant folding and one-operand identities in the selection; T: a product retargeted past a constant-lane store | `6e498505`, `a0497f7e` | noise and vert shorter | landed |
+| 4c: a constant lane of a constructed vector read as the constant | `27f2a036` | noise 556 at `eae3ac95` | landed |
+| 3: a `mul` read once by an `add` is one `mad`, none toward an `invariant` output | `02b3bc2b` | ten 338 -> 305, noise 556 -> 509 | landed |
+| 2, rest: partial-mask copies read through (P), a producer writes its copy's lane (R), an output takes its dying source's register (B) | `965d678b` | ten 305 -> 294, noise 509 -> 471 | landed |
+| 5': a blur tap's offset is one `mad` | `148091b1` | tilt 48 -> 29, bloom 27 -> 16, ten 294 -> 234 | landed |
+| negate fold (noise 840 -> 767) and constant division by a run-time `rcp` | none | noise has 0 negate-only `mov`s and 0 `rcp` already: the sr patch and 4a, 4b removed them | superseded, no work |
+| coalescer past a branch | none | no shader of terrain has a branch after the unroll | no member, not written |
+
+Not landed, and why (no plan item owns them; at most about 3 ms of the
+frame together, from counts at `eae3ac95` and `02b3bc2b`):
+
+- `step(a, b)` as one `set.lt`: 16 instructions of the noise shader, 0.6 ms.
+- Constant-lane fills with one const-vector `mov`: 21 instructions of noise,
+  0.8 ms.
+- A look-through of a separate `mov w, -v` in `fuse_mul_add` (`x - a*b`
+  stays `mul`, `mov -`, `add`): about 8 instructions of noise, 0.3 ms.
+- The 72 gathers and the `coord.x` gather, 3 splat copies of noise (class S
+  of `gc-terrain-shaders.md`): about 2 instructions.
+- normalmap's `s = 1 / resolution` has no sign proof, so rank 5' leaves it at
+  17 (rule R2 would save about 3 but changes bits).
+
+The ten shaders are now below etnaviv's count (234 against 279; tilt 29
+against 46, bloom 16 against 24); the noise shader is 57 above (471 against
+414, 2.2 ms), terrain.frag 3 above, terrain.vert 1. The remaining compiler
+gain against etnaviv is about 3 ms of a 160 ms frame. The blur passes run
+fewer instructions than etnaviv's, so they are probably texture-unit bound
+(9 `texld` in 29 instructions): the instruction model overstates what the
+last compiler commits gain on them.
+
+Values: the host interpreter's outputs of the eleven shaders are unchanged
+(`tests/gc_terrain_values.rs`, pinned before the changes), and so are
+`tests/es2_report_guard.rs` and `tests/gc_unroll.rs`. The `mad` is the
+interpreter's multiply then add, as Mesa models the GC `mad`; the
+GC7000's own `mad` rounding is not measured, so the X2 frames before and
+after are to be compared by eye too, not only by time.
+
+### Rows the X2 sessions fill for the compiler changes
+
+All rows are measured on the Armadillo-X2 (targets x2, x2-console), which
+stands in for the Verdin i.MX8MP (away since 2026-11-16): same SoC and GPU.
+Frame time is the console's `FrameTime` of the scene's 10 s; `board.sh` writes
+no console without a UART, so these two come from the console of the lease
+and are not `board.sh` verdict rows. Records are under the gitignored,
+redacted `records/x2/`.
+
+| row | image commit (origin/main) | ms a frame | FPS | record | state |
+|---|---|---:|---:|---|---|
+| before | `72972ba4` | 247.588 | 5 | `records/x2/20261127-0954-before-72972ba4/` | console PASS; `board.sh` ended `not_back` (the task machine's ssh key was lost at the reset) |
+| before | `85afd0cf` (has 3ac0d82d, f62bcfe1, 6e498505, a0497f7e, 27f2a036; not 02b3bc2b, 965d678b, 148091b1) | **162.0** | 7 | `records/x2/*-before-85afd0cf/` | console PASS |
+| after | the tip that holds `148091b1` | - | - | - | **not measured**: the same ssh-key loss at the X2's reset blocked the second image |
+| D (after minus before `85afd0cf`) | | - | | | model: about -23 ms (to about 139 ms, still 7 FPS) |
+
+The 85.6 ms between the two before rows is more than the model's 42.5 ms
+for the compiler commits between them; the runs differ by many other
+commits and the first is a console figure, so no per-instruction cost is
+drawn from it. The after row needs the ms, not the integer FPS (162.0 and
+139 ms are both 7 FPS).
+
+The X2 runner: the autostarting `slint-launcher` container made `board.sh x2
+run` refuse in the stops of 2026-11-24 and 25; at the jump of 2026-11-27
+none was running (`containers=0`, the board left up in Linux), and `tools/board.sh` needs no change for it. What is missing is outside this note's code: the per-task ssh key
+has to survive the board's reset (persisted on the board with the owner's
+say, or reinstalled by connected after each reboot, or the run made from a
+farm node whose key is persisted). Two small `board.sh` fixes are named for
+#396/#397: with no `BOARD_UART` it saves no console although the console had
+the PASS and the timing, and `INDEX.txt`'s "runner: tools/board.sh build
+<sha>" names the runner's commit, not the image's (the image is in
+`image build: YAKOGL_SAMPLE_TREE=`).
 
 ## Plan #355: host state and what the X2 must measure
 
