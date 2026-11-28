@@ -266,6 +266,15 @@ the int and bool arrays have had rows since plan #377), `nir_fs.rs:11122`
   and `deqp_intval3_rsg_swizzle12_fs` (then `Mk@AddA`, opform O1). The arm
   is kept to the forms the references draw: a colour word, the other lane
   not a constant.
+- **U7** (`nir_fs.rs`, `vectorise`'s int-uniform arm, plan #377
+  spike-fsunif-mp): one int uniform's word as both lanes of the colour's
+  second word is a new leaf, `Leaf::IntSplat`: the word is converted and
+  narrowed once (`S32_TO_F32 r0, u2.w0`, `FADD.f32 r0.h0, r0^, -0`, the
+  same rows as `Leaf::MkInt`), ATEST reads `r0.h0`, and the word is
+  `MKVEC.v2i16 r0.h0, r0.h0`, which opt.rs `lower_mkvec_swz` makes
+  `IADD.v2u16 r1, r0^.h00, 0x0`. Byte-equal: `deqp_unifmp_interaction_88`.
+  The arm is kept to that form (the same word twice, the colour's second
+  word); any other int pair still refuses with this text.
 - **Not landed:** U3 (c) and (d) (`deqp_unifmp_{mat4_sub_mat4,
   vec4_mat4_mul}`, `deqp_fsunif_{mat4_add_float,mat2_mul_mat2}` still stop
   at `nir_fs.rs:11100`; `rsg_sconv12`, U3 (b), was lowered by plan #377).

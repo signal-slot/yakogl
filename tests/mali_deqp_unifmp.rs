@@ -36,7 +36,9 @@ mod mali_ref;
 /// `interaction_16` since plan #387 mali-train-3a (unifmp U2): one uniform
 /// half beside a varying's or a computed lane as a word of the colour
 /// (nir_fs.rs `vectorise`).
-const LOWERED: &[&str] = &["rsg_sconv12", "interaction_16"];
+/// `interaction_88` since plan #377 spike-fsunif-mp: one int uniform's
+/// float in both halves of a colour word (nir_fs.rs `Leaf::IntSplat`).
+const LOWERED: &[&str] = &["rsg_sconv12", "interaction_16", "interaction_88"];
 
 /// The references that compile with other words than Mesa's (hazards).
 /// `inv_mediump_cse2` since unifmp U2: its fragment program is byte-equal
@@ -51,7 +53,6 @@ const DIFFERS: &[&str] = &["inv_mediump_cse2"];
 const REFUSED: &[(&str, &str)] = &[
     ("highp_mat3_mul", TEXT_FSU),
     ("highp_vec3_mat3", TEXT_FSU),
-    ("interaction_88", TEXT_FSU),
     ("mat4_sub_mat4", TEXT_FSU),
     ("rsg_expr10", TEXT_FSU),
     ("struct_array", TEXT_FSU),
@@ -127,7 +128,6 @@ fn interaction_16() {
 /// `uniform mediump int a` (the int's float in both lanes of the colour's
 /// second word; site `nir_fs.rs:10360`).
 #[test]
-#[ignore = "refused (FsUniform: one int uniform's float in both lanes of a word); pinned by refusals_pinned"]
 fn interaction_88() {
     assert_matches("interaction_88");
 }
