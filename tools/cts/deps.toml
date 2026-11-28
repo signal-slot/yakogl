@@ -56,9 +56,9 @@
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
 # MALI_CSFFW (one pinned file), LZ4 (one small program), MP2_QEMU (one QEMU
-# binary from pinned sources) and DEQP_GLES3_TEST_DIR (one directory at a
-# pinned commit), fetched by .github/workflows/gate.yml when a runner lacks
-# them (their notes).
+# binary from pinned sources), DEQP_GLES3_TEST_DIR and DEQP_GLES2_TEST_DIR
+# (one directory each at a pinned commit), fetched by
+# .github/workflows/gate.yml when a runner lacks them (their notes).
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -270,6 +270,29 @@ fi
 git -C "$part" sparse-checkout set --no-cone /data/gles3/shaders/
 git -C "$part" checkout -q --detach "$want"
 mv "$part" "$DEPS/VK-GL-CTS-gles3"
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
+name = "DEQP_GLES2_TEST_DIR"
+path = "VK-GL-CTS-gles2-data/data/gles2/shaders"
+marker = "VK-GL-CTS-gles2-data/data/gles2/shaders/conditionals.test"
+note = "the dEQP GLES2 shader library (*.test) of VK-GL-CTS at 93bca01, the commit DEQP_WORK pins: tests/shaderc71_es2_corpus.rs (check.sh's shaderc71_es2_corpus row) compiles its expect-pass version 100 programs at V3D 7.1, and tools/cts/es2lib-ref71.sh reads the same directory (its $CONNECTED_DEPS_DIR/VK-GL-CTS-gles2-data default). DEQP_GLES3_TEST_DIR's recipe with the gles2 directory: a sparse checkout of data/gles2/shaders alone, in a directory of its own (DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as a complete tree); DEQP_WORK's clone is the source when it has the commit (no network), else one blobless commit from GitHub. Test data: read it, never run anything from it"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+part="$DEPS/VK-GL-CTS-gles2-data.part"
+rm -rf "$part"
+if git -C "$DEPS/VK-GL-CTS" cat-file -e "$want^{commit}" 2>/dev/null; then
+  git clone -q --no-checkout "$DEPS/VK-GL-CTS" "$part"
+else
+  git init -q "$part"
+  git -C "$part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+  git -C "$part" fetch -q --depth 1 --filter=blob:none origin "$want"
+fi
+git -C "$part" sparse-checkout set --no-cone /data/gles2/shaders/
+git -C "$part" checkout -q --detach "$want"
+mv "$part" "$DEPS/VK-GL-CTS-gles2-data"
 '''
 packages.apt = ["git"]
 packages.portage = ["dev-vcs/git"]

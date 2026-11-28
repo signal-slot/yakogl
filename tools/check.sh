@@ -119,7 +119,8 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 # The external inputs (ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC, GLMARK2_SRC,
-# DEQP_GLES3_TEST_DIR, ...) are the entries of the dependency layout,
+# DEQP_GLES3_TEST_DIR, DEQP_GLES2_TEST_DIR, ...) are the entries of the
+# dependency layout,
 # tools/cts/deps.toml: the one definition of the gate's environment, which the
 # gate image builds (tools/env/build-gate-image.sh). An entry the caller left
 # unset or empty is taken from the layout here, so the CI, a pool machine and
@@ -2072,6 +2073,29 @@ v3d_lib_tests() {
 scope v3d local
 step "clippy  $V3D_CONFIG" cargo clippy --no-default-features --features "$V3D_CONFIG" --all-targets
 step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_tests
+# tests/shaderc71_es2_corpus.rs compiles dEQP's GLSL ES 1.00 shader library
+# at DEQP_GLES2_TEST_DIR (the deps.toml entry: VK-GL-CTS data/gles2/shaders
+# at 93bca01, which .github/workflows/gate.yml builds on a runner that lacks
+# it, as it does DEQP_GLES3_TEST_DIR) through the V3D 7.1 online back end:
+# every expect-pass `version 100` program through chain71, each word decoded
+# by codec71 and passed by verify71, the counts and the refusals of
+# tools/shaders/known-uncompilable-v3d71-es2.txt pinned (plan #386, P13 of
+# docs/notes/pre-study-rpi5.md). Without the library the test skips itself
+# and its row would still pass, so the row is then a gap naming the entry,
+# and the variable is unset (as DEQP_GLES3_TEST_DIR's above) so that a value
+# naming no library cannot fail the whole-directory tests row below in this
+# row's place. With it, that row runs the test too (about a second).
+# precompile: tools/shaders holds the test's refusal list.
+scope v3d precompile
+if ls "${DEQP_GLES2_TEST_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
+  step "test    $V3D_CONFIG (tests/shaderc71_es2_corpus.rs)" \
+    cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test shaderc71_es2_corpus
+else
+  tests_row shaderc71_es2_corpus
+  gap "shaderc71_es2_corpus: no dEQP GLES2 shader library at DEQP_GLES2_TEST_DIR='${DEQP_GLES2_TEST_DIR-}' (tools/cts/deps-env.sh --build DEQP_GLES2_TEST_DIR): the library was NOT compiled at V3D 7.1"
+  tests_row
+  unset DEQP_GLES2_TEST_DIR
+fi
 # Every integration test target of tests/ with the V3D feature set, not
 # only the files the rows below name: a target that compiles only under
 # gpu-v3d (or gates its cases on it) ran nowhere else. A change confined to
