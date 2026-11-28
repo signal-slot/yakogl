@@ -1,0 +1,12 @@
+[00:00:05.100] <inf> pvr: boot done
+[00:00:05.200] <inf> pvr: pvr-hwperf: from=0 widx=4096 wrap=0 size=2097152 fw_drops=0 packets=120 dropped=0 other=3 tasks=6 unmatched=0 open=0 overflow=0 span_ticks=8000000 span_ns=10000000 err=None
+[00:00:05.200] <inf> pvr: pvr-hwperf lane=ta tasks=2 gpu_ticks=80000 gpu_ns=100000 k2s_n=2 k2s_ticks=16000 k2s_ns=20000
+[00:00:05.200] <inf> pvr: pvr-hwperf lane=3d tasks=4 gpu_ticks=1600000 gpu_ns=2000000 k2s_n=4 k2s_ticks=32000 k2s_ns=40000
+noise line without data
+[00:00:09.900] <inf> pvr: pvr-hwperf: from=4096 widx=9000 wrap=0 size=2097152 fw_drops=1 packets=300 dropped=2 other=0 tasks=10 unmatched=0 open=0 overflow=0 span_ticks=80000000 span_ns=100000000 err=None
+[00:00:09.900] <inf> pvr: pvr-hwperf lane=ta tasks=3 gpu_ticks=240000 gpu_ns=300000 k2s_n=3 k2s_ticks=24000 k2s_ns=30000
+[00:00:09.900] <inf> pvr: pvr-hwperf lane=3d tasks=6 gpu_ticks=4800000 gpu_ns=6000000 k2s_n=6 k2s_ticks=48000 k2s_ns=60000
+[00:00:09.900] <inf> pvr: pvr-hwperf lane=tdm tasks=1 gpu_ticks=40000 gpu_ns=50000 k2s_n=0 k2s_ticks=0 k2s_ns=0
+[00:00:09.900] <inf> pvr: pvr-hwperf job ext=7 lane=3d gpu_ticks=800000 k2s_ticks=8000
+[00:00:09.900] <inf> pvr: pvr-hwperf job ext=7 lane=3d gpu_ticks=1600000 k2s_ticks=8000
+[00:00:09.900] <inf> pvr: pvr-hwperf job ext=8 lane=ta gpu_ticks=80000 k2s_ticks=8000
