@@ -81,10 +81,26 @@
 #                    per distinct text). The input of tools/mali/corpus_diff.py.
 #   commit           the tip, the CTS commit and the command line
 #
+# The CTS tree
+# ------------
+# The tree is DEQP_WORK, else --cts DIR, else <deps>/VK-GL-CTS-host (<deps> is
+# $CONNECTED_DEPS_DIR, as tools/cts/deps-env.sh --layout prints it). Before the
+# `build`/`deqp`/`all` stages the script makes it complete by itself, so a
+# machine without it needs no hand work: a shallow (depth 1), blobless, sparse
+# (no doc/, android/) fetch of VK-GL-CTS 93bca01 from GitHub, or from
+# $DEPS/VK-GL-CTS when that has the commit; `python3 external/fetch_sources.py`;
+# `git apply tools/cts/cts-yakogl-target.patch` (the one patch the host build
+# needs; uncommitted, as cts-build.sh does). Each step is skipped when its
+# result is there, so a half-made tree is finished, not redone. The last step
+# writes the stamp <tree>/.yakogl-host-prepared (the commit and the patch's
+# sha256); a tree with a matching stamp, or one that already has the yakogl
+# target and the external sources (a hand-made DEQP_WORK), is reused untouched
+# with no network access. A fresh tree needs git, python3 and network.
+#
 # Environment:
 #   DEQP_WORK  VK-GL-CTS checkout with external sources and the yakogl target
-#              (tools/cts/deps.toml); else <deps>/VK-GL-CTS of
-#              tools/cts/deps-env.sh --layout. --cts overrides.
+#              (tools/cts/deps.toml); else <deps>/VK-GL-CTS-host, prepared as
+#              above when missing or incomplete. --cts overrides.
 #   JOBS       chunks in parallel (default nproc - 1); CHUNK cases per
 #              process (default 100)
 set -euo pipefail
@@ -113,7 +129,7 @@ while [ $# -gt 0 ]; do
 	--filter) filter=${2:?--filter needs a string}; shift 2 ;;
 	--cases) caselist=$(realpath "${2:?--cases needs a file}"); shift 2 ;;
 	--stage) stage=${2:?--stage needs all|build|run|extract}; shift 2 ;;
-	-h | --help) sed -n '5,66p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h | --help) sed -n '5,105p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "$me: unknown argument '$1'" >&2; usage ;;
 	esac
 done
@@ -122,7 +138,7 @@ case $stage in all | build | deqp | lib | run | extract) ;;
 
 if [ -z "$cts" ]; then
 	deps=$("$REPO/tools/cts/deps-env.sh" --layout 2>/dev/null || true)
-	cts=${deps:-$HOME/.local/share/connected/deps/yakogl}/VK-GL-CTS
+	cts=${deps:-$HOME/.local/share/connected/deps/yakogl}/VK-GL-CTS-host
 fi
 [ "${#slices[@]}" -gt 0 ] || slices=("$REPO"/tools/cts/log/2026-11-15-t6-gles2-S{1,2,3,4}-37305608)
 COMMIT=$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown)
@@ -138,8 +154,46 @@ SURFACE=${DEQP_SURFACE:-256}
 
 echo "$me: tip $COMMIT, CTS $cts, out $out (HOST-ONLY: compile and link outcomes only)"
 
+# ---- 0. the CTS tree: prepared when missing or incomplete -------------------
+prepare_cts() {
+	local patch=$REPO/tools/cts/cts-yakogl-target.patch want
+	want="$CTS_COMMIT $(sha256sum "$patch" | cut -d' ' -f1)"
+	if [ -f "$cts/.yakogl-host-prepared" ] && [ "$(cat "$cts/.yakogl-host-prepared")" = "$want" ]; then
+		return 0
+	fi
+	if [ -f "$cts/targets/yakogl/yakogl.cmake" ] && [ -d "$cts/external/zlib/src" ]; then
+		return 0	# a complete tree made by hand: untouched
+	fi
+	echo "$me: preparing $cts (VK-GL-CTS ${CTS_COMMIT:0:7})"
+	mkdir -p "$cts"
+	if [ ! -e "$cts/.git" ]; then
+		local deps src=
+		deps=$("$REPO/tools/cts/deps-env.sh" --layout 2>/dev/null || true)
+		[ -z "$deps" ] || src=$deps/VK-GL-CTS
+		git init -q "$cts"
+		if [ -n "$src" ] && git -C "$src" cat-file -e "$CTS_COMMIT^{commit}" 2>/dev/null; then
+			git -C "$cts" remote add origin "$src"
+		else
+			git -C "$cts" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+		fi
+	fi
+	if ! git -C "$cts" cat-file -e "$CTS_COMMIT^{commit}" 2>/dev/null; then
+		git -C "$cts" fetch -q --depth 1 --filter=blob:none origin "$CTS_COMMIT"
+	fi
+	git -C "$cts" sparse-checkout set --no-cone '/*' '!/doc' '!/android'
+	git -C "$cts" checkout -q --detach "$CTS_COMMIT"
+	if [ ! -d "$cts/external/zlib/src" ]; then
+		(cd "$cts" && python3 external/fetch_sources.py)
+	fi
+	if [ ! -f "$cts/targets/yakogl/yakogl.cmake" ]; then
+		git -C "$cts" apply "$patch"
+	fi
+	echo "$want" > "$cts/.yakogl-host-prepared"
+}
+
 # ---- 1. deqp-gles2 for the host --------------------------------------------
 build_deqp() {
+	prepare_cts
 	[ -f "$cts/targets/yakogl/yakogl.cmake" ] || {
 		echo "$me: $cts has no yakogl target (tools/cts/cts-build.sh applies cts-yakogl-target.patch)" >&2; exit 1; }
 	[ -d "$cts/external/zlib/src" ] || {
