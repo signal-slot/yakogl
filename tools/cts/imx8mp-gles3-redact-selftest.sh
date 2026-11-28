@@ -123,6 +123,34 @@ if python3 -I "$tool" --check "$tmp/x2ok" >/dev/null 2>&1; then ok "legitimate X
 if grep -rEIn '/dev/tty(USB|ACM)|([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?|[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.[A-Za-z]' "$tmp/x2" >/dev/null; then
     bad "c8 grep finds a hit after --fix of X2 samples"; else ok "c8 grep clean after --fix of X2 samples"; fi
 
+# a glmark2 frame dump: 600 rows of 1600 base64 characters are checked in seconds (they were quadratic in the
+# row's length: 0.17 s a row), and a hit beside or after such rows is still found
+mkdir -p "$tmp/dump" "$tmp/dumphit"
+python3 -I - "$tmp" <<'PY'
+import base64, os, sys
+rows = ["glmark2-fb: %d %04x %s" % (y, y, base64.b64encode(bytes((x * 7 + y) & 255 for x in range(1200))).decode())
+        for y in range(600)]
+open(os.path.join(sys.argv[1], "dump", "console.txt"), "w").write("\n".join(rows) + "\n")
+tail = ["mail abc" + "@" + "host.example", "name board.tail1234" + ".ts" + ".net up", rows[0] + " x" + "@" + "y.zz"]
+open(os.path.join(sys.argv[1], "dumphit", "console.txt"), "w").write("\n".join(rows[:50] + tail) + "\n")
+PY
+t0=$(date +%s)
+if python3 -I "$tool" --check "$tmp/dump" >/dev/null 2>&1; then ok "a frame dump's rows are clean"; else bad "a frame dump's rows are reported"; fi
+t1=$(date +%s)
+if [ $((t1 - t0)) -le 30 ]; then ok "600 dump rows checked in $((t1 - t0)) s"; else bad "600 dump rows took $((t1 - t0)) s (quadratic again)"; fi
+out=$(python3 -I "$tool" --check "$tmp/dumphit" 2>/dev/null)
+if [ "$(grep -c ':51: login$' <<<"$out")" = 2 ] && grep -q ':52: tailnet$' <<<"$out" && [ "$(grep -c ':53: login$' <<<"$out")" = 2 ]; then
+    ok "hits after and on dump rows are still found"; else bad "hits after dump rows: $out"; fi
+cp "$tmp/dump/console.txt" "$tmp/dump.orig"
+t0=$(date +%s)
+python3 -I "$tool" --fix "$tmp/dump" "$tmp/dumphit" >/dev/null 2>&1
+t1=$(date +%s)
+if [ $((t1 - t0)) -le 30 ] && cmp -s "$tmp/dump.orig" "$tmp/dump/console.txt"; then ok "--fix leaves 600 clean dump rows as they are, in $((t1 - t0)) s"
+else bad "--fix of 600 clean dump rows: $((t1 - t0)) s, or the rows changed"; fi
+if python3 -I "$tool" --check "$tmp/dumphit" >/dev/null 2>&1 && grep -q '^mail <login> ok$\|^mail <login>$' "$tmp/dumphit/console.txt" &&
+    grep -q '^name <host> up$' "$tmp/dumphit/console.txt" && head -n 50 "$tmp/dumphit/console.txt" | cmp -s - <(head -n 50 "$tmp/dump.orig"); then
+    ok "--fix rewrites the hits after dump rows and no row"; else bad "--fix after dump rows"; fi
+
 # committed i.MX8MP logs, if any
 set -- "$here"/log/*-imx8mp-*
 if [ -e "$1" ]; then

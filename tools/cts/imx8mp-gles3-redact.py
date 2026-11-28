@@ -55,6 +55,22 @@ EXTRA = [
     ("prompt", LOGINP, "<host>"),
 ]
 COMPILED = [(n, re.compile(p.encode()), r.encode()) for n, p, r in PATTERNS + EXTRA]
+
+
+# NEEDLE: per COMPILED pattern, a literal that every match of it contains (None: none known). --check searches a
+# line with the pattern only when the line holds the literal. The result is the same; the time is not: the mail
+# and tailnet patterns start with an unbounded [A-Za-z0-9._-]+ run and are quadratic in the length of such a run,
+# so a glmark2 frame-dump row (one line of 1600 base64 characters, 600 rows a scene) took 0.17 s a line and a
+# four-scene record's console over half an hour.
+def needle(pattern):
+    if "@" in pattern:
+        return b"@"
+    if "ts\\.net" in pattern:
+        return b"ts.net"
+    return None
+
+
+NEEDLE = [needle(p) for n, p, r in PATTERNS + EXTRA]
 # --fix extends the hit to the whole token (device number, full host name) so no tail is left behind.
 FIX = [
     (re.compile(rb"(rfc2217|socket|telnet|ssh|tcp)://[^\s\"'<>]+"), b"<url>"),
@@ -105,8 +121,8 @@ def check(paths):
             continue
         nfiles += 1
         for ln, line in enumerate(data.split(b"\n"), 1):
-            for name, rx, _ in COMPILED:
-                if rx.search(line):
+            for (name, rx, _), lit in zip(COMPILED, NEEDLE):
+                if (lit is None or lit in line) and rx.search(line):
                     print(f"{path}:{ln}: {name}")
                     nhits += 1
     if nhits:
@@ -114,6 +130,17 @@ def check(paths):
         return 1
     print(f"redact: {nfiles} files clean")
     return 0
+
+
+def sub(rx, rep, data):
+    """rx.sub(rep, data); a pattern with a NEEDLE literal only on the lines that hold it (such a pattern matches no
+    newline, so the result is the same, without the quadratic search of every long line)."""
+    lit = needle(rx.pattern.decode())
+    if lit is None:
+        return rx.sub(rep, data)
+    if lit not in data:
+        return data
+    return b"\n".join(rx.sub(rep, line) if lit in line else line for line in data.split(b"\n"))
 
 
 def fix(paths):
@@ -125,7 +152,7 @@ def fix(paths):
         nfiles += 1
         out = data
         for rx, rep in FIX:
-            out = rx.sub(rep, out)
+            out = sub(rx, rep, out)
         if out != data:
             with open(path, "wb") as f:
                 f.write(out)
