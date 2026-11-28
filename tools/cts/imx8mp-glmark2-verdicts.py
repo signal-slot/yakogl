@@ -201,6 +201,7 @@ CASES = [
     ("bad-route.md", False, 1, "route 'camera' is not one of"),
     ("bad-verdict.md", False, 1, "verdict 'good' is not one of"),
     ("bad-photograph.md", False, 1, "route photograph needs 'seen without a value'"),
+    ("x2-kvm.md", True, 0, "ok: 33 rows, 33 filled"),
     ("partial-probes.md", False, 0, "ok: 33 rows, 2 filled"),
     ("bad-probes-novalue.md", False, 1,
      "route photograph+probes has a value, not 'seen without a value'"),

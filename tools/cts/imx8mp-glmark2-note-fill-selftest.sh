@@ -47,6 +47,21 @@ check_one "effect2d cell" "[effect2d] kernel=0,1,0;1,-4,1;0,1,0;" dump right
 if grep -q "^| \[build\] use-vbo=false | 01234567 | $R | dump | right |$" "$T/n.md"; then
   ok "row text"; else bad "row text"; fi
 
+# an X2 record (KVM screenshots, board=x2): the route is photograph+probes
+X2R=records/imx8mp/20261128-1200-x2-eye-a1b2c3d4/
+cp "$T/n.md" "$T/before.md"
+cp "$T/orig.md" "$T/n.md"
+if python3 "$FILL" --note "$T/n.md" --scene gm07 --commit "$C" --record "$X2R" \
+    --route photograph+probes --verdict right >/dev/null 2>&1 \
+  && python3 "$FILL" --note "$T/n.md" --scene "[texture] texture-filter=mipmap" \
+    --commit "$C" --record "$X2R" --route dump --verdict right >/dev/null 2>&1 \
+  && grep -q "| 01234567 | $X2R | photograph+probes | right |$" "$T/n.md" \
+  && grep -q "^| \[texture\] texture-filter=mipmap | 01234567 | $X2R | dump | right |$" "$T/n.md" \
+  && python3 "$HERE/imx8mp-glmark2-verdicts.py" "$T/n.md" | grep -qx 'ok: 33 rows, 2 filled'
+then ok "X2 KVM record: photograph+probes and mipmap dump rows accepted"
+else bad "X2 KVM record rows"; fi
+cp "$T/before.md" "$T/n.md"
+
 # the record's sha8 is the image's, not the commit's (as on the Pi 4 note)
 cp "$T/n.md" "$T/before.md"
 if python3 "$FILL" --note "$T/n.md" --scene gm05 --commit d4f95c29 \
