@@ -482,6 +482,7 @@ fn the_row_limit_is_stage_metas_not_the_frames() {
             sampler: None,
             samplers: &[],
             cube_samplers: 0,
+            cube_layers: 0,
             helper_threads: false,
             can_discard: false,
             ubo,

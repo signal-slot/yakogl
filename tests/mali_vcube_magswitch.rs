@@ -40,6 +40,12 @@
 //!   min NEAREST_MIPMAP_*, min LINEAR_MIPMAP_*, no mipmap filter) gets one
 //!   and the same code, and the probe does see a program change (a different
 //!   level expression in the source), and sees nothing in a repeated draw.
+//!   In a `report-es2` build those states are two groups, each with one
+//!   code: a state whose filters can read past a face's edge (mag LINEAR,
+//!   or min LINEAR / LINEAR_MIPMAP_*) draws the `cube_noseam` variant, the
+//!   cube read as the 2D array of its faces (docs/notes/mali-cube-noseam.md;
+//!   its program and texture descriptor differ from the plain look-up's),
+//!   and the two fix cases, mag LINEAR too, carry both keys.
 //!
 //! The level in (0, 0.5] is not a test input: with a uniform level the
 //! remap is one program for every value, so the draws all use 0.19 (dEQP's
@@ -420,16 +426,32 @@ fn the_probe_sees_the_vertex_program() {
     assert_eq!(code_diff(VCUBE_VERT, (NN, GL_LINEAR), VCUBE_VERT, (NN, GL_LINEAR)), 0);
 }
 
+/// A state that draws the `cube_noseam` variant: in a `report-es2` build, a
+/// filter that can read past the face's edge (`cube_filters_see_seams`,
+/// src/gl/draw.rs).
+fn noseam(s: State) -> bool {
+    cfg!(feature = "report-es2") && (s.1 == GL_LINEAR || matches!(s.0, GL_LINEAR | LN | LL))
+}
+
 /// Controls (3): no state without "mag LINEAR and min NEAREST_MIPMAP_*"
 /// changes the program, whatever its filters: every one of them gets the
-/// code of the first (equality is transitive; each draw compiles a new
-/// source, and the compiler's memory for them is bounded).
+/// code of the first of its `cube_noseam` group ([`noseam`]; one group
+/// outside a `report-es2` build), and the two groups' codes differ
+/// (equality is transitive; each draw compiles a new source, and the
+/// compiler's memory for them is bounded).
 #[test]
 fn states_needing_no_remap_get_the_same_vertex_code() {
     let _g = fixture();
-    let a = PLAIN[0];
-    for b in PLAIN {
-        assert!(!state_changes_code(a, b), "min {:#x} mag {:#x} against min {:#x} mag {:#x}", a.0, a.1, b.0, b.1);
+    for group in [false, true] {
+        let mut states = PLAIN.iter().copied().filter(|&s| noseam(s) == group);
+        let Some(a) = states.next() else { continue };
+        for b in states {
+            assert!(!state_changes_code(a, b), "min {:#x} mag {:#x} against min {:#x} mag {:#x}", a.0, a.1, b.0, b.1);
+        }
+    }
+    if cfg!(feature = "report-es2") {
+        let (a, b) = (PLAIN[0], PLAIN[4]);
+        assert!(!noseam(a) && noseam(b) && state_changes_code(a, b), "the cube_noseam variant is missing");
     }
 }
 
