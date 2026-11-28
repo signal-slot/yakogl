@@ -1,8 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# imx8mp-gles3-finish-selftest.sh - runs imx8mp-gles3-finish.sh (no --apply, --partial: the three recorded slices
-# are 48 of 133 entries) into $TMPDIR and checks that its notpass.tsv equals docs/es3/imx8mp-gles3-notpass.tsv and its
+# imx8mp-gles3-finish-selftest.sh - runs imx8mp-gles3-finish.sh (no --apply, --partial: the four recorded slices
+# are 51 of 133 entries) into $TMPDIR and checks that its notpass.tsv equals docs/es3/imx8mp-gles3-notpass.tsv and its
 # compare.tsv equals docs/es3/imx8mp-gles3-compare-9bc82915.tsv byte for byte, and that no committed file changed.
 #
 #   TMPDIR=<dir> sh tools/cts/imx8mp-gles3-finish-selftest.sh
@@ -22,7 +22,7 @@ cat "$O/summary.txt"
 [ "$(grep -c '^[1-6] ' "$O/summary.txt")" -eq 6 ] && echo "ok   six summary lines" || { echo "FAIL summary lines"; fail=1; }
 ck "notpass.tsv == docs/es3/imx8mp-gles3-notpass.tsv" "$O/out/notpass.tsv" "$ROOT/docs/es3/imx8mp-gles3-notpass.tsv"
 ck "compare.tsv == docs/es3/imx8mp-gles3-compare-9bc82915.tsv" "$O/out/compare.tsv" "$ROOT/docs/es3/imx8mp-gles3-compare-9bc82915.tsv"
-# without --partial the three slices are an incomplete campaign: the chain stops at step 1
+# without --partial the four slices are an incomplete campaign: the chain stops at step 1
 if sh "$HERE/imx8mp-gles3-finish.sh" "$O/strict" >"$O/strict.txt" 2>&1; then echo "FAIL strict run did not stop"; fail=1; else echo "ok   incomplete campaign stops without --partial"; fi
 A=$(cd "$ROOT" && git status --porcelain docs 2>/dev/null | md5sum)
 [ "$A" = "$B" ] && echo "ok   no committed file changed" || { echo "FAIL docs changed"; fail=1; }

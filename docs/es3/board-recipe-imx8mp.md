@@ -12,8 +12,9 @@ slices at `9bc82915` (below) are history; the closing step retires them.
 This recipe has run on the board at the earlier commit `9bc82915`. Three slices of it (plan #316 items s01, s03, s04) came from the one
 campaign commit `9bc82915e06367b46e3a62b644dbf2bb659d72ad` and are recorded as
 `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51` under `tools/cts/log/`: table
-entries 0-12, 16-33 and 34-50 (48 of 133, 28,459 mustpass cases). **Entries 13-15 and 51-132 (14,351
-mustpass cases) have not run.** Every verdict line, record word and tally line this file expected has been
+entries 0-12, 16-33 and 34-50 (48 of 133, 28,459 mustpass cases). Entries 13-15 ran at `9bc82915` on the
+Armadillo-X2 on 2026-11-27 (`2026-11-imx8mp-gles3-9bc82915-rows14-16`, measured on the X2; "Running on the
+Armadillo-X2: the 9bc82915 slices"). **Entries 51-132 have not run at `9bc82915`.** Every verdict line, record word and tally line this file expected has been
 seen; what has never been seen is the console's text, and the sections that were marked **unverified** now say
 what the three sessions measured instead. Board results are recorded under
 `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is issue #2 of signal-slot/yakogl. The commands
@@ -1319,6 +1320,92 @@ slices"):
 | s05 | `52`-`57` | `51-56` | s11 | `123`-`133` | `122-132` |
 | s06 | `58`-`67` | `57-66` | | | |
 
+### Running on the Armadillo-X2: the 9bc82915 slices (plan #410)
+
+Plan #410 finishes the `9bc82915` campaign on the X2: the three Verdin slices (`2026-11-imx8mp-gles3-9bc82915-rows01-13`,
+`-rows17-34`, `-rows35-51`) stay, and the missing entries (13-15, 51-132) run on the X2 from an image of
+`9bc82915` itself, named `2026-11-imx8mp-gles3-9bc82915-rowsAA-BB` like the Verdin slices. This is not the
+`c29a5ffe` campaign of the next section. `imx8mp-gles3-merge.py --check` takes one commit per tree, so a
+`9bc82915` X2 slice merges with the `9bc82915` Verdin slices and never with `c29a5ffe` slices. The first such
+slice is `2026-11-imx8mp-gles3-9bc82915-rows14-16`, run 2026-11-27, 14:11-14:16 UTC. Its three rows were
+`rc=0 verdict=done boot_verdict=complete resets=absent`, with `back_after` of 61, 41 and 65 s. It began
+1,183 cases: 79 Pass, 1,104 Fail, 0 other, 0 without a result.
+
+`9bc82915` runs on the X2 as it is. Its tree already has the X2 board (`armadillo_x2/mimx8ml8/a53`, its
+devicetree identical to the tip's), the three-word record with DEQP_FAILS pages of four names
+(`GC_RESULT_DEQP_FAILS_PER_PAGE` = `YK_RECORD_DEQP_FAILS_PER_PAGE_3W` under KEEP_LPGPR0), and `IMX8MP_BOARD=x2`
+in `imx8mp-deqp-build.sh`. Only the runner and the loader come from the tip, as for every script of the
+campaign.
+
+Two things a host meets when it reaches the X2 only through an ssh forward (a lent machine, a ProxyCommand),
+and the wrapper's knobs for them:
+- **No ICMP.** `board.sh x2` waits after each jump with `ping -c1 -W1 <host>`, then ssh (`kexec_wait_back`).
+  Without an answer to ping, every row ends rc 5 after 1500 s, a board that "did not come back".
+  `X2_PING=ssh` (or the default `auto`, when the real ping gets no answer) puts `tools/cts/x2-ping/` first in
+  `PATH`. Its `ping` answers when the board's sshd does, including a refusal at authentication.
+- **A key in a tmpfs.** The board's `/root` is an overlay over a tmpfs. A key that connected adds to
+  `/root/.ssh/authorized_keys` for a lease, as on a lent machine, is gone after the first jump's reboot, and
+  every later row ends rc 5. `X2_KEEP_KEY=1` reads the persisted copy (`/live/rootfs/root/.ssh/authorized_keys`)
+  and keeps it on the host. When the live file holds lines that copy lacks, it runs `persist_file
+  /root/.ssh/authorized_keys` before the tree. After `board.sh`, whatever its rc, it puts the kept copy back
+  with `persist_file` and checks its sha256; the live file keeps the session's key. A restore that cannot
+  run (the board did not come back) prints the undo and exits 7 when `board.sh`'s rc was 0. That board then
+  needs a person anyway. This is the one eMMC write of such a session, besides `board.sh`'s lease file: the
+  file the farm keys are persisted in, rewritten and put back.
+
+The session, from the integration tip's checkout (names only; `BOARD_HOST` from the board resource's environment):
+
+```sh
+COMMIT=9bc82915e06367b46e3a62b644dbf2bb659d72ad; HEAD8=9bc82915
+AA=14; BB=16; ROWS=13-15                       # the slice: rowsAA-BB is TREE_ROWS=AA-1..BB-1
+# 1. the image, in a worktree of the campaign commit (stage 1 first when it is missing: section 1, with CTS set)
+git worktree add --detach "$TMPDIR/yakogl-$HEAD8" "$COMMIT"
+(cd "$TMPDIR/yakogl-$HEAD8" &&
+  IMX8MP_BOARD=x2 DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-stage1.sh gles3 &&      # only without $DEQP_STAGE1's package
+  IMX8MP_BOARD=x2 DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-build.sh es3-$HEAD8 'dEQP-GLES3.info.*' \
+    --table tools/cts/imx8mp-gles3-tree.txt)  # rc=0, check-deqp-images: the dEQP image recipes build what conformance needs
+# 2. the loader and the record tool: step 2 of "Running a GLES3 slice on the Armadillo-X2"
+# 3. artefacts, preflight (must end "preflight: all ok", with "image es3-9bc82915 is commit 9bc82915")
+IMX8MP_BOARD=x2 tools/cts/imx8mp-gles3-artefacts.sh es3-$HEAD8 > $TMPDIR/artefacts.txt
+tools/cts/imx8mp-gles3-preflight.sh --board x2 --commit "$COMMIT" --out "$IMX8MP_OUT" | tee $TMPDIR/preflight.txt
+# 4. the records directory (records/ is gitignored; create records/x2 first) and a dry run
+IMG=$IMX8MP_OUT/x2/es3-$HEAD8/zephyr/zephyr.bin; mkdir -p records/x2
+REC=records/x2/$(date -u +%Y%m%d-%H%M)-es3-$HEAD8-rows$AA-$BB-$(sha256sum "$IMG" | cut -c1-8)
+TREE_ROWS=$ROWS TREE_IMAGE=$IMG X2_PING=ssh X2_KEEP_KEY=1 tools/cts/imx8mp-gles3-board.sh --dry-run --board x2 tree "$REC"
+# 5. pass 1 (the rows); pass 2 (the name pages) only for rows the pages can name (below)
+export IMX8MP_BOARD=x2 TREE_IMAGE=$IMG BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt X2_PING=ssh X2_KEEP_KEY=1
+export DEQP_CASELIST=<the full dEQP-GLES3 case list: dEQP-GLES3-cases.txt of a DEQP_TARGET=null build of VK-GL-CTS 93bca01>
+TREE_ROWS=$ROWS NAMES=0 tools/cts/imx8mp-gles3-board.sh tree "$REC" > "$REC.log" 2>&1
+IMX8MP_BOARD=x2 tools/cts/imx8mp-gles3-board.sh tally "$REC" > "$REC.tally.txt" 2>&1
+python3 -I tools/cts/imx8mp-gles3-redact.py --fix "$REC"     # kexec.log carries the board's address
+# 6. the slice
+D=tools/cts/log/2026-11-imx8mp-gles3-$HEAD8-rows$AA-$BB
+python3 -I tools/cts/imx8mp-gles3-slice.py --commit "$COMMIT" --rows $AA-$BB --date <day, UTC> --run-date <day, UTC> \
+  --window <HH:MM/HH:MM> --lines "$REC.log" --lines "$REC.tally.txt" --records "$REC" --results "$REC/results.tsv" \
+  --artefacts $TMPDIR/artefacts.txt --preflight $TMPDIR/preflight.txt --out "$D"
+cp "$REC/results.tsv" "$REC/rows.md" "$D/"
+python3 -I tools/cts/imx8mp-gles3-merge.py --check --partial tools/cts/log/2026-11-imx8mp-gles3-$HEAD8-rows*   # exit 0
+python3 -I tools/cts/imx8mp-gles3-redact.py --check "$D"
+```
+
+`slice.py`'s X2 README opens with "Measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), not the Verdin
+i.MX8MP." Add `verdicts.txt` (the `board.sh x2 e<NN> rc=` lines), the `.license` files of `results.tsv` and
+`rows.md`, and the session's notes (knobs, timeline, why pages were or were not run) by hand, as the
+`rows14-16` README does. What `rows14-16` measured for the next sessions:
+- **Rows cost a minute each.** From the jump to ssh: e13 60 s, e14 40 s, e15 65 s. `ping lost` came at 9 s
+  every time, and Linux's uptime was 17-23 s at the read. The three rows took 4 min 35 s of wall time with
+  staging and reads (`=== e13` at 14:11:08, `=== e15 rc=0` at 14:15:43). The X2 rates are close to the Verdin's for these entries (planner: 164, 132 and 171 s with the
+  Verdin's boot included).
+- **Pages.** A row's pages run until four names a page cover the fail count (`board.sh name_pages`), at most
+  40 (160 names). A row with more fails than that is named only in part, so leave it at counts (`NAMES=0`
+  pass only) as `rows14-16` did. All three of its rows were above 160. Run pass 2 (`NAMES` unset) when every
+  row with fails is at or below 160.
+- **The console delivers text on the X2.** UART2 printed the image's stamp, the selector, the filter and one
+  `deqp: <status> <case>` line per case. When the console lease is the only client of the bridge, as in a
+  connected task, `board.sh` cannot open it, so `BOARD_UART` stays unset and the README says recoveries were
+  not counted. Naming many fails cheaply needs a host that can be `board.sh`'s `BOARD_UART`
+  (`host:port` raw bridge) for a `NAMES=0` run with `tools/cts/deqp-uart-tally.py`.
+
 ## Armadillo-X2 campaign
 
 The whole 133-entry tree runs on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) from **one** commit, **`05769bf2`**,
@@ -1535,3 +1622,23 @@ TREE_IMAGE=$IMX8MP_OUT/wt-$HEAD8/zephyr/zephyr.bin tools/board.sh imx8mp tree to
 # after the run (it reads the directory's results.tsv) or after the commit (a README's or verdicts.txt's verdict lines):
 python3 -I tools/cts/imx8mp-es2-regress.py records/imx8mp/es2-$HEAD8
 ```
+
+On the Armadillo-X2 (the Verdin is off the farm), the same 29 rows run through `board.sh x2`, with the
+knobs of "Running on the Armadillo-X2: the 9bc82915 slices" for an ssh-only host. `imx8mp-es2-regress.py`
+reads `board.sh x2` lines (three-word records) and judges them as the Verdin's; its first line names the
+board (`es2 regress: board Armadillo-X2 (baseline: Verdin i.MX8MP stage 1)`), so the session's record says it
+was measured on the X2.
+`imx8mp-gles3-sessions.py --gles2` plans the session (board-independent: the table and the mustpass).
+
+```sh
+python3 -I tools/cts/imx8mp-gles3-sessions.py --gles2 --pages        # the 29 rows' estimate
+(cd "$TMPDIR/yakogl-$HEAD8" && IMX8MP_BOARD=x2 DEQP_STAGE1=<gles2 stage 1> \
+  tools/cts/imx8mp-deqp-build.sh wt-$HEAD8 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt)
+mkdir -p records/x2; PATH=$PWD/tools/cts/x2-ping:$PATH   # only on an ssh-only host (X2_PING=ssh does this in the wrapper)
+TREE_IMAGE=$IMX8MP_OUT/x2/wt-$HEAD8/zephyr/zephyr.bin tools/board.sh x2 tree tools/cts/imx8mp-full-tree.txt records/x2/es2-$HEAD8
+python3 -I tools/cts/imx8mp-es2-regress.py records/x2/es2-$HEAD8
+```
+
+`tools/board.sh` is called directly here (the GLES3 wrapper's table is the GLES3 one), so `X2_KEEP_KEY` is
+not available. On a host whose key lives in the board's tmpfs, persist it and put it back around the run as
+"A key in a tmpfs" describes, or run the session from a farm node whose key is persisted.

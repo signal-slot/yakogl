@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# every verdict line tools/board.sh x2 printed for this slice on the Armadillo-X2 (pass 1: rows e13-e15 with NAMES=0, printed by the run; no pass 2: every row has more fails than 40 pages of four names cover)
+board.sh x2 e13 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b0844,01ae0014,00000000 back_after=61s (kexec-dev: a development run, never a row)
+board.sh x2 e14 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b08b4,00e0001a,00000000 back_after=41s (kexec-dev: a development run, never a row)
+board.sh x2 e15 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b0886,01c20021,00000000 back_after=65s (kexec-dev: a development run, never a row)
