@@ -67,4 +67,27 @@ python3 -I "$t" --tsv "$here/log/2026-10-31-pi4-gles3-a" > "$w/pi4.tsv" || fail 
 [ "$(wc -l < "$w/pi4.tsv")" -eq 2 ] || fail "pi4: header and total only"
 grep -q '	TOTAL	0	0.0	-$' "$w/pi4.tsv" || fail "pi4 total"
 python3 -I "$t" "$w/nonexistent" > /dev/null || fail "missing dir"
+# a refused X2 jump is skipped with a note; a ping-less return is timed from its meta.txt fields
+r=$w/2026-11-imx8mp-gles3-x2-0123abcd-rows04-06
+mkdir "$r"
+cat > "$r/README.md" <<'EOT'
+board.sh x2 e04 rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none resets=absent record=absent back_after=?s
+board.sh x2 e05 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=1,2 back_after=?s
+board.sh x2 e06 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=1,2 back_after=?s
+board.sh x2 e07 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=1,2 back_after=?s
+EOT
+printf 'jump=refused\nrefused_rc=3\nrefused=loader refused\n' > "$r/e04.meta.txt"
+printf 't_reboot=100\njump=ok\nlost=12\nback=1\nt_back=190\ntimeline=jump 0s, ping n/a (no reply; a new boot_id over ssh is the return), ssh back 88s, route --crash\n' > "$r/e05.meta.txt"
+printf 't_reboot=100\njump=ok\nlost=12\nback=1\nt_back=190\n' > "$r/e06.meta.txt"
+printf 't_reboot=100\njump=ok\nlost=12\nback=1\ntimeline=jump 0s, ping n/a (x), ssh back ?s, route --crash\n' > "$r/e07.meta.txt"
+python3 -I "$t" "$r" > "$w/r.txt" 2> "$w/rerr.txt" || fail "refused/ping-less run"
+[ ! -s "$w/rerr.txt" ] || fail "refused/ping-less warnings: $(cat "$w/rerr.txt")"
+grep -q '^# e04 refused .*skipped' "$w/r.txt" || fail "refused note"
+if grep -q '^e04 ' "$w/r.txt"; then fail "refused row listed"; fi
+grep -q '^e05 .* 88 ' "$w/r.txt" || fail "ping n/a: ssh back 88"
+grep -q '^e06 .* 90 ' "$w/r.txt" || fail "ping n/a: t_back - t_reboot 90"
+grep -q '^e07 .* 12 ' "$w/r.txt" || fail "ping n/a: lost 12"
+grep -q 'total  3 of 3 entries timed: measured 190 s' "$w/r.txt" || fail "refused/ping-less total"
+python3 -I "$t" --tsv "$r" > "$w/r.tsv" || fail "refused tsv"
+grep -q '^# .*e04 refused' "$w/r.tsv" || fail "refused tsv note"
 echo "imx8mp-gles3-times-selftest: ok"
