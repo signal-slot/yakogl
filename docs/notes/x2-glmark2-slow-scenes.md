@@ -545,3 +545,22 @@ one jump a turn, and board.sh can never read that jump's record.
 
 To run it next time: the same commands, with ssh that survives the run's
 reboot. The loader and the readiness checks no longer stop it.
+
+## At dfabc888 (plan #413, stage-2 i.MX8MP stand-in; measured on the Armadillo-X2)
+
+The Verdin i.MX8MP is off the farm, so the stage-2 i.MX8MP common set at
+origin/main `dfabc888` was **measured on the Armadillo-X2** (same i.MX8MP SoC
+and GC7000UL GPU), not on the Verdin. Recorded, not judged. Issues: #15 and
+#1106.
+
+`records/imx8mp/common-dfabc888/` (`measured-on: armadillo-x2`) is not
+readable on the machine that wrote this section, so the figures are quoted
+from run-x2-common (plan #413), not read from the record:
+
+| commit | board | glmark2 score | terrain ms/frame | shadow ms/frame | refract ms/frame |
+|---|---|---|---|---|---|
+| dfabc888 | Armadillo-X2 | 46 | 164.01 | 83.44 | 117.69 |
+
+That run's GM row was marked `not_back`. A later run (run-x2-common-2)
+completed GM and GT; plan #413's docs-one-commit replaces the figures above
+with the completed run's.
