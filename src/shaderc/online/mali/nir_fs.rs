@@ -15434,7 +15434,12 @@ fn fold16(a: AluOp, p: Val, q: Val) -> Result<u32, MaliError> {
 /// are all that one lane has one conversion of it alone, which every reader
 /// reads (deqp_varylink_swz_xx: `out0 = in0.xx`, then `FADD.f32 r0.h0, r0^,
 /// 0x0.neg` and the subtraction's `r0^.h00`). Equal lanes beside another
-/// lane read, or of two varyings, have no reference: refused by name.
+/// lane read are the distinct lanes' conversions, each merged lane read
+/// from its first lane's (deqp_varylink2_swz_mixed: `out0 = in0.grg`, one
+/// `.v2` load, `V2F32_TO_V2F16 r0, r0^, r1^`, lane 2 read as lane 0); the
+/// distinct lanes pair by their place in the slot the link compacted
+/// (deqp_varylink2_mediump_vec4_yyw, _vec3_bbg, _vec4_aaag). Equal lanes
+/// of two varyings have no reference: refused by name.
 pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
     let defect = MaliError::Defect(Defect::IrIndex);
     f.inputs16 = true;
@@ -15466,10 +15471,17 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
         let of = *f.lane_of.get(loc as usize).ok_or(defect)?;
         /* the lanes read that the link laid out as an earlier lane read */
         let mut merged = 0u8;
+        /* the earlier lane read of the same place, for each merged lane */
+        let mut from = [0usize; 4];
+        let mut first_at = [None::<(u8, u8)>; 4];
         for c in (0..4).filter(|&c| read[n] & 1 << c != 0) {
             let Some(at) = of[c] else { continue };
+            first_at[c] = Some(at);
             match places[..nplaces].iter().find(|x| x.0 == at) {
-                Some(&(_, m)) if m == n => merged |= 1 << c,
+                Some(&(_, m)) if m == n => {
+                    merged |= 1 << c;
+                    from[c] = (0..c).find(|&d| first_at[d] == Some(at)).ok_or(defect)?;
+                }
                 Some(_) => return Err(MaliError::VaryingDuplicate),
                 None => {
                     *places.get_mut(nplaces).ok_or(defect)? = (at, n);
@@ -15477,28 +15489,43 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
                 }
             }
         }
-        let first = read[n].trailing_zeros() as usize;
-        if merged != 0 && read[n] != merged | 1 << first {
-            return Err(MaliError::VaryingDuplicate);
-        }
-        /* the one lane converted, and read in place of the merged ones */
-        let lanes = if merged != 0 { 1 << first } else { read[n] };
+        /* the lanes converted (one per place), each merged one read in place
+         * of the earlier lane of its place (deqp_varylink2_swz_mixed:
+         * `in0.grg`, lanes 0 and 1 converted as a pair, lane 2 read from
+         * lane 0's conversion) */
+        let lanes = read[n] & !merged;
         let at = f.origin[n];
         /* in the order right after the load, lane by lane: a node's place
          * among those of one key is its place in the order */
         let mut after = f.nir.order[..f.nir.len].iter().position(|&x| x as usize == n).ok_or(defect)? + 1;
         let mut conv = [Val::Undef; 4];
+        /* the lane paired with lane `c`: the next one when both are read
+         * and `c` is even; with a lane merged, the one at the next place of
+         * the slot when `c`'s place is even (the link compacts the slot:
+         * deqp_varylink2_mediump_vec4_yyw's `in0.yyw` stores y and w as
+         * `VAR0.xy`, which Mesa converts as one pair, `V2F32_TO_V2F16 r0,
+         * r0^, r1^`) */
+        let partner = |c: usize| -> Option<usize> {
+            if merged == 0 {
+                return (c.is_multiple_of(2) && lanes & 3 << c == 3 << c).then_some(c + 1);
+            }
+            let (slot, l) = of[c]?;
+            if l % 2 != 0 {
+                return None;
+            }
+            (c + 1..4).find(|&d| lanes & 1 << d != 0 && of[d] == Some((slot, l + 1)))
+        };
+        let mut done = 0u8;
         let mut c = 0;
         while c < 4 {
-            let pair = c % 2 == 0 && lanes & 3 << c == 3 << c;
-            if lanes & 1 << c == 0 {
+            if lanes & 1 << c == 0 || done & 1 << c != 0 {
                 c += 1;
                 continue;
             }
-            let (src, width) = if pair {
-                ([Val::Lane(n as u16, c as u8), Val::Lane(n as u16, c as u8 + 1), Val::Undef], 2)
-            } else {
-                ([Val::Lane(n as u16, c as u8), Val::Undef, Val::Undef], 1)
+            let pair = partner(c);
+            let (src, width) = match pair {
+                Some(d) => ([Val::Lane(n as u16, c as u8), Val::Lane(n as u16, d as u8), Val::Undef], 2),
+                None => ([Val::Lane(n as u16, c as u8), Val::Undef, Val::Undef], 1),
             };
             let nd = NirNode { kind: Kind::Alu(Alu::F2f16), src, bits: 16, width };
             let id = match f.nir.nodes[..f.nir.n].iter().position(|x| *x == nd) {
@@ -15512,15 +15539,15 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
                 }
             };
             conv[c] = Val::Lane(id, 0);
-            if pair {
-                conv[c + 1] = Val::Lane(id, 1);
-                c += 2;
-            } else {
-                c += 1;
+            done |= 1 << c;
+            if let Some(d) = pair {
+                conv[d] = Val::Lane(id, 1);
+                done |= 1 << d;
             }
+            c += 1;
         }
         for c in (0..4).filter(|&c| merged & 1 << c != 0) {
-            conv[c] = conv[first];
+            conv[c] = conv[from[c]];
         }
         for id in 0..f.nir.n {
             let nd = f.nir.nodes[id];
