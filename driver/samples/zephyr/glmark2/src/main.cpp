@@ -38,6 +38,9 @@
  *                      wait), "absent" when the driver was built without
  *                      CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES; "absent" on the
  *                      GC7000. Measured with the cycle counter (k_cycle_get_64).
+ *                      The line's last field is "g N.NNN ms": the last update's
+ *                      elapsed time (the interval from the scene's previous
+ *                      update() to its last; 0 when the scene had one frame).
  *   the draw steps     after it, one "glmark2-steps:" line: the mean
  *                      microseconds per frame of each step the library times
  *                      inside a draw (src/draw_steps.rs, totalled by the
@@ -193,6 +196,10 @@ struct FrameCost {
     uint64_t steps0[OSAL_DRAW_STEPS] = {};
     uint32_t untimed0 = 0;
     uint64_t gl = 0, swap = 0, show = 0, frame = 0; /* cycles */
+    /* the last update's elapsed time: the cycles from the scene's previous
+     * update() to its last (the interval glmark2's animation advances by);
+     * t_upd_prev 0: no earlier update in the scene */
+    uint64_t t_upd_prev = 0, g = 0;
 #if defined(CONFIG_YAKOGL_GPU_V3D)
     /* jobs completed during the scene's frames; the times of the last one
      * completed in each frame that completed any (job_frames of them) */
@@ -1233,6 +1240,8 @@ public:
             s_perf.s.slow_presents++;
         }
 #endif
+        s_cost.g = s_cost.t_upd_prev != 0 ? t1 - s_cost.t_upd_prev : 0;
+        s_cost.t_upd_prev = t1;
         s_cost.gl += t1 - t0;
         s_cost.frame += t2 - t0 - readback;
         s_cost.frames++;
@@ -1463,6 +1472,14 @@ private:
 #endif
     }
 
+    /* The line's last field: the last update's elapsed time in ms, g. */
+    static void print_g(const FrameCost &c)
+    {
+        const uint64_t us = cyc_to_us(c.g);
+        printk("; g %llu.%03llu ms\n", (unsigned long long)(us / 1000u),
+               (unsigned long long)(us % 1000u));
+    }
+
     void print_cost()
     {
         const FrameCost &c = s_cost;
@@ -1481,7 +1498,8 @@ private:
                (unsigned long long)frame);
 #if defined(CONFIG_YAKOGL_GPU_V3D)
         if (c.job_frames == 0) {
-            printk("; v3d completed jobs: absent (none completed in the scene)\n");
+            printk("; v3d completed jobs: absent (none completed in the scene)");
+            print_g(c);
         } else {
             const uint64_t f = c.job_frames;
             printk("; v3d last completed job per frame: prep %llu, bin %llu",
@@ -1495,15 +1513,17 @@ private:
                        (unsigned long long)(c.job_total_us / c.exact_frames),
                        (unsigned long long)c.exact_frames, (unsigned long long)f);
             }
-            printk(" (jobs %llu over %llu frames, frames with more than one %llu)\n",
+            printk(" (jobs %llu over %llu frames, frames with more than one %llu)",
                    (unsigned long long)c.jobs, (unsigned long long)f,
                    (unsigned long long)c.multi_job_frames);
+            print_g(c);
         }
         print_jobs(c);
 #elif defined(CONFIG_YAKOGL_DRV_GPU_PVR)
         print_kicks(c);
 #else
-        printk("; gpu job times: absent\n");
+        printk("; gpu job times: absent");
+        print_g(c);
 #endif
     }
 
@@ -1553,11 +1573,13 @@ private:
     {
         typedef unsigned long long ull;
         if (c.kick_rc == -ENOTSUP) {
-            printk("; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)\n");
+            printk("; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)");
+            print_g(c);
             return;
         }
         if (c.kick_frames == 0) {
-            printk("; pvr kick times: absent (no kick completed in the scene, rc %d)\n", c.kick_rc);
+            printk("; pvr kick times: absent (no kick completed in the scene, rc %d)", c.kick_rc);
+            print_g(c);
             return;
         }
         const uint64_t f = c.kick_frames;
@@ -1583,8 +1605,9 @@ private:
         } else {
             printk(", wait %llu (%llu)", (ull)(c.wait_us / c.wait_frames), (ull)c.wait_frames);
         }
-        printk(" (kicks %llu over %llu frames, frames with more than one %llu, lost %u; bound %u us)\n",
+        printk(" (kicks %llu over %llu frames, frames with more than one %llu, lost %u; bound %u us)",
                (ull)c.kicks, (ull)f, (ull)c.multi_kick_frames, c.lost, KICK_BOUND_US);
+        print_g(c);
     }
 #endif
 
