@@ -314,15 +314,20 @@ def glmark2_pictures(text):
     """the picture lines of a glmark2 console: {"order": [info, ...], "scenes": {info: value}} where
     value is parse_picture_value()'s dict, or None for an "absent" line or one that does not
     parse; "raw" is {info: the value's text}, which tells the two apart (judge_one_picture); a
-    scene printed twice keeps its last line. "missing" is {info: why} for the scenes whose line says a page of
+    scene printed twice keeps its last line (a line that does not parse never replaces a parsed one; lines from the "board: record, " marker on are not read). "missing" is {info: why} for the scenes whose line says a page of
     glmark2-pages.txt is missing"""
     order, scenes, raw, missing = [], {}, {}, {}
     for line in plain_lines(text):
+        if "board: record, " in line:
+            break  # the firmware's replay after the hold: not a picture line of the run
         m = GM_PICTURE_RE.search(line)
         if m:
+            value = parse_picture_value(m.group(2))
             if m.group(1) not in scenes:
                 order.append(m.group(1))
-            scenes[m.group(1)] = parse_picture_value(m.group(2))
+            elif value is None and scenes[m.group(1)] is not None:
+                continue  # a line that does not parse never replaces one that did
+            scenes[m.group(1)] = value
             raw[m.group(1)] = m.group(2)
             # glmark2-pages.txt: "absent (page P0 of scene N missing)" is a page that was never run
             # (nothing to judge), not a readback that failed

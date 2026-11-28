@@ -1,0 +1,4 @@
+10:00:00 glmark2-picture: [build] use-vbo=false: 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+10:00:01 glmark2-picture: [texture] x: 800x600; probes c 0000ffff, tl 0000ffff, tr 0000ffff, bl 0000ffff, br 0000ffff; crc16 1111, crc16q 2222; mean 9 9 9; black no
+10:00:05 board: record, 99 s after boot
+10:00:06 glmark2-picture: [build] use-vbo=false: 800x600; garbled

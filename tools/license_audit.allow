@@ -39,6 +39,7 @@ tools/cts/*.results.tsv | Apache-2.0 | our board run results
 docs/es3/*.tsv | Apache-2.0 | our board run results
 tools/cts/testdata/*.qpa | Apache-2.0 | test data: result logs of our runs
 tools/cts/testdata/ladder/* | Apache-2.0 | probe shaders written for this project
+tools/cts/testdata/common-tally-pictures/* | Apache-2.0 | synthetic, redacted glmark2 console lines for tools/cts/common-tally-pictures-selftest.sh
 tools/cts/wedge_probe/*.vert | Apache-2.0 | probe shaders written for this project
 tools/testdata/*.uart.ts | Apache-2.0 | UART captures of our board runs
 tools/testdata/*.console.txt | Apache-2.0 | console captures of our board runs
