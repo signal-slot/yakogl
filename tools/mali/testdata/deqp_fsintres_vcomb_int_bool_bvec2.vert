@@ -1,0 +1,16 @@
+#version 100
+precision highp float;
+precision highp int;
+
+attribute highp vec4 dEQP_Position;
+attribute float a_in0;
+varying float v_in0;
+attribute float a_in1;
+varying float v_in1;
+
+void main()
+{
+    gl_Position = dEQP_Position;
+    v_in0 = a_in0;
+    v_in1 = a_in1;
+}
