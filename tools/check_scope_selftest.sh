@@ -22,6 +22,9 @@ unset MESA_PAN_TREE
 # And DEQP_GLES3_TEST_DIR: without the corpus the shaderc rows carry a gap
 # naming it; the plans below are made without it.
 unset DEQP_GLES3_TEST_DIR
+# And DEQP_GLES2_TEST_DIR and DEQP_ES2_PROGRAMS (the gate's job exports
+# both): without them the V3D 7.1 corpus rows are gaps naming them.
+unset DEQP_GLES2_TEST_DIR DEQP_ES2_PROGRAMS
 # check.sh fills an unset input from the dependency layout (tools/cts/deps.toml),
 # which would bring every variable above back on a host that has one: the plans
 # are made with no layout (a directory that does not exist).
@@ -609,6 +612,10 @@ done
 expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/fixtures/v3d_texref.txt)"
 # the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
 expect "tests: glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/glmark2_corpus.rs)"
+# the harvested dEQP-GLES2 programs at 7.1: its own row, a gap without the harvest
+gen71_plan=$(plan tests/shaderc71_deqp_programs.rs)
+expect "tests: shaderc71_deqp_programs selects its harvest row" '^gap   shaderc71_deqp_programs: no harvest at DEQP_ES2_PROGRAMS=' "$gen71_plan"
+count "tests: the harvest row once" '^(plan|gap) .*shaderc71_deqp_programs' 1 "$gen71_plan"
 expect "tests: gc_kick_diff selects its knob row" '^plan  test    .*tests/gc_kick_diff.rs' "$(plan tests/gc_kick_diff.rs)"
 # The tree key row (scope treekey): every .rs file the scan reads reaches it,
 # a test file with a GPU's scope too, and so does the scan itself; a document
