@@ -5,7 +5,7 @@
 # Build glmark2-es2 for the NanoPC-T6's Armbian (Debian trixie, aarch64; Mali-G610
 # over panthor) on YakoGL's Mali pair, into the tree tools/cts/mali-glmark2-run.sh runs.
 #
-#   tools/cts/mali-glmark2-build.sh [--dev] [--dry-run] [--gles-lib DIR] <outdir>
+#   tools/cts/mali-glmark2-build.sh [--dev] [--dry-run] [--es3] [--gles-lib DIR] <outdir>
 #   tools/cts/mali-glmark2-build.sh --check <outdir>
 #
 # The program is glmark2 at GLMARK2_PIN (the pin of tools/hostharness/glmark2/
@@ -65,6 +65,14 @@
 # clean (no change to a tracked file), so BUILD-INFO's commit is main code;
 # else the build is refused with exit 3. --dev builds anyway, for local tests
 # only: BUILD-INFO then says dev=yes and the tree is not a record.
+#
+# The GL version the pair reports to glmark2-es2: OpenGL ES 2.0, the version
+# panfrost gives an ES 2.0 client (the pair's default, panthor-gles/build.sh).
+# Under an ES 3.0 report glmark2's unsized GL_DEPTH_COMPONENT depth texture
+# (shadow) is incomplete, as ES 3.0 4.4.4.2 requires. --es3 keeps the ES 3.0
+# report (builds the pair with its --es3). BUILD-INFO's gl_report= says es2 or
+# es3; the pair's own version text is checked against it, for --gles-lib DIR too
+# (a DIR whose report cannot be read, or differs, is refused).
 #
 # --dry-run checks the arguments and the commit and prints every step, running
 # none and writing nothing (no toolchain, glmark2 or network is needed).
@@ -127,14 +135,15 @@ usage() {
 	exit 2
 }
 
-out='' gles_lib='' dry=0 dev=0 check=0
+out='' gles_lib='' dry=0 dev=0 check=0 es3=0
 while [ $# -gt 0 ]; do
 	case $1 in
 	--dev) dev=1; shift ;;
 	--dry-run) dry=1; shift ;;
+	--es3) es3=1; shift ;;
 	--gles-lib) gles_lib=${2:?--gles-lib needs a directory}; shift 2 ;;
 	--check) check=1; out=${2:?--check needs an outdir}; shift 2 ;;
-	-h | --help) sed -n '5,103p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h | --help) sed -n '5,112p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	-*) echo "$me: unknown argument '$1'" >&2; usage ;;
 	*) [ -z "$out" ] || { echo "$me: one <outdir> only" >&2; usage; }; out=$1; shift ;;
 	esac
@@ -420,8 +429,33 @@ if [ -n "$gles_lib" ]; then
 	step "3. the pair: libGLESv2.so.2 and libEGL.so.1 from --gles-lib $gles_lib"
 	gles_out=$gles_lib
 else
-	step "3. the pair: tools/mali/panthor-gles/build.sh $gles_out (release, ES 2.0)"
-	run "$PAIR/build.sh" "$gles_out"
+	if [ "$es3" = 1 ]; then
+		step "3. the pair: tools/mali/panthor-gles/build.sh --es3 $gles_out (release, ES 3.0 report, --es3)"
+		run "$PAIR/build.sh" --es3 "$gles_out"
+	else
+		step "3. the pair: tools/mali/panthor-gles/build.sh $gles_out (release, ES 2.0 report, the default)"
+		run "$PAIR/build.sh" "$gles_out"
+	fi
+fi
+gl_report=es2
+[ "$es3" = 0 ] || gl_report=es3
+if [ "$dry" = 1 ]; then
+	echo "+ check the pair's version text is OpenGL ES ${gl_report#es}.0 (gl_report=$gl_report)"
+else
+	# the report the built pair carries (compile-time: one of the two texts)
+	has2=0 has3=0
+	grep -aq 'OpenGL ES 2.0 YakoGL' "$gles_out/libGLESv2.so.2" && has2=1
+	grep -aq 'OpenGL ES 3.0 YakoGL' "$gles_out/libGLESv2.so.2" && has3=1
+	case "$has2$has3" in
+	10) built=es2 ;;
+	01) built=es3 ;;
+	*) built=unknown ;;
+	esac
+	if [ -n "$gles_lib" ] && [ "$built" = unknown ]; then
+		echo "$me: --gles-lib $gles_lib: cannot tell which GL version its pair reports" >&2; exit 1
+	fi
+	[ "$built" = unknown ] || [ "$built" = "$gl_report" ] || { echo "$me: the pair reports $built, not $gl_report" >&2; exit 1; }
+	[ "$built" = unknown ] || gl_report=$built
 fi
 run "$PAIR/check.sh" "$gles_out"
 
@@ -517,6 +551,7 @@ run cp -r "$BUILD/glmark2/data/shaders" "$BUILD/glmark2/data/models" "$BUILD/glm
 if [ "$dry" = 1 ]; then
 	echo "+ check $part (readelf: AArch64, RUNPATH \$ORIGIN/../lib, NEEDED within $NEEDED_OK, the pair, GLIBC_$GLIBC_FLOOR GLIBCXX_$GLIBCXX_FLOOR CXXABI_$CXXABI_FLOOR)"
 	echo "+ write $part/BUILD-INFO (commit=$describe dev=${dev_info%% *} glmark2=$GLMARK2_PIN flavour=$FLAVOUR glibc_max= glibcxx_max= cxxabi_max=)"
+	echo "+ BUILD-INFO also gets gl_report=$gl_report"
 	echo "+ check $part with its BUILD-INFO (--check)"
 else
 	if [ -z "${READELF:-}" ]; then
@@ -533,6 +568,7 @@ else
 		echo "flavour=$FLAVOUR"
 		echo "toolchain=$toolchain, Debian trixie MALI_DEQP_TOOLCHAIN (tools/cts/deps.toml)"
 		echo "gles_lib=${gles_lib:-tools/mali/panthor-gles/build.sh}"
+		echo "gl_report=$gl_report"
 		echo "glibc_max=$glibc_max"
 		echo "glibcxx_max=$glibcxx_max"
 		echo "cxxabi_max=$cxxabi_max"
