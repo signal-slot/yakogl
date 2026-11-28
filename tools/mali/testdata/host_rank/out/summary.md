@@ -1,0 +1,1 @@
+HOST-ONLY: synthetic fixture.
