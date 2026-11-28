@@ -161,7 +161,7 @@ at `:20511-20528`):
 | case 248 `gl_test: tear: frames F, ms T, swaps S, display_busy waits n/a` and `gl_test: tear: dss vsyncs V` | F = 6000, T about 100 s; V over T about **59 a second** (`am62p-dss-readahead.md`: 58.85, 16.99 ms frame). T well under F/60 s means swaps did not wait for the display |
 
 Not printed: the re-post count of a terrain run in the GM (use `glmark2-counters
-reposts`), HWPerf timestamps (`pvr-hwperf.md` is a design).
+reposts`), HWPerf timestamps (see the HWPerf arm below).
 
 ### Arm 3: the camera tear look (image A, case 248, `target:am62p-camera`)
 
@@ -303,6 +303,147 @@ Ran 2026-11-27 on the Verdin AM62P:
 **Missed**, not kick-bound. The table and the records are in
 `pvr-mip-three-levels.md`, "Measured on the Verdin AM62P (2026-11-27)".
 
+## HWPerf arm: the firmware's own kick timings (image H, after `pvr-hwperf-enable`)
+
+Host-written, **nothing here ran on a board**. One extra arm for the same
+session. It splits the ~1.1 ms a queued mip kick (about 1.8 ms a kick in the
+frame) into the firmware's take-up of the post and the GPU's execution, which
+the host's reads cannot (`pvr-hwperf.md`, `am62p-slow-terrain.md`, "Open").
+Needs main to carry `d4d0d754` (`pvr-hwperf-enable`) and the reader
+`driver/rust/src/gpu/pvr/hwperf.rs`; check `git log` for both first.
+
+### What is wired, and what is not
+
+On: the Kconfig knob **`CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF`** (`driver/zephyr/Kconfig:211`,
+default off; buffer `CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF_BUF_KB`, default 1024,
+range 64 to 2048). `driver/src/pvr_fw_boot.c:430-436` passes
+`YD_PVR_FWINIT_HWPERF` and the buffer size to the firmware init; the init logs
+`HWPerf on: buffer <N> KiB at fw 0x.., filter 0x..` (`fwinit.rs:339`) or
+`HWPerf: a <N> KiB buffer does not fit ...; HWPerf stays off` (`:362`).
+
+**Not wired: no output path.** `pvr_fw_hwperf_drain()` (`pvr_fw_boot.c:450`,
+declared in `driver/src/pvr_drv.h:87`) has **no caller** in gl_test, the
+glmark2 sample or the driver. With the knob on and nothing else changed the
+console shows only the boot line `HWPerf on`; the `pvr-hwperf` lines below are
+never printed. So this arm cannot be run from main as it is. **Smallest
+follow-up (do not do it here):** in `driver/tools/pvrlab/gl_test.c` case 216,
+declare `extern int pvr_fw_hwperf_drain(void);` (gl_test does not include
+`pvr_drv.h`) and call it once before the first measured frame (discards the
+boot and warm-up stretch) and once after the last frame, **outside** the timed
+span and before the case's own prints. Optional, same size: a call at the end of
+each glmark2 scene in `driver/samples/zephyr/glmark2/src/main.cpp`; the buffer
+is never freed, so a whole glmark2 run fills 1 MiB (the firmware then drops
+packets, counted as `fw_drops=`), so use case 216 first. Also open: the
+`ui32ExtJobRef` write in `render.rs`, which would tie packets to kicks; without
+it `ext_job_ref` is 0 and a kick is told by order only.
+
+### Build (image H, no repository file changed)
+
+Same `<main>` commit as image A, plus that follow-up commit if it is not on
+main yet (then say so in the record and take A from the same commit without
+the knob). The knob is one more `-D` on the printed west line, as arm 2 does
+for the tear frames (`common-images.sh` takes no extra argument):
+
+```text
+tools/cts/common-images.sh --dry-run --cases '216' am62p tools/cts/common-tree.txt build/rb/H GT
+# append  -DCONFIG_YAKOGL_DRV_GPU_PVR_HWPERF=y  to the printed west build line, then run that line
+tools/board.sh am62p run build/rb/H/GT/zephyr/zephyr.bin records/am62p/rb-H-gt
+```
+
+The off arm is **image A's** case 216 (same commit, `--cases` containing 216),
+not a new build. For a glmark2 image (only once the glmark2 calls exist) do the
+same with `GM` and `-DCONFIG_YAKOGL_DRV_GPU_PVR_HWPERF=y`. Keep `-DCONFIG_YAKOGL_DRV_GPU_PVR_HWPERF_BUF_KB=1024` the
+default; a larger one risks the "does not fit" refusal.
+
+### Lines to read
+
+In the gl_test log, after the case's drain call (`hwperf.rs:831-877`, `Inf`
+level, so check the log level shows them):
+
+```text
+pvr-hwperf: from=F widx=W wrap=.. size=.. fw_drops=D packets=P dropped=.. other=.. tasks=T unmatched=.. open=.. overflow=.. span_ticks=.. span_ns=.. err=..
+pvr-hwperf lane=ta tasks=.. gpu_ticks=.. gpu_ns=.. k2s_n=.. k2s_ticks=.. k2s_ns=..
+pvr-hwperf lane=3d tasks=.. gpu_ticks=.. gpu_ns=.. k2s_n=.. k2s_ticks=.. k2s_ns=..
+```
+
+(more `lane=` lines only for lanes that ran: `3dspm` is a partial render,
+`3dtq` the transfer queue.) Fields:
+
+- `gpu_ticks` / `gpu_ns`: sum over the lane's tasks of finish less start.
+- `k2s_ticks` / `k2s_ns` over `k2s_n` tasks: sum of start less the stamp of the
+  last firmware background-task start before it (`Task::kick_to_start_ticks`,
+  `hwperf.rs:555`), the firmware's take-up of the KCCB post. A task with no
+  background stamp before it is not counted (`k2s_n < tasks`).
+- **The core clock** is `PVR_CORE_CLOCK_HZ` = 800 MHz (`pvr_fw_boot.c:283`),
+  passed by `pvr_fw_hwperf_drain`; the timer is `RGX_CR_TIMER`, 1 tick per 256
+  core clocks, so `ns = ticks * 256 * 1e9 / 800e6 = ticks * 320`
+  (`ticks_to_ns`, `hwperf.rs:714`; test `:1118`). The `*_ns` fields are
+  already converted. **Check the clock**: `span_ns` of a drain over the timed
+  frames must equal the case's own wall time (`gl_test: mipchains: 20 frames, X
+  ms a frame` times 20) within a few percent; if not, the 800 MHz is wrong and
+  every ns below scales by the ratio. (Not yet checked on a board.)
+- `fw_drops` 0 and `dropped` 0, `err=None`, `unmatched`/`open` 0 or 1 (a wrap
+  mark cuts a task: `wrap` changed between `from` and `widx`), else the
+  summary is partial and the run is void for the ratios.
+
+### From the lines to ms a kick
+
+Drain once before and once after the 20 measured frames. Case 216 has 40 kicks
+a frame (800 over 20 frames; the gl_test line `per frame: N kicks`). Terrain
+has 5 chains of 9 kicks (`am62p-pvr-mipmap-kicks.md`; 51 to 52 kicks a frame in
+all). Then, over the stretch:
+
+```text
+3D GPU ms a kick   = lane=3d gpu_ns / lane=3d tasks / 1e6
+TA GPU ms a kick   = lane=ta gpu_ns / lane=ta tasks / 1e6
+take-up ms a kick  = lane=3d k2s_ns / lane=3d k2s_n / 1e6
+share of a kick    = (3D ms + take-up ms) against the case's X ms a frame / kicks a frame
+```
+
+`tasks` should equal the kicks (800), a check of the reader. Kicks of a chain
+are queued behind each other, so a kick's `k2s` includes waiting for the
+previous kick's 3D: take-up less the previous kick's `gpu` is the firmware's
+own latency; the totals only bound it (`Task::prev_finish` is not printed).
+That is why the case 219 pair (`kickpair`, an idle GPU, arm 2) is read beside
+it: its `post->geom` of 120 to 140 us is the idle-GPU floor.
+
+### Hypotheses and the record values
+
+Prior (`am62p-slow-terrain.md`): GPU busy about 0.19 ms of about 1.1 ms a
+queued kick, about 0.9 ms between the post and the geometry fence.
+
+| reading | firmware latency (kick to start) | GPU execution |
+|---|---|---|
+| **confirms** | `k2s_ns / k2s_n` **0.7 to 1.0 ms**, about the same on every kick (a fixed per-post cost), and `3d gpu_ns / tasks` **0.1 to 0.3 ms** and `ta` under 0.1 ms; their sum is within 10 % of the frame's ms a kick | the opposite row |
+| **refutes** | `k2s` under **0.3 ms** a kick (near the 0.12 to 0.14 ms idle floor) | `3d gpu_ns / tasks` **0.8 ms or more**, i.e. GPU busy about the whole kick; then `pvr-fence-wait.md`'s fence-read reading is wrong and path A or fewer tiles matters, not the doorbell/latency route |
+| **in between** | `k2s` 0.3 to 0.7 ms and `3d` 0.3 to 0.8 ms: both pay; rank by which is larger and which a fix can move |  |
+
+Also read: `k2s` that grows along a chain (the first kick low, the later ones
+high) is queueing behind the GPU, not firmware latency; `lane=3dspm` with
+tasks above 0 means mip kicks are partial-rendering (extra GPU time the host
+did not know of); `fw_drops` above 0 voids the run. The 20 ms fence
+(`reposts` of arm 1) is a separate stall: the HWPerf stretch of a frame with a
+re-post shows a `k2s` of about 20 ms on one kick. Each reading is a prior to
+check against the record, not a result.
+
+### Noise check: the reading must not move what it measures
+
+HWPerf adds firmware work (a packet per task and per event, and UFO packets)
+and, in the follow-up, a drain between frames. Compare, same commit, same
+case, A (knob off) against H (knob on):
+
+| record | requirement |
+|---|---|
+| `gl_test: mipchains: 20 frames, X ms a frame` | `|X_H - X_A|` under **1 ms** (run-to-run spread about 1 ms, `pvr-rering-knob.md`); take A and H twice each if the lease allows and compare the spread of the pairs |
+| `per frame: N kicks`, `reposts R over 20 frames` | equal on both arms (a changed count means the knob changed the schedule) |
+| `TA|3D ... us, wall ... us` | within the same noise |
+
+Beyond 1 ms, report the difference as the cost of HWPerf itself (the first
+board check `pvr-hwperf-enable` leaves open) and do not use H's ms a kick for
+the frame's budget, only for the ratio of take-up to GPU time. The drain's own
+console print must stay outside the measured span: a UART print of five lines
+between frames is a time the frame loop would otherwise count.
+
 ## After the session
 
 Per arm: `docs/notes/` record with `<main>` and each experiment commit, the
@@ -320,7 +461,8 @@ and camera result; `pvr-mip-tail-e1-board` the E1 and re-ring rows;
 - Whether `common-images.sh` accepts `EXTRA_CFLAGS` for the tear frames
   directly: `am62p-flip-latch.md` says to append it to the printed west line.
   Run `--dry-run` first.
-- The HWPerf split of the 0.9 ms (`pvr-hwperf.md`) needs code first.
+- The HWPerf split of the 0.9 ms: the knob is on main but nothing calls the
+  drain (see the HWPerf arm); it needs the gl_test call first.
 
 ## dEQP-GLES3 tree session
 
