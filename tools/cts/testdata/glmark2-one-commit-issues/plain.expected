@@ -1,0 +1,27 @@
+#1196: the README glmark2 table from one main commit, `0badf00d`
+
+- Toradex Verdin AM62P: score 501; 33 scenes, 0 failed, 0 GL errors, 0 out-of-memory scenes; gl_test 50 of 50; GM `verdict=done`, GT `verdict=done`; 2026-12-01; record `records/am62p/common-0badf00d/`
+- Raspberry Pi 4: score 222; 33 scenes, 0 failed, 0 GL errors, 0 out-of-memory scenes; gl_test 50 of 50; GM `verdict=done`, GT `verdict=done`; 2026-12-01; record `records/pi4/common-0badf00d/`
+- Toradex Verdin iMX8M Plus: score 77; 33 scenes, 0 failed, 0 GL errors, 0 out-of-memory scenes; gl_test 48 of 48 run passed, 2 skipped; GM `verdict=done`, GT `verdict=done`; 2026-12-01; record `records/imx8mp/common-0badf00d/`
+
+All three boards ran GM (glmark2-es2 800x600) and GT (gl_test) at `0badf00d`: 33 scenes, 0 failed, 0 GL errors, 0 out-of-memory scenes. README.md's table, the three RESULTS.md 'Common set' rows, STATUS.md and website/data.js take these scores. Closes #1196.
+
+#1209: Raspberry Pi 4 terrain at `0badf00d`
+
+[terrain] 33.00 ms/frame (30 FPS) at `0badf00d`, record `records/pi4/common-0badf00d/`; 161.79 ms at `c4af4917` before.
+The figure is below the 161.79 ms of the issue: #1209 can be closed on this record.
+
+#15: i.MX8MP slow scenes at `0badf00d`, measured on the Toradex Verdin iMX8M Plus
+
+terrain 250.00 ms (4 FPS); shadow 100.00 ms (10 FPS); refract 200.00 ms (5 FPS) (recorded, not judged). Score 77. Record `records/imx8mp/common-0badf00d/`.
+The issue stays open: the figures are recorded, not a verdict on the cause.
+
+#17: glmark2 pictures by eye at `0badf00d`
+
+Pi 4: 33 of 33 pictures checked by eye, right (`docs/notes/pi4-glmark2-pictures-by-eye.md`).
+i.MX8MP: still open; measured on the Toradex Verdin iMX8M Plus, the record gives 33 scenes, match 33. Nobody has looked at them by eye yet.
+The issue stays open for the i.MX8MP only.
+
+#1606: docs/release/checklist.md line 9 (glmark2 table)
+
+The README glmark2 table now comes from one main commit, `0badf00d` (#1196). Line 9 is no longer left to #1196; the i.MX8MP pictures by eye stay with #17.
