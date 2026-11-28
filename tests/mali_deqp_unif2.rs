@@ -24,10 +24,6 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// `arr_mat_array`'s `mediump mat3 u_var0[5]`: a matrix array has no
-/// element rule (nir.rs `array_element`; docs/notes/mali-unif2-lowering.md
-/// step 8).
-const ARRAY: &str = "Valhall: a uniform array is not lowered yet";
 const LOOP_VS: &str = "Valhall: a loop in a vertex shader is not lowered yet";
 /// `fs_other`'s fragment shader alone (glCompileShader, before the link
 /// folds `b` and `c`): `d * b` of a uniform and a varying lane in one pair.
@@ -46,13 +42,12 @@ const LANE: &str = "Valhall: a gl_FragColor lane other than the varying's own la
 const VS_PRECISION: &str = "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet";
 
 /// The references that compile byte-equal, without the `deqp_unif2_` prefix.
-const LOWERED: &[&str] = &["fs_mat_uniform", "vs_mat_uniform"];
+const LOWERED: &[&str] = &["arr_mat_array", "fs_mat_uniform", "vs_mat_uniform"];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("arr_bool_array", LANE),
     ("arr_int_array", LANE),
-    ("arr_mat_array", ARRAY),
     ("arr_struct_array", VS_PRECISION),
     ("fs_bool_uniform", LANE),
     ("fs_int_uniform", LANE),
@@ -112,6 +107,17 @@ fn fs_mat_uniform() {
     mali_ref::assert_matches("deqp_unif2_fs_mat_uniform");
 }
 
+/// `mediump mat3 u_var0[5]`, element 2 read: a plain mediump matrix array is
+/// fp16, a column a load of its own (nir.rs `matrix_array`, step U8 of
+/// docs/notes/mali-unif2-lowering.md as vsuarr's VA2; plan #387
+/// mali-train-3b), `compare_mat3`'s product as Mesa's selects join it
+/// (`vs_chain_step`) and the two halves of a word subtracted in one
+/// `FADD_IMM.v2f16` (`vs_vectorize16`).
+#[test]
+fn arr_mat_array() {
+    mali_ref::assert_matches("deqp_unif2_arr_mat_array");
+}
+
 /// An ignored test per refused reference: the byte-compare the lowering enables.
 macro_rules! refused {
     ($($name:ident),* $(,)?) => {$(
@@ -126,7 +132,6 @@ macro_rules! refused {
 refused!(
     arr_bool_array,
     arr_int_array,
-    arr_mat_array,
     arr_struct_array,
     fs_bool_uniform,
     fs_int_uniform,

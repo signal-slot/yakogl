@@ -44,15 +44,11 @@ const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
 /// `array_element`) and whose compares plan #387 mali-train-3b lowers (a
 /// vector's `==` in nir.rs `vs_reduce`, the product of the compare results
 /// in `vs_mask_tree`).
-const MATCHED: &[&str] = &["bvec4", "ivec4", "multi", "unused_bvec4"];
+const MATCHED: &[&str] = &["bvec4", "ivec4", "mat4", "multi", "unused_bvec4"];
 
 /// Every refused reference with its refusal.
-const REFUSED: &[(&str, &str)] = &[
-    ("mat4", UNIFORM_ARRAY),
-    ("struct_mat", UNIFORM_ARRAY),
-    ("nested_mat", UNIFORM_ARRAY),
-    ("unused_mat2", UNIFORM_ARRAY),
-];
+const REFUSED: &[(&str, &str)] =
+    &[("struct_mat", UNIFORM_ARRAY), ("nested_mat", UNIFORM_ARRAY), ("unused_mat2", UNIFORM_ARRAY)];
 
 #[test]
 fn refusals_pinned() {
@@ -98,7 +94,6 @@ fn ivec4() {
 /// word and an `FMAX.v2f16` tree of the 48 `abs`, one `FCMP_OR.v2f16.lt`
 /// with the 0.05 at FAU 35.
 #[test]
-#[ignore = "refused: a uniform array (uniform mediump mat4 u_var[3])"]
 fn mat4() {
     mali_ref::assert_matches("deqp_vsuniarr_mat4");
 }
