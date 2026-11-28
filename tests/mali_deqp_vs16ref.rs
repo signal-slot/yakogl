@@ -130,14 +130,14 @@ fn vs16ref_or_bool() {
     mali_ref::assert_matches("deqp_vs16ref_or_bool");
 }
 
+/// Plan #387 mali-train-3b: a `bvecN ==` against a constant of true and
+/// false lanes, cut last lane first (nir.rs `vs_reduce`).
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
 fn vs16ref_uapi_bvec3_mix() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_bvec3_mix");
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
 fn vs16ref_uapi_bvec4_mix() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_bvec4_mix");
 }
@@ -152,10 +152,18 @@ fn vs16ref_uapi_ivec3() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_ivec3");
 }
 
+/// The five words' `umax` tree (plan #387 mali-train-3b, nir.rs
+/// `vs_chain_step`): `compare_ivec4`'s own product is `umax(umax(w, z),
+/// umax(x, y))`, and the struct's `int` joins it last.
 #[test]
-#[ignore = "refused: an integer or boolean value (the five words' umax chain, which Mesa rebalances into a tree)"]
 fn vs16ref_uapi_struct_int_ivec4() {
-    mali_ref::assert_matches("deqp_vs16ref_uapi_struct_int_ivec4");
+    /* drawn with its struct members set: compared with their values, as
+     * `mali_ref::STRUCT_VALUES` does for the references it lists */
+    let name = "deqp_vs16ref_uapi_struct_int_ivec4";
+    let r = mali_ref::Reference::load(name);
+    let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: the pair is refused: {e}"));
+    let d = mali_ref::differences_members(&r, &pair, true);
+    assert!(d.is_empty(), "{name}: differs from its reference:\n{}", d.join("\n"));
 }
 
 #[test]
@@ -165,7 +173,6 @@ fn vs16ref_xor_bool() {
 }
 
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
-const INT: &str = "an integer or boolean value is not lowered yet";
 
 /// Every reference the compiler refuses and the text it gives now.
 const REFUSALS: &[(&str, &str)] = &[
@@ -176,9 +183,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_vs16ref_bcmp_eq_bvec4", ARITH),
     ("deqp_vs16ref_bcmp_ne_bvec4", ARITH),
     ("deqp_vs16ref_eq_mediump_vec4", ARITH),
-    ("deqp_vs16ref_uapi_bvec3_mix", ARITH),
-    ("deqp_vs16ref_uapi_bvec4_mix", ARITH),
-    ("deqp_vs16ref_uapi_struct_int_ivec4", INT),
 ];
 
 /// References that compile at the tip, to other words than Mesa's (the
@@ -202,10 +206,16 @@ const MATCHED: &[&str] = &[
     "deqp_vs16ref_bcmp_eq_bvec3",
     "deqp_vs16ref_bcmp_ne_bvec3",
     "deqp_vs16ref_or_bool",
+    /* plan #387 mali-train-3b: `bvecN ==` against true and false lanes */
+    "deqp_vs16ref_uapi_bvec3_mix",
+    "deqp_vs16ref_uapi_bvec4_mix",
     /* vs16-2: an int / ivec uniform read as its words, `compare_ivec3`'s
      * product the `CSEL.u32.gt` chain */
     "deqp_vs16ref_uapi_int",
     "deqp_vs16ref_uapi_ivec3",
+    /* plan #387 mali-train-3b: the product of compare results as Mesa's
+     * selects join it */
+    "deqp_vs16ref_uapi_struct_int_ivec4",
 ];
 
 #[test]

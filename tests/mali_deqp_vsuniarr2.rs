@@ -42,23 +42,31 @@ mod mali_ref;
 
 /// The refusal, without the `Valhall: ` prefix.
 const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
-/// The ivec3 and bvec3 arrays' elements load since plan #377
-/// spike-uniform-rest3 (nir.rs `array_element`); their compares'
-/// reduction (`vs_reduce`, n = 3) is next.
-const ARITHMETIC: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
+/// `ivec3_part`: its vertex shader compiles since plan #387 mali-train-3b
+/// (nir.rs `vs_reduce`'s `ivec3 == ivec3(0)`; the vertex words are Mesa's,
+/// measured with the reference's own vertex shader beside a fragment shader
+/// that reads the varying alone); the refusal left is its fragment
+/// shader's.
+const FRAG_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+/// `bvec3_part`: `compare_vec3`'s product of three compares beside two
+/// `compare_bvec3` in one product chain, which nir.rs `vs_chain_step`
+/// refuses (the product is one condition in a later run of Mesa's passes;
+/// no model of that order).
+const INT_VALUE: &str = "an integer or boolean value is not lowered yet";
 
-/// The references the compiler makes byte-equal. None yet.
-const MATCHED: &[&str] = &[];
+/// The references the compiler makes byte-equal: `mat3_part`, plan #387
+/// mali-train-3b step VA2 (a plain mediump matrix array, nir.rs
+/// `matrix_array`).
+const MATCHED: &[&str] = &["mat3_part"];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("mat3_part", UNIFORM_ARRAY),
     ("struct_mat4_arr", UNIFORM_ARRAY),
-    ("mat2_struct", UNIFORM_ARRAY),
-    ("mat4_mixed", UNIFORM_ARRAY),
+    ("mat2_struct", INT_VALUE),
+    ("mat4_mixed", INT_VALUE),
     ("struct_vec3_mat2", UNIFORM_ARRAY),
-    ("ivec3_part", ARITHMETIC),
-    ("bvec3_part", ARITHMETIC),
+    ("ivec3_part", FRAG_LANE),
+    ("bvec3_part", INT_VALUE),
     ("struct_nested", UNIFORM_ARRAY),
 ];
 
@@ -86,7 +94,6 @@ fn refusals_pinned() {
 
 /// `uniform mediump mat3 u_var0[5]`: only `u_var0[2]` is read.
 #[test]
-#[ignore = "refused: a uniform array (uniform mat3 u_var0[5])"]
 fn mat3_part() {
     mali_ref::assert_matches("deqp_vsuniarr2_mat3_part");
 }
@@ -100,14 +107,14 @@ fn struct_mat4_arr() {
 
 /// `uniform mediump mat2 u_var0[4]`: elements 0 and 2 are read.
 #[test]
-#[ignore = "refused: a uniform array (uniform mat2 u_var0[4])"]
+#[ignore = "refused: an integer or boolean value (compare_mat2 products beside other compares in one product chain; the mat2 array loads)"]
 fn mat2_struct() {
     mali_ref::assert_matches("deqp_vsuniarr2_mat2_struct");
 }
 
 /// `uniform mediump mat4 u_var0[3]`, every element compared, beside scalars.
 #[test]
-#[ignore = "refused: a uniform array (uniform mat4 u_var0[3])"]
+#[ignore = "refused: an integer or boolean value (compare_mat4 products beside int and bool compares in one product chain; the mat4 array loads)"]
 fn mat4_mixed() {
     mali_ref::assert_matches("deqp_vsuniarr2_mat4_mixed");
 }
@@ -121,14 +128,14 @@ fn struct_vec3_mat2() {
 
 /// `uniform mediump ivec3 u_var0[2]`: `u_var0[1]` is read.
 #[test]
-#[ignore = "refused: arithmetic (the ivec3 compare's reduction)"]
+#[ignore = "refused: a gl_FragColor lane (the fragment shader's; the vertex shader compiles)"]
 fn ivec3_part() {
     mali_ref::assert_matches("deqp_vsuniarr2_ivec3_part");
 }
 
 /// `uniform bvec3 u_var1[5]`: elements 1 and 3 are read.
 #[test]
-#[ignore = "refused: arithmetic (the bvec3 compare's reduction)"]
+#[ignore = "refused: an integer or boolean value (a compare_vec3 product beside compare_bvec3 in one product chain)"]
 fn bvec3_part() {
     mali_ref::assert_matches("deqp_vsuniarr2_bvec3_part");
 }

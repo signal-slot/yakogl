@@ -39,25 +39,16 @@ mod mali_ref;
 
 /// The refusal, without the `Valhall: ` prefix.
 const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
-/// The int and bool vector arrays' elements load since plan #377
-/// spike-uniform-rest3 (nir.rs `array_element`); their bvec4 / ivec4
-/// compares' reduction (`vs_reduce`, n = 3 and 4) is next.
-const ARITHMETIC: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
-
-/// The references the compiler makes byte-equal. None yet.
-const MATCHED: &[&str] = &[];
+/// The references the compiler makes byte-equal: the int and bool vector
+/// arrays, whose elements load since plan #377 spike-uniform-rest3 (nir.rs
+/// `array_element`) and whose compares plan #387 mali-train-3b lowers (a
+/// vector's `==` in nir.rs `vs_reduce`, the product of the compare results
+/// in `vs_mask_tree`).
+const MATCHED: &[&str] = &["bvec4", "ivec4", "mat4", "multi", "unused_bvec4"];
 
 /// Every refused reference with its refusal.
-const REFUSED: &[(&str, &str)] = &[
-    ("bvec4", ARITHMETIC),
-    ("ivec4", ARITHMETIC),
-    ("mat4", UNIFORM_ARRAY),
-    ("multi", ARITHMETIC),
-    ("struct_mat", UNIFORM_ARRAY),
-    ("nested_mat", UNIFORM_ARRAY),
-    ("unused_bvec4", ARITHMETIC),
-    ("unused_mat2", UNIFORM_ARRAY),
-];
+const REFUSED: &[(&str, &str)] =
+    &[("struct_mat", UNIFORM_ARRAY), ("nested_mat", UNIFORM_ARRAY), ("unused_mat2", UNIFORM_ARRAY)];
 
 #[test]
 fn refusals_pinned() {
@@ -86,7 +77,6 @@ fn refusals_pinned() {
 /// `LSHIFT_AND.i32` of the lanes expected true, `LSHIFT_OR.i32` and one
 /// `.not` of the lanes expected false.
 #[test]
-#[ignore = "refused: arithmetic (the bvec4 compare's reduction)"]
 fn bvec4() {
     mali_ref::assert_matches("deqp_vsuniarr_bvec4");
 }
@@ -95,7 +85,6 @@ fn bvec4() {
 /// each lane one `ICMP_OR.u32.eq.m1` or `ICMP_AND` with its constant (a byte
 /// lane of an embedded table, an `IADD_IMM` or a pushed FAU constant).
 #[test]
-#[ignore = "refused: arithmetic (the ivec4 compare's reduction)"]
 fn ivec4() {
     mali_ref::assert_matches("deqp_vsuniarr_ivec4");
 }
@@ -105,7 +94,6 @@ fn ivec4() {
 /// word and an `FMAX.v2f16` tree of the 48 `abs`, one `FCMP_OR.v2f16.lt`
 /// with the 0.05 at FAU 35.
 #[test]
-#[ignore = "refused: a uniform array (uniform mediump mat4 u_var[3])"]
 fn mat4() {
     mali_ref::assert_matches("deqp_vsuniarr_mat4");
 }
@@ -115,7 +103,6 @@ fn mat4() {
 /// 16), then the fp16 floats, one a word (17 to 19), then the ivec3 words
 /// (20 to 28): not the declaration's order.
 #[test]
-#[ignore = "refused: arithmetic (the ivec3 and bvec2 compares' reduction)"]
 fn multi() {
     mali_ref::assert_matches("deqp_vsuniarr_multi");
 }
@@ -142,9 +129,14 @@ fn nested_mat() {
 /// five words alone (FAU 11 to 15: ffffffff, 0, ffffffff, ffffffff, 0 for
 /// `m0` true and `m3[1]` true, false, true, false, so not `m0` first).
 #[test]
-#[ignore = "refused: arithmetic (the bvec4 compare's reduction)"]
 fn unused_bvec4() {
-    mali_ref::assert_matches("deqp_vsuniarr_unused_bvec4");
+    /* drawn with its struct members set (the FAU words above): compared
+     * with their values, as `mali_ref::STRUCT_VALUES` does for the
+     * references it lists */
+    let r = mali_ref::Reference::load("deqp_vsuniarr_unused_bvec4");
+    let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("the pair is refused: {e}"));
+    let d = mali_ref::differences_members(&r, &pair, true);
+    assert!(d.is_empty(), "deqp_vsuniarr_unused_bvec4: differs from its reference:\n{}", d.join("\n"));
 }
 
 /// `unused_uniforms.mat4_mat2`: `m0` and `m3[1]` alone are read, 16 and 4

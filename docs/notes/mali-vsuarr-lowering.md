@@ -201,3 +201,115 @@ after the steps decides.
   FAU constant), so this is no limit here.
 - Not checked on any board. G310 = G610 holds for the eight references
   (`g310_check.sh`).
+
+## 6. Landed: U3's residue and VA1 (plan #387, item `mali-train-3b`)
+
+HOST-ONLY; nothing here ran on a board. The references were redrawn on Mesa
+26.2.1's G610 drm-shim (`$CONNECTED_DEPS_DIR/mesa-shim`) with
+`NIR_DEBUG=print`, which prints the shader after every pass; the rules below
+are read from that, not guessed from the words.
+
+- **A vector's `==`** (`nir.rs` `vs_reduce`): `ball_iequalN` is cut into its
+  lanes last lane first (`lower_reduction`'s reverse order,
+  `nir_lower_alu_width.c:228`): `iand(iand(iand(w, z), y), x)`. Of booleans
+  a lane expected true is the word and one expected false its `inot`, and a
+  run of `inot`s is one `ior` negated once (De Morgan). Of integers against
+  zeros it is one `umax` chain and one `ieq`; against non-zero constants the
+  `ieq`s' `iand` chain. A constant of zero and non-zero int lanes is refused
+  (no reference).
+- **Section 3's "regrouped across elements" is not a regrouping.** The
+  leaves of `init_bvec4` and `init_ivec4` are each element's own chain, w
+  and z first. The FAU slots look regrouped because `bi_opt_reorder_push`
+  gives the first slots to the word pairs one instruction reads (w and z of
+  each element) and the unpaired words (x, y) the rest. `fau.rs` already
+  models that pass, so a tree built in Mesa's order gets the slots.
+- **The product of the compare results** (`nir.rs` `vs_chain_step`,
+  `vs_mask_tree`). `v = 1.0; v *= compare_a(..); v *= compare_b(..)` is, in
+  Mesa's NIR, a nest of selects: each `fmul(v, b2f(c))` becomes
+  `bcsel(c, v, 0.0)`, the last statement's outermost, and
+  `bcsel(a, bcsel(b, x, 0.0), 0.0)` becomes `bcsel(iand(a, b), x, 0.0)`.
+  `nir_opt_algebraic` visits the last instruction first and does not visit
+  a select it has just made again, so each run joins the selects in pairs
+  from the outermost, and the next run joins the pairs. In the first run
+  the second factor joins the first at once, and the third joins that pair
+  when the count is odd. Nine factors (`init_multi`) give
+  `iand(iand(iand(c9, c8), iand(c7, c6)), iand(iand(c5, c4), iand(c3, iand(c2, c1))))`.
+  Each `iand` then takes nir_opt_algebraic's own rules: two fp16 `flt`s of
+  one constant are `flt(fmax(a, b), c)`, two zero tests
+  `ieq(umax(a, b), 0)`, two negations the `inot` of their `ior`.
+- **`inot` moves like a compare.** `nir_alu_instr_is_comparison` takes
+  `inot` (`nir.c:3313`), and `nir_opt_move` runs twice on a vertex shader
+  (before and after `pan_nir_lower_bool_to_bitsize`), so an `inot` an `iand`
+  reads beside a compare ends up after that compare.
+- **Refused by name, not compiled:** a chain of more than three factors
+  that holds a scalar `bool == false` (its `inot` exists before the product
+  is a select, and `bcsel(inot(a), b, c)` swaps the arms: another join
+  order, `init_bool`'s) or a factor that is itself a product
+  (`compare_vec4`'s `compare_float(..) * ..`, which Mesa makes one condition
+  in a later run); and any such chain that also holds a vector's `==`.
+  `deqp_vsuniarr2_bvec3_part` and `deqp_uniarray_struct` are these. Before
+  this step `deqp_uniarray_struct`'s vertex shader compiled to words that
+  were not Mesa's (hidden behind its fragment shader's refusal).
+
+References lifted: `deqp_vsuarr_init_{bvec4,ivec4,multi}`,
+`deqp_vsuniarr_{bvec4,ivec4,multi,unused_bvec4}`,
+`deqp_vs16ref_uapi_{bvec3,bvec4}_mix`. Vertex shaders that now compile to
+Mesa's words while the pair still stops at its fragment shader (measured with
+the reference's vertex shader beside a fragment shader that reads the varying
+alone): `deqp_unif2_vs_struct_uniform`, `deqp_vsuniarr2_ivec3_part`,
+`deqp_uniarray_api_float` (its three `compare_float` statements were
+`fmax(fmax(F0, F1), F2)` before; Mesa's is `fmax(F2, fmax(F1, F0))`).
+
+## 7. Landed: VA2 with unif2's U8 (plan #387, item `mali-train-3b`)
+
+HOST-ONLY, as section 6; the rules are read from `NIR_DEBUG=print` of
+`deqp_audit_m1_uniform_initial_mat4_vs` and `deqp_vsuarr_init_mat4` on the
+Mesa 26.2.1 drm-shim.
+
+- **The layout** (`nir.rs` `matrix_array`, `select.rs`
+  `UboLayout::push_uniform`): a plain mediump `mat2`/`mat3`/`mat4` array is
+  fp16 in Mesa's block, a column from a word of its own (an element 2, 6
+  and 8 words), each column a load of its own. Only the vertex stage takes
+  it (`uniform_of_stage`). A matrix array that is not fp16 (a struct's
+  member: VA3; a highp one) stays refused with this text.
+- **A product inside an expression** (`compare_vec4`'s
+  `compare_float(a.x, b.x) * compare_float(a.y, b.y) * ..`, and
+  `compare_mat4`'s product of those). GLSL hoists the calls, so every factor
+  stands before the product, and the joins after the last factor. The first
+  `fmul(b2f(a), b2f(b))` is `b2f(iand(a, b))` in the factors' order; the
+  rest joins as the statement chain does (section 6), from the outermost.
+  Four factors are `iand(iand(d, c), iand(a, b))`:
+  `fmax(fmax(w, z), fmax(x, y))` for a column, and
+  `fmax(fmax(c3, c2), fmax(c0, c1))` for the matrix. A factor that is itself
+  a product is one condition: Mesa's first run sees no `b2f` there and
+  leaves the `fmul` until both sides are one.
+- **A statement chain of products** (`v *= compare_mat4(u_var[0], ..)` three
+  times): the `fcanonicalize` of `1.0 * f` is gone before the factors are
+  conditions, so the first two join in their order too:
+  `fmax(E2, fmax(E0, E1))`.
+- **`nir_opt_vectorize`** (`nir.rs` `vs_vectorize16`): the two fp16
+  subtractions of the halves of one uniform word (`a.x - b.x`, `a.y - b.y`
+  of an assigned value) are one two-lane `fadd` of the word and the
+  constants' pair, `FADD_IMM.v2f16 r0, u5.w1, #0x467B3E8F`.
+- **Held, and refused otherwise:** an expression or a statement chain of up
+  to four factors that are all compares' own selects or all products; two
+  factors of which the second is a product. A mix of the two kinds among
+  more than three factors is refused by name (`deqp_vsuniarr2_mat4_mixed`:
+  three `compare_mat4`, a `compare_vec3`, two `compare_int`, a
+  `compare_bool`; `deqp_vsuniarr2_mat2_struct`). Five or more products in
+  one chain (`mat4 u_var[5]`, every element compared) have no reference and
+  are refused too.
+
+References lifted: `deqp_vsuarr_init_mat4`, `deqp_vsuniarr_mat4`,
+`deqp_vsuniarr2_mat3_part`, `deqp_unif2_arr_mat_array` (U8),
+`deqp_vs16ref_uapi_struct_int_ivec4` (`compare_ivec4`'s product of four
+`compare_int`), and `deqp_audit_m1_uniform_initial_mat4_vs`, which compiled
+to other words than Mesa's before. A vertex shader that now compiles to
+Mesa's words behind its fragment shader's refusal:
+`deqp_unif2_vs_mediump_array`.
+
+Left of this note's steps: **VA3** (struct-member matrix arrays, fp32 words
+narrowed with `V2F32_TO_V2F16`), with unif2's U5; the references
+`deqp_vsuarr_init_{struct_mat,nested_mat}`,
+`deqp_vsuniarr_{struct_mat,nested_mat,unused_mat2}`,
+`deqp_vsuniarr2_{struct_mat4_arr,struct_vec3_mat2,struct_nested}`.
