@@ -21,7 +21,7 @@ awk -F' [|] ' '$1=="am62p"{print "12:00:00 glmark2-picture: " $2 ": " $3}' "$tab
 n=$(wc -l < "$work/console.txt")
 if [ "$n" = 33 ]; then ok "console has 33 scenes"; else bad "console has $n scenes"; fi
 
-hdr="looked at by eye, commit 0123abcd, records/imx8mp/test-run"
+hdr="looked at by eye on the Armadillo-X2 (measured on the X2), commit 0123abcd, records/imx8mp/test-run, probes KVM-approximate"
 common=(--commit 0123abcd --record records/imx8mp/test-run)
 
 if py "$work/t.txt" imx8mp "$work/console.txt" "${common[@]}" --header-text "$hdr" \
@@ -84,6 +84,20 @@ refused "a header without the record" "$work/t.txt" imx8mp "$work/console.txt" "
     --header-text "looked at by eye, commit 0123abcd"
 refused "a short commit" "$work/t.txt" imx8mp "$work/console.txt" --commit 0123ab \
     --record records/imx8mp/test-run --header-text "commit 0123ab records/imx8mp/test-run"
+# X2 header rules (imx8mp): c3 order, X2 named, probe source named, no "NOT looked at by eye"
+refused "an imx8mp header without X2" "$work/t.txt" imx8mp "$work/console.txt" "${common[@]}" \
+    --header-text "looked at by eye, commit 0123abcd, records/imx8mp/test-run, framebuffer probes"
+refused "an imx8mp header without the probe source" "$work/t.txt" imx8mp "$work/console.txt" "${common[@]}" \
+    --header-text "looked at by eye on the X2, commit 0123abcd, records/imx8mp/test-run"
+refused "an imx8mp header saying NOT looked at by eye" "$work/t.txt" imx8mp "$work/console.txt" "${common[@]}" \
+    --header-text "NOT looked at by eye on the X2, commit 0123abcd, records/imx8mp/test-run, framebuffer"
+refused "an imx8mp header with the record before the commit" "$work/t.txt" imx8mp "$work/console.txt" "${common[@]}" \
+    --header-text "looked at by eye on the X2, records/imx8mp/test-run, commit 0123abcd, framebuffer"
+# c3/c4 on the scratch copy
+if grep -qE '^# imx8mp: .*looked at by eye.*[0-9a-f]{8}.*records/imx8mp/' "$work/new.txt" \
+   && ! grep -q 'NOT looked at by eye' "$work/new.txt" && grep -q 'X2' "$work/new.txt" \
+   && [ "$(grep -c '^imx8mp | ' "$work/new.txt")" = 33 ]; then ok "c3 and c4 on the scratch copy"
+else bad "c3 and c4 on the scratch copy"; fi
 # a table whose column has a /dev/tty line fails --check
 awk -F' [|] ' 'BEGIN{OFS=" | "} $1=="imx8mp" && !d {$3=$3 " /dev/ttyS0"; d=1} {print}' "$table" > "$work/leak.txt"
 refused "--check on a leaking table" "$work/leak.txt" imx8mp --check

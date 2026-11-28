@@ -22,6 +22,11 @@ extra or duplicate scene, a scene out of order, and any text (header or
 line) matching the redaction regex
   ([0-9]{1,3}\.){3}[0-9]{1,3}|/home/|/dev/tty|/Users/
 
+For the imx8mp column the new header must also read "looked at by eye", then the
+commit, then records/imx8mp/<name> (acceptance c3), contain no "NOT looked at by
+eye", say "X2" (measured on the Armadillo-X2) and name the probe source
+("framebuffer" for UART values, "KVM-approximate" for KVM screenshots).
+
 --check validates the column of an existing table only: 33 lines in the host
 column's order, one header with an 8-hex commit and a records/ path, nothing
 matching the redaction regex. It prints the state; exit 0 when it is sound,
@@ -82,6 +87,22 @@ def check_header(header, column):
         raise Refused("the header has no 8-hex commit")
     if not RECORD_RE.search(text):
         raise Refused("the header has no records/ path")
+
+
+C3_RE = re.compile(r"^# imx8mp: .*looked at by eye.*[0-9a-f]{8}.*records/imx8mp/")
+
+
+def check_imx8mp_header(header):
+    """a new imx8mp header: measured on the Armadillo-X2 (farm rule), by eye, probe source named"""
+    if "NOT looked at by eye" in header:
+        raise Refused("the imx8mp header still says 'NOT looked at by eye'")
+    if not C3_RE.search(header):
+        raise Refused("the imx8mp header must read 'looked at by eye', then the commit, then records/imx8mp/<name>")
+    if not re.search(r"\bX2\b", header):
+        raise Refused("the imx8mp header must say it was measured on the X2 (Armadillo-X2)")
+    if not re.search(r"KVM-approximate|framebuffer", header):
+        raise Refused("the imx8mp header must say whether the probe values are "
+                      "'framebuffer' (UART) or 'KVM-approximate'")
 
 
 def check_scenes(scenes, order):
@@ -192,6 +213,8 @@ def main(argv):
             raise Refused("the header text does not name the commit and the record")
         header = "# %s: %s" % (column, text)
         check_header(header, column)
+        if column == "imx8mp":
+            check_imx8mp_header(header)
 
         new = run_tally(pos[2], column)
         for l in new:
