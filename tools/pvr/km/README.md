@@ -128,6 +128,14 @@ gate needs only the hashes, not the commit.
   dw24/25 0x34/0x2 (ISP_ZLSCTL), dw30..44 the PBE words 0xE0..0xE7. Where
   `render-pr` pins the 3D_PR with a zero `isp_zlsctl`, this one pins the
   ZLSCTL words. `km_check render-pr-zs` reproduces the record.
+- `ui32ExtJobRef`, a deliberate difference in all four render records
+  (`render`, `render-verbose`, `render-pr`, `render-pr-zs`): every client
+  CCB command of a kick carries the kick's seq at header byte 8
+  (`render::ring_put`, `fwif::CCB_CMD_HEADER_EXT_JOB_REF`), where the C
+  left 0, so the firmware's HWPerf packets name the kick
+  (docs/notes/pvr-hwperf.md). The records gain only the `M` lines of
+  those words (529, 20, 36 and 9 of them: 33,906, 21,383, 15,912 and
+  14,467 lines); nothing else moves.
 
 ## Not covered
 
