@@ -994,7 +994,62 @@ pub(super) fn check_status(c: &GlContext, fb: &GlFramebuffer) -> GLenum {
     {
         return GL_FRAMEBUFFER_UNSUPPORTED;
     }
+    /* PowerVR: the colour targets a draw writes must fit the pixel's four
+     * 32-bit output registers (pvr_output_budget_ok) */
+    #[cfg(feature = "gpu-powervr")]
+    if !pvr_output_budget_ok(c, fb) {
+        return GL_FRAMEBUFFER_UNSUPPORTED;
+    }
     GL_FRAMEBUFFER_COMPLETE
+}
+
+/// Do the colour targets a draw into `fb` writes fit the PowerVR pixel's
+/// four 32-bit output registers (docs/notes/mrt4-v3d-pvr.md section 2.3,
+/// docs/notes/pvr-mrt4-budget.md)? The walk is the back end's end-of-tile
+/// emit loop (`pvr::backend::flush`, `out_reg_walk`): slots in draw-buffer
+/// order up to the last one that writes, each written slot taking its
+/// format's dwords (`surf_out_dwords` of the attachment's own surface,
+/// [`renderbuffer_surf_format`]: RGBA8-class, sRGB (drawn as RGBA8 bytes
+/// beside others), R32F/I/UI, RG16I/UI one, RGBA16F/RG16F/RGB16F, RG32*,
+/// RGBA16I/UI two, RGBA32* four; a 64-bit one on an even register), a slot
+/// that writes nothing (a GL_NONE draw buffer before a written one, leading
+/// ones included: `out_shift`) one register.
+///
+/// Only a list that reaches the fourth slot (RC14's fourth draw buffer, so
+/// only where `backend::draw_targets()` is four) is held to it: a
+/// four-target layout `mrt_layout::register_layout` refuses would be drawn
+/// short (the back end stops emitting at the first target past register 3),
+/// so it is GL_FRAMEBUFFER_UNSUPPORTED and a draw or clear into it is
+/// refused as an incomplete framebuffer. A list of up to three keeps the
+/// back end's own answers: the last target from a tile buffer (`eot3_tb`,
+/// three RGBA16F), an integer target beside others refused by name for a
+/// draw while its clears and blits are drawn (tests/es3_pvr_int_mixed_gl.rs,
+/// tests/es3_blit_int_tex.rs). Spilling to tile buffers
+/// (`mrt_layout::layout`'s eot4_tb* programs) would lift the budget layout
+/// by layout.
+#[cfg(feature = "gpu-powervr")]
+fn pvr_output_budget_ok(c: &GlContext, fb: &GlFramebuffer) -> bool {
+    use crate::pvr::mrt_layout;
+
+    let slots = context::max_draw_buffers().min(mrt_layout::MAX_TARGETS);
+    let mut dwords = [1u8; mrt_layout::MAX_TARGETS];
+    let mut used = 0usize;
+    for (i, d) in dwords.iter_mut().enumerate().take(slots) {
+        let writes = fb.num_draw_buf == 0 || (i < fb.num_draw_buf as usize && fb.draw_buf[i] >= 0);
+        let Some(a) = color_attachment(fb, i as u8).filter(|a| writes && a.type_ != GL_NONE) else { continue };
+        let Some(st) = attachment_storage(c, a) else { continue };
+        let surf = renderbuffer_surf_format(st.internalformat);
+        /* an sRGB attachment of several is drawn as RGBA8 bytes the PBE
+         * encodes, one register (`srgb_beside_other_as_rgba8`,
+         * `srgb_targets_as_rgba8`); alone it fits either way */
+        *d = if backend::gles_surf_is_srgb(surf) {
+            1
+        } else {
+            crate::pvr::backend::surf_out_dwords(surf).clamp(1, mrt_layout::OUTPUT_REGS as u32) as u8
+        };
+        used = i + 1;
+    }
+    used < mrt_layout::MAX_TARGETS || mrt_layout::register_layout(&dwords).is_ok()
 }
 
 /// The one sample count of `fb`'s attached images (a texture's is 0, a

@@ -851,8 +851,10 @@ fn the_partial_render_carries_the_frames_pairs() {
 /* ---- 64-bit targets: register pairs --------------------------------------------- */
 
 /// An RGBA16F target takes two output registers starting at an even one,
-/// exactly where `mrt_layout::register_layout` places it; a layout that runs
-/// past register 3 stops emitting at the target `register_layout` refuses.
+/// exactly where `mrt_layout::register_layout` places it. A layout that runs
+/// past register 3 (RGBA16F + RGBA8 x3) was drawn short, stopping at the
+/// target `register_layout` refuses, until item pvr-budget-fb (plan #368)
+/// made it GL_FRAMEBUFFER_UNSUPPORTED: it is not drawn, its clear refused.
 /// Cleared frames (the back end's own programs, no shader variant needed).
 #[test]
 fn sixty_four_bit_targets_take_the_register_layouts_pairs() {
@@ -863,7 +865,6 @@ fn sixty_four_bit_targets_take_the_register_layouts_pairs() {
         &[GL_RGBA8, GL_RGBA8, GL_RGBA16F],
         &[GL_RGBA16F, GL_RGBA16F],
         &[GL_RGBA8, GL_RGBA16F],
-        &[GL_RGBA16F, GL_RGBA8, GL_RGBA8, GL_RGBA8],
     ] {
         fbo(formats);
         let f = clear_all();
@@ -871,18 +872,40 @@ fn sixty_four_bit_targets_take_the_register_layouts_pairs() {
         let d: Vec<u8> = formats.iter().map(|&x| dwords(x)).collect();
         let (pairs, words) = &f.eot[0];
         assert_eq!(*pairs, 4, "{formats:x?}");
-        let (n, want): (usize, Vec<(u32, u32)>) = match register_layout(&d) {
-            Ok(l) => (d.len(), (0..d.len()).map(|i| (u32::from(l.place[i].source_pos()), i as u32)).collect()),
-            Err(yakogl::pvr::mrt_layout::LayoutError::OutputRegs { target, .. }) => {
-                let target = target as usize;
-                let l = register_layout(&d[..target]).expect("the prefix fits");
-                (target, (0..target).map(|i| (u32::from(l.place[i].source_pos()), i as u32)).collect())
-            }
-            Err(e) => panic!("{formats:x?}: {e:?}"),
-        };
+        let l = register_layout(&d).unwrap_or_else(|e| panic!("{formats:x?}: {e:?}"));
+        let (n, want) =
+            (d.len(), (0..d.len()).map(|i| (u32::from(l.place[i].source_pos()), i as u32)).collect::<Vec<_>>());
         assert_eq!(f.kicks[0].frag.num_rt as usize, n, "{formats:x?}: emitted targets");
         assert_eq!(emits(words, n), want, "{formats:x?}: source_pos per register_layout");
     }
+    /* past register 3: an incomplete framebuffer, nothing kicked */
+    let formats = [GL_RGBA16F, GL_RGBA8, GL_RGBA8, GL_RGBA8];
+    let d: Vec<u8> = formats.iter().map(|&x| dwords(x)).collect();
+    assert!(register_layout(&d).is_err(), "{formats:x?}");
+    // SAFETY: plain GL calls; room for the names.
+    unsafe {
+        let mut fb = 0;
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        for (i, f) in formats.iter().enumerate() {
+            let mut rb = 0;
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, *f, SIZE, SIZE);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, ATT[i], GL_RENDERBUFFER, rb);
+        }
+        glDrawBuffers(4, ATT.as_ptr());
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_UNSUPPORTED, "{:?}", logs());
+        assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+    }
+    let f = frame_of(|| {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glClear(GL_COLOR_BUFFER_BIT);
+            assert_eq!(glGetError(), GL_INVALID_FRAMEBUFFER_OPERATION);
+        }
+    });
+    assert!(f.kicks.is_empty(), "{formats:x?}: {:?}", logs());
 }
 
 /* ---- glClearBuffer of draw buffer 3 ------------------------------------------------ */
