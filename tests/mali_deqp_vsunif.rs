@@ -115,7 +115,7 @@ const VARYING_LANE_D: &str = "Valhall: a varying lane left unwritten is not lowe
 /// it here and drops the test's `#[ignore]` in the same commit.
 const DESIGN: &[(&str, Result<bool, &str>)] = &[
     ("local_array_member", Ok(true)),
-    ("local_cond_assign", Ok(false)),
+    ("local_cond_assign", Ok(true)),
     ("local_equal", Err(ARITHMETIC_D)),
     ("local_nested_equal", Err(ARITHMETIC_D)),
     ("local_parameter", Ok(true)),
@@ -317,12 +317,13 @@ fn local_array_member() {
     assert_matches("local_array_member");
 }
 
-/// `shaders.struct.local.conditional_assignment_vertex`. Compiles. The
-/// first differing instruction of `vs.varying` is `[0]`: ours `F16_TO_F32`
-/// of the mediump uniform `uf_one` and an f32 `FCMP_OR`, Mesa's
-/// `FCMP_OR.v2f16.lt.m1` of its fp16 half and `S16_TO_S32` (step V3).
+/// `shaders.struct.local.conditional_assignment_vertex`: `if (uf_one >
+/// 0.0)` of a mediump float uniform is `FCMP_OR.v2f16.lt.m1` of its fp16
+/// half and `S16_TO_S32` (nir.rs `vs_cmp16_ok`), and the struct members'
+/// selects come last member first, as Mesa's phis stand (`vs_join`).
+/// Plan #387 mali-train-3b, the part of step V3 that is no run-time
+/// subscript.
 #[test]
-#[ignore = "compiles but differs: vs.varying instruction 0 (F16_TO_F32 and FCMP_OR.f32 against FCMP_OR.v2f16 of the fp16 uniform; step V3)"]
 fn local_cond_assign() {
     assert_matches("local_cond_assign");
 }

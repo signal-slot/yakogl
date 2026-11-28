@@ -3980,7 +3980,13 @@ fn vs_cmp16_ok(
     for &v in &x[..wd] {
         let ok = match v {
             Val::Lane(n, _) => {
-                narrow && matches!(vs.nodes[n as usize], NirNode { kind: Kind::Input { .. }, bits: 32, .. })
+                (narrow && matches!(vs.nodes[n as usize], NirNode { kind: Kind::Input { .. }, bits: 32, .. }))
+                    /* one lane of an fp16 uniform, read as it is in the
+                     * block (deqp_vsunif_local_cond_assign's `uf_one >
+                     * 0.0`: `FCMP_OR.v2f16.lt.m1 r0, 0x0, u6.w1.h00, 0x0`
+                     * and the mask's `S16_TO_S32`; lower_precision keeps
+                     * the compare of a 16-bit variable at 16 bits) */
+                    || (wd == 1 && vs_uniform16_lane(vs, v).is_some())
             }
             _ => false,
         };
@@ -3989,6 +3995,13 @@ fn vs_cmp16_ok(
         }
     }
     Ok(Some((k, wd)))
+}
+
+/// The 16-bit lane of an fp16 uniform under the `f2f32` its load gave it
+/// (`v`), or None.
+fn vs_uniform16_lane(vs: &Nir<'_>, v: Val) -> Option<Val> {
+    let (Alu::F2f32, [x @ Val::Lane(u, _), ..]) = vs_alu_of(vs, v)? else { return None };
+    matches!(vs.nodes[u as usize], NirNode { kind: Kind::Uniform { .. }, bits: 16, .. }).then_some(x)
 }
 
 /// The first of the constants (all equal, [`vs_cmp16_ok`]).
@@ -4053,6 +4066,10 @@ fn vs_cmp16(
     }
     for i in 0..wd {
         out[i] = match x[i] {
+            v if vs_uniform16_lane(vs, v).is_some() => {
+                let lane16 = vs_uniform16_lane(vs, v).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                Val::Lane(vs_node16w(vs, Alu::Fcmp(op), srcs(lane16), 1)?, 0)
+            }
             Val::Lane(n, l) if matches!(vs.nodes[n as usize].kind, Kind::Input { .. }) => {
                 let lo = l & !1;
                 let Kind::Input { comps, .. } = vs.nodes[n as usize].kind else {
@@ -6254,7 +6271,12 @@ fn vs_join(
     if t.point_size != e.point_size {
         return Err(MaliError::ControlFlow);
     }
-    for l in 0..MAX_LOCALS {
+    /* the last local first: `nir_lower_vars_to_ssa` puts each variable's
+     * phi at the head of the merge block, so the one of the variable it
+     * takes last stands first, and the selects are made in the phis' order
+     * (deqp_vsunif_local_cond_assign's struct `{a; b; c}`: the `CSEL.u32.eq`
+     * of `c`, then `b`'s lanes, then `a`) */
+    for l in (0..MAX_LOCALS).rev() {
         for i in 0..4 {
             let (a, b) = (t.locals[l][i], e.locals[l][i]);
             /* a local one side does not define is dead after the `if`
