@@ -23,7 +23,6 @@
 //!    returns at `glClear`, which every glClearBuffer* form reaches. The
 //!    argument errors of glClearBuffer* still come first. The core matches
 //!    the specification on every form, so no `#[ignore]` defect pin is needed.
-//!    ignore: see the report of the item.
 //!
 //! Not measurable on the host: that the PBE stores render target 3 to memory
 //! (the board's: docs/notes/mrt4-v3d-pvr.md section 5).
