@@ -49,6 +49,13 @@
 //!   that follows while the pixel clock arrives (a frame end needs it).
 //!   `DISPIRQ0_INTERRUPTENABLE0` is a plain word; the status latches
 //!   without it (Linux's handler masks the status with it).
+//! - DISPIRQ0's write protection (`DISPIRQ0_LOCKUNLOCK`, DPU + 0x381000;
+//!   `DISPIRQ0_LOCKSTATUS`, DPU + 0x381004; `PERI_DISPLAY_SEERIS.h`): an unlock
+//!   counter, 1 after reset; the lock key decrements it, the unlock key
+//!   increments it (up to 15), the privilege keys set and clear
+//!   `PrivilegeStatus`, the freeze key makes every later key a no-op. While
+//!   the counter is 0 (`LockStatus` 1) the block's other words take no
+//!   writes (logged, not applied); its status still latches and reads.
 //! - Signature0 window 0's CRC is a function of the buffer scanned out
 //!   (the content the test gives an address), the window and the mode: the
 //!   model's stand-in for the hardware's polynomial (U7).
@@ -76,6 +83,9 @@ pub enum Access {
 mod o {
     pub const IRQ_STATUS0: u32 = 0x102c;
     pub const IRQ_CLEAR0: u32 = 0x1020;
+    pub const DIRQ0_LOCKUNLOCK: u32 = 0x38_1000;
+    pub const DIRQ0_LOCKSTATUS: u32 = 0x38_1004;
+    pub const DIRQ0_END: u32 = 0x38_1038;
     pub const DIRQ0_CLEAR0: u32 = 0x38_1020;
     pub const DIRQ0_STATUS0: u32 = 0x38_102c;
     pub const DM_EXTDST0: u32 = 0x200c;
@@ -124,6 +134,48 @@ pub struct Faults {
     pub frame_end_needed: bool,
 }
 
+/// `DISPIRQ0_LOCKUNLOCK` keys (`PERI_DISPLAY_SEERIS.h`).
+pub mod key {
+    pub const LOCK: u32 = 0x5651_F763;
+    pub const UNLOCK: u32 = 0x691D_B936;
+    pub const PRIVILEGE_ON: u32 = 0xAEE9_5CDC;
+    pub const PRIVILEGE_OFF: u32 = 0xB5E2_466E;
+    pub const FREEZE: u32 = 0xFBE8_B1E6;
+}
+
+/// A lock unit's state (`DISPIRQ0` here).
+#[derive(Clone, Copy, Debug)]
+struct LockUnit {
+    counter: u32,
+    privilege: bool,
+    frozen: bool,
+}
+
+impl Default for LockUnit {
+    fn default() -> LockUnit {
+        LockUnit { counter: 1, privilege: false, frozen: false }
+    }
+}
+
+impl LockUnit {
+    fn key(&mut self, k: u32) {
+        if self.frozen {
+            return;
+        }
+        match k {
+            key::LOCK => self.counter = self.counter.saturating_sub(1),
+            key::UNLOCK => self.counter = (self.counter + 1).min(15),
+            key::PRIVILEGE_ON => self.privilege = true,
+            key::PRIVILEGE_OFF => self.privilege = false,
+            key::FREEZE => self.frozen = true,
+            _ => {}
+        }
+    }
+    fn status(&self) -> u32 {
+        u32::from(self.counter == 0) | u32::from(self.privilege) << 4 | u32::from(self.frozen) << 8
+    }
+}
+
 #[derive(Default)]
 struct State {
     regs: BTreeMap<(&'static str, u32), u32>,
@@ -141,6 +193,7 @@ struct State {
     /// FGENABLE was cleared while running; reads of DISPIRQ0's status since
     /// (`None`: no sequence pending).
     seq_reads: Option<u32>,
+    dirq0_lock: LockUnit,
 }
 
 pub struct Display {
@@ -336,6 +389,9 @@ impl Display {
                 self.tick(&mut st);
                 u32::from(st.sig_valid) << 1 | u32::from(st.sig_valid)
             }
+            ("dpu", o::DIRQ0_LOCKSTATUS) => st.dirq0_lock.status(),
+            // write-only
+            ("dpu", o::DIRQ0_LOCKUNLOCK) => 0,
             ("dpu", o::SIG_CRC_R0) => self.crc(&st, 0),
             ("dpu", o::SIG_CRC_G0) => self.crc(&st, 1),
             ("dpu", o::SIG_CRC_B0) => self.crc(&st, 2),
@@ -355,6 +411,14 @@ impl Display {
             return;
         }
         st.log.push(Access::W(b, off, val));
+        if b == "dpu" && off == o::DIRQ0_LOCKUNLOCK {
+            st.dirq0_lock.key(val);
+            return;
+        }
+        if b == "dpu" && (o::DIRQ0_LOCKUNLOCK..o::DIRQ0_END).contains(&off) && st.dirq0_lock.counter == 0 {
+            // locked: the write does not land
+            return;
+        }
         match (b, off) {
             ("dpu", o::IRQ_CLEAR0) => {
                 let s = Self::reg(&st, b, o::IRQ_STATUS0) & !val;

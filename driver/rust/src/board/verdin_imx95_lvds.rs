@@ -44,7 +44,7 @@
 //! `fsl_rgpio.c` `RGPIO_PinInit` for an output: the level first, then the
 //! direction.
 
-use crate::env::Env;
+use crate::env::{Env, Level};
 use crate::firmware::scmi::{self, Transport};
 use crate::ip::tpm_pwm::{self, Pwm};
 use crate::mmio::Mmio;
@@ -119,6 +119,60 @@ pub mod disp_irq {
     pub const INTERRUPTSTATUS0: u32 = 0x2c;
 }
 
+/// The interrupt block's write protection: `DISPIRQ0_LOCKUNLOCK` (+0x0,
+/// write-only, takes keys) and `DISPIRQ0_LOCKSTATUS` (+0x4, read-only), at
+/// DPU+0x381000 and DPU+0x381004 (hal_nxp's BSD-3 `PERI_DISPLAY_SEERIS.h` for
+/// the i.MX 95, the `DISPIRQ0_LOCKUNLOCK` / `_LOCKSTATUS` fields). The
+/// block carries an unlock counter: the [`LOCK_KEY`](dirq_lock::LOCK_KEY)
+/// decrements it, the [`UNLOCK_KEY`](dirq_lock::UNLOCK_KEY) increments it
+/// (up to 15); it is 1 after reset, and while it is 0 the block's other
+/// words take no writes (`LockStatus` reads 1). `PrivilegeStatus` (bit 4)
+/// lets only privileged accesses in; `FreezeStatus` (bit 8) means no key
+/// has an effect until reset.
+///
+/// NXP's Linux dpu95 driver (linux-imx lf-6.6.y 5a0a5e71d2bd,
+/// `drivers/gpu/drm/imx/dpu95/`) never reads or writes either word for
+/// DISPIRQ0: `dpu95-core.c` `dpu95_irq_hw_init` writes `INTERRUPTENABLE`
+/// and `INTERRUPTCLEAR` straight after reset, the generic irq chip on
+/// `disp_irq0_reg` only those and `INTERRUPTSTATUS`; the only keys in the
+/// driver are the blit engine's `CMDSEQ_LOCKUNLOCK` (`dpu95-blit-registers.h`,
+/// the same two key values). So [`display_down`] does not unlock either: it
+/// reads `LOCKSTATUS` before it writes the block and reports a lock (the
+/// clear and the enable did not land), and reads `INTERRUPTENABLE0` back.
+pub mod dirq_lock {
+    pub const LOCKUNLOCK: u32 = 0x00;
+    pub const LOCKSTATUS: u32 = 0x04;
+    /// `LOCKSTATUS` fields.
+    pub const LOCK_STATUS: u32 = 1 << 0;
+    pub const PRIVILEGE_STATUS: u32 = 1 << 4;
+    pub const FREEZE_STATUS: u32 = 1 << 8;
+    /// `LOCKUNLOCK` keys (`PERI_DISPLAY_SEERIS.h`; Linux's
+    /// `CMDSEQ_LOCKUNLOCK_LOCKUNLOCK__LOCK_KEY` / `__UNLOCK_KEY`). Nothing of
+    /// ours writes them; the host model takes them.
+    pub const LOCK_KEY: u32 = 0x5651_F763;
+    pub const UNLOCK_KEY: u32 = 0x691D_B936;
+    pub const PRIVILEGE_ON_KEY: u32 = 0xAEE9_5CDC;
+    pub const PRIVILEGE_OFF_KEY: u32 = 0xB5E2_466E;
+    pub const FREEZE_KEY: u32 = 0xFBE8_B1E6;
+}
+
+/// `DISPIRQ0_LOCKSTATUS` as read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Dirq0Lock(pub u32);
+
+impl Dirq0Lock {
+    /// The unlock counter is 0: writes to the block are ignored.
+    pub const fn locked(&self) -> bool {
+        self.0 & dirq_lock::LOCK_STATUS != 0
+    }
+    pub const fn privileged(&self) -> bool {
+        self.0 & dirq_lock::PRIVILEGE_STATUS != 0
+    }
+    pub const fn frozen(&self) -> bool {
+        self.0 & dirq_lock::FREEZE_STATUS != 0
+    }
+}
+
 /// The backlight as Linux runs it (module text): TPM5 channel 0, 150 Hz,
 /// low-true, 119 of 255.
 pub const BACKLIGHT: Pwm = Pwm { channel: 0, period_ns: 6_666_667, level: 119, max: 255, low_true: true };
@@ -165,10 +219,12 @@ pub enum Error {
     /// The down: FrameGen0's [`SEQ_COMPLETE0`] did not set within
     /// `waited_us` after `FGENABLE` was cleared; `irq` is the last
     /// [`DISP_IRQ0`] `INTERRUPTSTATUS0`, `comctrl` the common-control
-    /// block's `IRQ_INTERRUPTSTATUS0` then (for the record), `fg`
-    /// FrameGen0's state. The LDB's clocks and the display's power were left
-    /// on.
-    SeqTimeout { waited_us: u32, irq: u32, comctrl: u32, fg: dpu::FgStatus },
+    /// block's `IRQ_INTERRUPTSTATUS0` then (for the record), `enable` the
+    /// `INTERRUPTENABLE0` read back after the enable, `lock` the block's
+    /// `LOCKSTATUS` read before it was written, `fg` FrameGen0's state with
+    /// `fg.stop` the wait (polls, `FGTIMESTAMP` before `FGENABLE` = 0 and at
+    /// the timeout). The LDB's clocks and the display's power were left on.
+    SeqTimeout { waited_us: u32, irq: u32, comctrl: u32, enable: u32, lock: Dirq0Lock, fg: dpu::FgStatus },
     /// TPM5's clock over SCMI: the message (CLOCK_CONFIG_SET 0x07 or
     /// CLOCK_RATE_GET 0x06) and what came back; the picture is up, dark.
     BacklightClock { msg: u8, fault: Fault },
@@ -278,6 +334,17 @@ pub fn display_up<T: Transport>(t: &mut T, m: &impl Mmio, env: &impl Env, cfg: &
 /// stay on and [`Error::SeqTimeout`] comes back. When it completes but
 /// FrameGen0 still reads running, the LDB is still brought down and the
 /// first error is returned; the power stays on then.
+///
+/// Before step 1 the block's `LOCKSTATUS` is read ([`dirq_lock`]): a locked
+/// block takes neither the clear nor the enable, and Linux never unlocks it,
+/// so neither does this; the lock is reported, and `INTERRUPTENABLE0` is
+/// read back after the enable. The status latches without the enable
+/// (Linux's handler masks it with the enable in software), so a lock on its
+/// own leaves a stale bit set rather than hiding a new one; a stale bit seen
+/// under a lock is reported, since the wait cannot tell it from this stop's.
+///
+/// Every console line here is one value group, under [`DOWN_LINE_MAX`]
+/// characters, so the console's line cut loses none of it.
 pub fn display_down<T: Transport>(
     t: &mut T,
     m: &impl Mmio,
@@ -288,28 +355,40 @@ pub fn display_down<T: Transport>(
     backlight_off(t, m, cfg)?;
     let mut delay = |us: u32| env.busy_wait_us(us);
     let base = cfg.display.dpu;
-    let irq0 = base + DISP_IRQ0 as usize;
-    let enable = irq0 + disp_irq::INTERRUPTENABLE0 as usize;
-    let clear = irq0 + disp_irq::INTERRUPTCLEAR0 as usize;
-    let status = irq0 + disp_irq::INTERRUPTSTATUS0 as usize;
+    let irq0 = |off: u32| base + (DISP_IRQ0 + off) as usize;
+    let enable = irq0(disp_irq::INTERRUPTENABLE0);
+    let clear = irq0(disp_irq::INTERRUPTCLEAR0);
+    let status = irq0(disp_irq::INTERRUPTSTATUS0);
+    // 0: the block's protection, before anything is written to it
+    let lock = Dirq0Lock(m.read32(irq0(dirq_lock::LOCKSTATUS)));
+    log_lock(env, lock);
+    if lock.locked() && m.read32(status) & SEQ_COMPLETE0 != 0 {
+        ylog!(env, Err, "verdin-imx95 X12 down: stale SeqComplete0 under the lock: the wait cannot tell");
+    }
     // 1: a sequence complete left from before is not this stop's; the event
     // enabled as Linux's enable_irq leaves it (nothing else of ours is
-    // enabled in this block, so the word is written, not read back)
+    // enabled in this block, so the word is written, not read-modified)
     m.write32(clear, SEQ_COMPLETE0);
     m.write32(enable, SEQ_COMPLETE0);
+    let enabled = m.read32(enable);
+    ylog!(env, Inf, "verdin-imx95 X12 down: DISPIRQ0 ENABLE0 {:#010x} (wrote {:#010x})", enabled, SEQ_COMPLETE0);
+    let ts_start = dpu::fg_timestamp(m, base);
     // 2: FrameGen0 off, no shadow token
     m.write32(base + r::DISENG_FRAMEGEN0_FGENABLE as usize, 0);
+    ylog!(env, Inf, "verdin-imx95 X12 down: FGENABLE 0 (no FGSLR token), FGTIMESTAMP 0x{:08x}", ts_start);
     ylog!(
         env,
         Inf,
-        "verdin-imx95 LVDS down: FGENABLE 0 (no FGSLR token), waiting up to {} us for SeqComplete0 in DISPIRQ0 (DPU+{:#x} bit 20)",
+        "verdin-imx95 X12 down: waiting <= {} us for SeqComplete0 (DPU+{:#x} bit 20)",
         SEQ_COMPLETE_BUDGET_US,
         DISP_IRQ0 + disp_irq::INTERRUPTSTATUS0
     );
     // 3: FrameGen0's sequence complete, polled as dpu's waits poll
     let mut waited = 0;
+    let mut polls = 0;
     loop {
         let irq = m.read32(status);
+        polls += 1;
         if irq & SEQ_COMPLETE0 != 0 {
             m.write32(clear, SEQ_COMPLETE0);
             break;
@@ -318,19 +397,11 @@ pub fn display_down<T: Transport>(
             // 4 also on the way out
             m.write32(enable, 0);
             let comctrl = m.read32(base + r::IRQ_INTERRUPTSTATUS0 as usize);
-            let fg = dpu::fg_status(m, base);
-            ylog!(
-                env,
-                Err,
-                "verdin-imx95 LVDS down: no SeqComplete0 in {} us (DISPIRQ0 INTERRUPTSTATUS0 {:#010x}, COMCTRL IRQ_INTERRUPTSTATUS0 {:#010x}, FGENABLE {} FGENSTS {:#x} FGCHSTAT {:#x}); the LDB and the power stay on",
-                waited,
-                irq,
-                comctrl,
-                fg.fgenable,
-                fg.fgensts,
-                fg.fgchstat
-            );
-            return Err(Error::SeqTimeout { waited_us: waited, irq, comctrl, fg });
+            let mut fg = dpu::fg_status(m, base);
+            fg.stop = Some(dpu::StopWait { waited_us: waited, polls, ts_start, ts_end: dpu::fg_timestamp(m, base) });
+            let e = Error::SeqTimeout { waited_us: waited, irq, comctrl, enable: enabled, lock, fg };
+            log_seq_timeout(env, &e);
+            return Err(e);
         }
         delay(dpu::POLL_STEP_US);
         waited += dpu::POLL_STEP_US;
@@ -341,33 +412,115 @@ pub fn display_down<T: Transport>(
     ylog!(
         env,
         Inf,
-        "verdin-imx95 LVDS down: SeqComplete0 after {} us, FGENSTS {}, frame {}",
+        "verdin-imx95 X12 down: SeqComplete0 after {} us ({} polls), FGENSTS {}",
         waited,
-        if stopped.is_ok() { "stopped" } else { "running" },
-        match &stopped {
-            Ok(w) => w.frame_end(),
-            Err(display::Error::NotStopped(fg)) => fg.stop.map_or(0, |w| w.frame_end()),
-            Err(_) => 0,
-        }
+        polls,
+        if stopped.is_ok() { "stopped" } else { "running" }
     );
     // 5: the pixel clock goes
     ldb::down(m, cfg.ldb);
     // the pixel link off, the power; no second wait when the first failed
     match stopped {
         Ok(w) => {
-            ylog!(
-                env,
-                Inf,
-                "verdin-imx95 X12: FrameGen0 stopped after {} us ({} polls), frame counter {} -> {} (FGTIMESTAMP 0x{:08x} -> 0x{:08x})",
-                w.waited_us,
-                w.polls,
-                w.frame_start(),
-                w.frame_end(),
-                w.ts_start,
-                w.ts_end
-            );
+            ylog!(env, Inf, "verdin-imx95 X12: FrameGen0 stopped after {} us ({} polls)", w.waited_us, w.polls);
+            log_frames(env, false, &w);
             display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display)
         }
-        Err(e) => Err(Error::Display(e)),
+        Err(e) => {
+            if let display::Error::NotStopped(fg) = &e {
+                if let Some(w) = &fg.stop {
+                    ylog!(
+                        env,
+                        Err,
+                        "verdin-imx95 X12 down: FrameGen0 still running after {} us ({} polls)",
+                        w.waited_us,
+                        w.polls
+                    );
+                    log_fg(env, fg);
+                    log_frames(env, true, w);
+                }
+            }
+            Err(Error::Display(e))
+        }
     }
+}
+
+/// The longest console line [`display_down`] prints, in characters: the
+/// console's own prefix and its cut (shorter than `env::LINE_MAX`) leave
+/// room for no more.
+pub const DOWN_LINE_MAX: usize = 99;
+
+/// `LOCKSTATUS` on the console: one line, and when locked two more naming
+/// what that means here.
+fn log_lock(env: &impl Env, lock: Dirq0Lock) {
+    let yn = |b: bool| if b { "on" } else { "off" };
+    let lvl = if lock.locked() { Level::Err } else { Level::Inf };
+    env.log(
+        lvl,
+        format_args!(
+            "verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS {:#x}: {}, privilege {}, freeze {}",
+            lock.0,
+            if lock.locked() { "locked" } else { "unlocked" },
+            yn(lock.privileged()),
+            yn(lock.frozen())
+        ),
+    );
+    if lock.locked() {
+        ylog!(env, Err, "verdin-imx95 X12 down: DISPIRQ0 locked: its CLEAR0 and ENABLE0 writes are ignored");
+        ylog!(env, Err, "verdin-imx95 X12 down: Linux's dpu95 never unlocks DISPIRQ0; not unlocked here");
+    }
+}
+
+/// FrameGen0's three status words on one line.
+fn log_fg(env: &impl Env, fg: &dpu::FgStatus) {
+    ylog!(
+        env,
+        Err,
+        "verdin-imx95 X12 down: FGENABLE {} FGENSTS {:#x} FGCHSTAT {:#x}",
+        fg.fgenable,
+        fg.fgensts,
+        fg.fgchstat
+    );
+}
+
+/// A wait's frame counter (with the frozen/moving verdict) and its two
+/// `FGTIMESTAMP` reads, one line each.
+/// On a failure (`failed`) the counter line says frozen or moving.
+fn log_frames(env: &impl Env, failed: bool, w: &dpu::StopWait) {
+    let lvl = if failed { Level::Err } else { Level::Inf };
+    env.log(
+        lvl,
+        format_args!(
+            "verdin-imx95 X12: frame counter {} -> {} ({} frames){}",
+            w.frame_start(),
+            w.frame_end(),
+            w.frames(),
+            match (failed, w.frames()) {
+                (false, _) => "",
+                (true, 0) => ": frozen, the pixel clock is dead",
+                (true, _) => ": moving, FrameGen0 still runs",
+            }
+        ),
+    );
+    env.log(lvl, format_args!("verdin-imx95 X12: FGTIMESTAMP 0x{:08x} -> 0x{:08x}", w.ts_start, w.ts_end));
+}
+
+/// [`Error::SeqTimeout`] on the console, one value group a line.
+fn log_seq_timeout(env: &impl Env, e: &Error) {
+    let Error::SeqTimeout { waited_us, irq, comctrl, enable, lock, fg } = e else {
+        return;
+    };
+    let polls = fg.stop.map_or(0, |w| w.polls);
+    ylog!(env, Err, "verdin-imx95 X12 down: no SeqComplete0 after {} us ({} polls)", waited_us, polls);
+    log_fg(env, fg);
+    ylog!(env, Err, "verdin-imx95 X12 down: DISPIRQ0 STATUS0 {:#010x} ENABLE0 {:#010x}", irq, enable);
+    ylog!(env, Err, "verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS {:#x}", lock.0);
+    ylog!(env, Err, "verdin-imx95 X12 down: COMCTRL IRQ_INTERRUPTSTATUS0 {:#010x}", comctrl);
+    if let Some(w) = &fg.stop {
+        log_frames(env, true, w);
+    }
+    if lock.locked() {
+        ylog!(env, Err, "verdin-imx95 X12 down: DISPIRQ0 was locked: the enable did not land");
+    }
+    ylog!(env, Err, "verdin-imx95 X12 down: the LDB and the power stay on");
 }
