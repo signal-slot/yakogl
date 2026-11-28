@@ -246,4 +246,17 @@ pyr > "$tmp/full2.tsv" 2> "$tmp/fe.txt" || fail "real --gles2 run: $(cat "$tmp/f
 [ "$(grep -v '^#' "$tmp/full2.tsv" | awk -F'\t' '$1 ~ /^[0-9]+$/' | wc -l)" = 29 ] || fail "--gles2 did not list 29 rows"
 pyr --rows 0..28 | grep -v '^# rows' | cmp -s - "$tmp/full2.tsv" || fail "--gles2 --rows 0..28 differs from --gles2"
 pyr --sessions 1 | grep -v '^#' | awk -F'\t' 'NR == 2 {exit !($2 == 0 && $3 == 28 && $4 == 29)}' || fail "--gles2 one session over 29 rows"
+# --x2: the eleven remaining X2 slices (and rows14-16) over the real table, the board name x2 in every command line
+python3 "$py" --x2 > "$tmp/x2.tsv" 2> "$tmp/x2e.txt" || fail "--x2 run: $(cat "$tmp/x2e.txt")"
+for d in rows52-57 rows58-61 rows62-67 rows68-75 rows76-83 rows84-94 rows95-107 rows108-117 rows118-122 rows123-128 rows129-133 rows14-16; do
+  grep -q "^2026-11-imx8mp-gles3-x2-9bc82915-$d	" "$tmp/x2.tsv" || fail "--x2 lacks slice $d"
+done
+[ "$(grep -vc '^#' "$tmp/x2.tsv")" = 13 ] || fail "--x2: 12 slices and a header expected"
+grep -v '^#' "$tmp/x2.tsv" | awk -F'\t' 'NR > 1 && $9 !~ /tools\/board\.sh x2 tree / {bad = 1} END {exit bad}' || fail "--x2 command line lacks 'board.sh x2'"
+grep -v '^#' "$tmp/x2.tsv" | awk -F'\t' 'NR > 1 {c += $4; if ($7 % 300 || $7 <= $5) bad = 1} END {exit bad || c != 14351}' || fail "--x2 cases do not add to 14351 or a budget is off"
+grep -q 'rows58-61' "$tmp/x2.tsv" && grep -q 'RISK' "$tmp/x2.tsv" || fail "--x2 lacks the risk advice"
+python3 "$py" --x2 --x2-commit 05769bf2 --x2-month 2026-12 | grep -q '^2026-12-imx8mp-gles3-x2-05769bf2-rows52-57	' || fail "--x2-commit/--x2-month"
+python3 "$py" --x2 --rows 0..3 > /dev/null 2>&1 && fail "--x2 --rows accepted"
+# the existing default output is unchanged by the option
+python3 "$py" | grep -q 'Armadillo-X2 sessions' && fail "default output names the X2 listing"
 echo "imx8mp-gles3-sessions-selftest: ok"
