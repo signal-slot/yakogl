@@ -227,6 +227,25 @@ else
     bad "deps-selftest.sh: rc $drc, $dok of $DEPS_SELFTEST_CHECKS ok; $(printf '%s\n' "$dout" | grep 'FAIL' | head -3 | paste -sd';' -)"
 fi
 
+# 20c. tools/cts/t6-deqp-run-selftest.sh: t6-deqp-images.sh --run, the
+# NanoPC-T6 whole-tree runner, on a fake console (canned board lines through
+# t6-console-pty.py's pty) and a fake board.sh: T6_HAND or --unattended
+# required, the console from T6_CONSOLE_CMD or the lease's variables (never
+# printed), an unattended hang stopping the tree with INCOMPLETE.txt (row,
+# reason, rows left, resume command), the resume, a busy console named. Its
+# count is pinned like images-selftest's.
+T6_RUN_SELFTEST_CHECKS=20
+echo
+echo "== 20c. t6-deqp-run-selftest.sh: the T6 tree runner on a fake console"
+t6r_out=$(bash "$HERE/t6-deqp-run-selftest.sh" 2>&1)
+t6r_rc=$?
+t6r_ok=$(printf '%s\n' "$t6r_out" | grep -c '^ok ')
+if [ "$t6r_rc" -eq 0 ] && [ "$t6r_ok" -eq "$T6_RUN_SELFTEST_CHECKS" ]; then
+    ok "t6-deqp-run-selftest.sh: $t6r_ok checks passed"
+else
+    bad "t6-deqp-run-selftest.sh: rc $t6r_rc, $t6r_ok of $T6_RUN_SELFTEST_CHECKS ok; $(printf '%s\n' "$t6r_out" | grep '^FAIL' | head -3 | paste -sd';' -)"
+fi
+
 # ---- 21: cts-summary.py --by-message tallies failures by their detail -------
 #
 # host-deqp-run.sh writes this tally into every run's summary.txt, and
