@@ -118,6 +118,13 @@ measurement, not in the default list: run it by number
 (`CONFIG_GL_TEST_CASES="220"`, or `gl_test_set_list`). Board figures go into
 `docs/notes/v3d-terrain-gpu.md`, not here.
 
+With `CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF=y` (default n, docs/notes/pvr-hwperf.md)
+case 216 calls `pvr_fw_hwperf_drain()` outside its timed span: once before the
+first measured frame and once after the last. Read the lines between
+`pvr-hwperf-case216: begin` and `pvr-hwperf-case216: end`: `pvr-hwperf: from=...
+widx=... fw_drops=... err=...` and `pvr-hwperf lane=ta|3d tasks=... gpu_ns=...
+k2s_ns=...`. The first call only moves the drain's start mark.
+
 ## Case 221 (`instmix`): a mixed-divisor instanced draw with `gl_InstanceID`
 
 dEQP's `instanced.{draw_arrays,draw_elements}_instanced.mixed` shape in one
