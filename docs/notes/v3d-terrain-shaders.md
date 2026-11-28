@@ -25,6 +25,24 @@ marked "measured"); the other Mesa 4.2 counts stay estimates.
 `pi4-slow-terrain.md`'s ranked rows 2 and 3 carry their blocked status
 (section 5).
 
+Updated 2026-11-28 (plan #419, item `vs-4threads`): the terrain VS now
+compiles at **4 threads in 154 words**, Mesa 26.2.1's count and threads (it
+was 156 at 2). The cause was register pressure: 30 values live across the
+look-up's thread switch, and the allocator gave out rf3..rf31 (29 registers)
+at 4 threads, holding back rf0..rf2 for a payload that only a fragment
+shader has. Mesa gives every register-file register to a vertex or
+coordinate shader. `alloc.rs` `allocate_from` takes the first register
+(`RF_FIRST_NO_PAYLOAD` = 0, refused for a fragment shader). `chain.rs`
+`build` retries a VS or CS that fits 2 threads but not 4 from rf3 at 4
+threads from rf0. It measures the plain packing, `PAIRING` and `PAIRING_4`
+(acc_span 12) and keeps the shortest one, but only when it is no longer than
+the 2-thread code (keep the shortest verified candidate). By span at 4
+threads from rf0: 4: 166, 8: 159, 12: 154, 16: 158, 20: 158, 24: 160,
+32: 158, plain: 159 words. No other glmark2 program moved and none grew. The
+`tests/es3_tf_v3d.rs` transform-feedback VSs went from 2 to 4 threads with
+the same word counts. The terrain noise sim hashes did not move. Board gain:
+not measured yet (item 2b below).
+
 ## Answer in short
 
 - **Our compiler's counts at `3e950f0f`** (the texts below this bullet give
@@ -398,7 +416,9 @@ entries before the terrain draw; "the terrain entry" is the one before the
    2b. The terrain VS at 4 threads instead of 2 (register pressure) helps
    only the latency of its 2 look-ups. The gain is not measured and
    probably small, because the draw is ALU-bound. Mesa's 4.2 code fits the
-   same text at 4 threads (154 words), so 4 threads is reachable.
+   same text at 4 threads (154 words), so 4 threads is reachable. Done
+   2026-11-28 (item `vs-4threads`): ours is 154 words at 4 threads too
+   (VS and CS get rf0..rf2, as in Mesa); the board gain is not measured yet.
 3. **Blurs: nothing found to fix.** They are 78/80 words (Mesa about the
    same), 4 threads, 16-bit returns, the same TMU batching as Mesa, UIF
    level 0 as in Mesa, no raster sampling and no 32-bit return. Their model

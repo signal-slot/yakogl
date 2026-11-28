@@ -24,8 +24,13 @@
 //!   `ldvary` writes its C term there (qpu_validate.c:193-200), and Mesa keeps
 //!   r5 for `ldunif` alone (vir_register_allocate.c:1290-1311).
 //! * rf3 up to the thread count's end for the rest. rf0..rf2 hold the fragment shader's payload (W,
-//!   centroid W, Z; nir_to_vir.c:4853-4858) and are never handed out, in any
-//!   stage, which costs three registers nobody needs yet.
+//!   centroid W, Z; nir_to_vir.c:4853-4858) and are not handed out by
+//!   [`allocate_by`], in any stage. A vertex or coordinate shader has no
+//!   payload, and Mesa allocates every register-file register to it;
+//!   [`allocate_from`] with [`RF_FIRST_NO_PAYLOAD`] does so too, which
+//!   `chain.rs` asks for only when a vertex or coordinate shader does not
+//!   fit 4 threads from rf3 (glmark2 terrain's vertex shader: 30 values live
+//!   across its look-up's thread switch, 29 registers from rf3 to rf31).
 //!
 //! Mesa's class rules, each followed:
 //!
@@ -62,12 +67,16 @@ use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 pub enum Reg {
     /// Accumulator r0..r4.
     Acc(u8),
-    /// Register-file register rf3..rf31.
+    /// Register-file register rf3..rf63 (rf0..rf63 in a stage with no
+    /// payload, [`allocate_from`]).
     Rf(u8),
 }
 
 /// The first register-file register handed out.
 pub const RF_FIRST: u8 = 3;
+/// The first register-file register handed out to a stage with no payload
+/// (a vertex or coordinate shader, [`allocate_from`]).
+pub const RF_FIRST_NO_PAYLOAD: u8 = 0;
 /// One past the last register-file register a thread has at 4 threads.
 pub const RF_END_4_THREADS: u8 = 32;
 /// One past the last register-file register a thread has at 1 or 2 threads.
@@ -115,7 +124,8 @@ impl From<ArenaError> for AllocError {
 pub struct Allocation<'a> {
     /// Indexed by virtual register.
     pub reg: &'a [Reg],
-    /// One past the highest register-file register used (RF_FIRST when none).
+    /// One past the highest register-file register used (the first one
+    /// handed out when none).
     pub rf_end: u8,
 }
 
@@ -145,14 +155,31 @@ pub fn allocate<'a>(sel: &Selected<'_>, threads: u32, a: &Arena<'a>) -> Result<A
     allocate_by(sel, threads, Rule::PLAIN, a)
 }
 
-/// Allocate `sel`'s virtual registers.
+/// Allocate `sel`'s virtual registers from rf3 up ([`RF_FIRST`]).
 pub fn allocate_by<'a>(
     sel: &Selected<'_>,
     threads: u32,
     rule: Rule,
     a: &Arena<'a>,
 ) -> Result<Allocation<'a>, AllocError> {
+    allocate_from(sel, threads, rule, RF_FIRST, a)
+}
+
+/// Allocate `sel`'s virtual registers, handing out the register file from
+/// `rf_first` up: [`RF_FIRST`] in any stage, [`RF_FIRST_NO_PAYLOAD`] in a
+/// vertex or coordinate shader only (a fragment shader's selection reads
+/// its payload there: [`AllocError::Threads`]).
+pub fn allocate_from<'a>(
+    sel: &Selected<'_>,
+    threads: u32,
+    rule: Rule,
+    rf_first: u8,
+    a: &Arena<'a>,
+) -> Result<Allocation<'a>, AllocError> {
     let end = rf_end(threads).ok_or(AllocError::Threads)?;
+    if rf_first >= end || (rf_first < RF_FIRST && sel.fragment) {
+        return Err(AllocError::Threads);
+    }
     let n = sel.vregs as usize;
     let def = a.alloc_filled(n, NONE)?;
     let last = a.alloc_filled(n, NONE)?;
@@ -283,7 +310,7 @@ pub fn allocate_by<'a>(
     let mut rf_owner = [NONE; RF_END_2_THREADS as usize];
     let mut acc_lent = [NONE; ACCS as usize];
     let mut rf_lent = [NONE; RF_END_2_THREADS as usize];
-    let mut rf_end = RF_FIRST;
+    let mut rf_end = rf_first;
     /* A load's accumulator (ldvary, a uniform load) is taken round-robin,
      * from the one after the last taken (Mesa's v3d_ra_select_accum takes
      * every accumulator so, "to give post-RA instruction selection more
@@ -300,7 +327,7 @@ pub fn allocate_by<'a>(
      * register file takes it round-robin too (below); every other value
      * there stays lowest-first. */
     let mut next_acc = 0u8;
-    let mut next_rf = RF_FIRST;
+    let mut next_rf = rf_first;
     /* r5, for a uniform load (Mesa's v3d_ra_select_accum takes it first for
      * one, vir_register_allocate.c: "nobody else can load to that reg, and
      * it keeps the QPU cond field free from being occupied by ldunifrf"):
@@ -488,8 +515,8 @@ pub fn allocate_by<'a>(
          * this fails exactly when lowest-first fails and the thread count
          * cannot change (chain.rs pins the two-thread stages). */
         let rf_pick = |lend: bool| {
-            let first = if is_load { next_rf.max(RF_FIRST) - RF_FIRST } else { 0 };
-            let order = (0..end - RF_FIRST).map(|k| RF_FIRST + (first + k) % (end - RF_FIRST));
+            let first = if is_load { next_rf.max(rf_first) - rf_first } else { 0 };
+            let order = (0..end - rf_first).map(|k| rf_first + (first + k) % (end - rf_first));
             order.filter(|&r| rf_ok(r, lend)).min_by_key(|&r| if lend { 0 } else { stop(rf_touch[r as usize]) })
         };
         /* A plain move that is its source's last read takes the source's
@@ -519,7 +546,7 @@ pub fn allocate_by<'a>(
          * move-source rule stays first, and a value that must be in the
          * register file is not affected. */
         let favor_acc = last[v] - i as u32 <= rule.acc_span
-            || (RF_FIRST..end).filter(|&r| free(rf_busy[r as usize])).count() < ACC_FAVOR_RF;
+            || (rf_first..end).filter(|&r| free(rf_busy[r as usize])).count() < ACC_FAVOR_RF;
         let pick = match (same, acc_pick(false), rf_pick(false)) {
             (Some(r), _, _) => (r, false),
             (None, _, Some(r)) if !favor_acc && !phys[v] => (Reg::Rf(r), false),
