@@ -4,8 +4,8 @@
 
 ## Current state (2026-11-27)
 
-Terrain is no longer a slow scene on the Pi 4: it runs at **31.906 ms a
-frame (32 fps)** at `3e950f0f`, against 34.758 ms (29 fps) at
+Terrain is no longer a slow scene on the Pi 4: it runs at **31.899 ms a
+frame (32 fps)** at `3e950f0f`, against 34.745 ms (29 fps) at
 `ce73e98e` and 161.79 ms at `c4af4917`. Everything below
 this section is the history of how that was found and is left as written.
 
@@ -27,12 +27,12 @@ this section is the history of how that was found and is left as written.
   agree within the rounding of whole fps.
 - **The scheduler change (`3e950f0f`, plan #419).** `3e950f0f` (v3d alloc:
   accumulators kept for short values, the list order allocated again) took
-  terrain from 34.758 to **31.906 ms** a frame (`ce73e98e` -> `3e950f0f`,
+  terrain from 34.745 to **31.899 ms** a frame (`ce73e98e` -> `3e950f0f`,
   measured on the Pi 4, "Board runs" below). The cause of the empty add halves
   was the register file's two read ports, not the packer: `sched.rs` is
   unchanged, `alloc.rs` keeps r0..r4 for short values. Noise FS words
   1495 -> 1090 (Mesa 1161), terrain VS 172 -> 156 (Mesa 154), FS 160 -> 146
-  (Mesa 153), CS 97 -> 87 (Mesa 92); `wait.ns` 28.34 -> 25.57 ms.
+  (Mesa 153), CS 97 -> 87 (Mesa 92); `wait.ns` 28.331 -> 25.584 ms.
 - **What is left** is "What is left, ranked (current)" below: 25.6 of the
   31.9 ms is the CPU waiting for the GPU jobs (render plus TFU about 27 ms).
   The CPU work outside the waits is about 6 ms. Job 4 (the terrain draw) is
@@ -376,7 +376,7 @@ Row 1 (shaders) was the largest and is measured (-2.85 ms at `3e950f0f`).
 
 | # | candidate | gain | note | confirming record value |
 |---|---|---|---|---|
-| 1 | **Pair the add and mul halves better in the V3D scheduler** (plan #419; the change landed in the allocator, `src/shaderc/online/v3d/alloc.rs`, `3e950f0f`; `sched.rs` rules unchanged) for the noise pass of job 2 and the terrain draw of job 4. **Done in part, measured.** Host words, ours before -> after (Mesa 26.2.1 for V3D 4.2 beside, measured by `v3d_shc`): noise FS **1495 -> 1090** at 2 threads (Mesa **1161**; floor about 872 to 900), terrain VS **172 -> 156** at 2 threads (Mesa **154** at 4), terrain FS **160 -> 146** (Mesa **153**), terrain CS **97 -> 87** (Mesa **92**); the blur FSs 80, 48 -> 78, 47. Tests: `tests/v3d_terrain_sched_words.rs` (add and mul counts, words), `tests/v3d_terrain_noise_sim.rs`, `tests/v3d_sched_fuzz.rs`; `tests/es2_report_guard.rs` answers unchanged. What stays: the VS at 2 threads (register pressure; Mesa gets 4), a duplicate `rsqrt` in the FS and look-up placement | **measured, Pi 4, `ce73e98e` -> `3e950f0f`: terrain 34.758 -> 31.906 ms a frame (-2.85 ms, 29 -> 32 fps)**; noise entry `render` **7930 -> 5791 us** (-2.14 ms; the model said about 5000), terrain entry (job 4) **9373 -> 8819 us** (-0.55 ms; the model said about 7000: only a quarter of it); `wait.ns` 28.34 -> 25.57 ms. The prediction of 4.4 to 4.6 ms was high by 1.6 ms because job 4 moved by 0.55 ms, not 2 ms. The two blur entries were not the cause: render plus TFU 27 ms is too little for blurs of 7 to 9 ms (see the confirming column) | `v3d-terrain-shaders.md` (sections 4 and 5), `v3d-blur-jobs.md`, `v3d-terrain-gpu.md`, `3e950f0f`'s message | after the change, job 4's `render` 8819 us is the remainder; the VS at 4 threads (Mesa), the duplicate `rsqrt` and look-up placement are the next levers of row 1. Blur model: render plus TFU 27 ms with noise 5.8 and terrain 8.8 ms leaves about 12 ms for six small entries, so the blurs read well under 7 ms; the per-entry blur values were not handed to this note, so the "3 to 4 ms" reading is inferred, not read, and a TMU cache study is **not** indicated |
+| 1 | **Pair the add and mul halves better in the V3D scheduler** (plan #419; the change landed in the allocator, `src/shaderc/online/v3d/alloc.rs`, `3e950f0f`; `sched.rs` rules unchanged) for the noise pass of job 2 and the terrain draw of job 4. **Done in part, measured.** Host words, ours before -> after (Mesa 26.2.1 for V3D 4.2 beside, measured by `v3d_shc`): noise FS **1495 -> 1090** at 2 threads (Mesa **1161**; floor about 872 to 900), terrain VS **172 -> 156** at 2 threads (Mesa **154** at 4), terrain FS **160 -> 146** (Mesa **153**), terrain CS **97 -> 87** (Mesa **92**); the blur FSs 80, 48 -> 78, 47. Tests: `tests/v3d_terrain_sched_words.rs` (add and mul counts, words), `tests/v3d_terrain_noise_sim.rs`, `tests/v3d_sched_fuzz.rs`; `tests/es2_report_guard.rs` answers unchanged. What stays: the VS at 2 threads (register pressure; Mesa gets 4), a duplicate `rsqrt` in the FS and look-up placement | **measured, Pi 4, `ce73e98e` -> `3e950f0f`: terrain 34.745 -> 31.899 ms a frame (-2.85 ms, 29 -> 32 fps)**; noise entry `render` **7930 -> 5790 us** (-2.14 ms; the model said about 5000), terrain entry (job 4) **9394 -> 8847 us** (-0.55 ms; the model said about 7000: only a quarter of it); `wait.ns` 28.331 -> 25.584 ms (records `records/pi4/20261128-0119-glmark2-ce73e98e-7770c817/` and `records/pi4/20261128-0126-glmark2-3e950f0f-6b9aa4fb/`). The prediction of 4.4 to 4.6 ms was high by 1.6 ms because job 4 moved by 0.55 ms, not 2 ms. The blur entries were not the cause: the bloom blurs (entries 5 and 6) read **459 -> 457 us** and **287 -> 287 us**, the tilt-shift blurs (entries 8 and 1) **2797 -> 2807 us** and **4443 -> 4445 us**, none 7 to 9 ms and none moved by the change | `v3d-terrain-shaders.md` (sections 4 and 5), `v3d-blur-jobs.md`, `v3d-terrain-gpu.md`, `3e950f0f`'s message | after the change, job 4's `render` 8847 us is the remainder; the VS at 4 threads (Mesa), the duplicate `rsqrt` and look-up placement are the next levers of row 1. Blur model: **confirmed** by the per-entry values read from both records (bloom H 0.46 ms, bloom V 0.29 ms, tilt-shift H 2.8 ms, tilt-shift V 4.4 ms, as `v3d-blur-jobs.md` predicts), so a TMU cache study is **not** indicated |
 | 2 | **TFU chain bytes: skip a chain no draw reads below level 0.** Exact part: the lazy chain plus a magnification proof drops bloom V's 256x256 chain (5 to 4 TFU chains a frame). The rest (chains read at lambda 0.0001 to 0.019) is not exact under ES 2.0. **Blocked in the GL core (2026-11-27, item `tfu-skip-chain`): not exact in `src/v3d/**` alone.** A lazy chain alone skips none of terrain's 5 chains (`lazy-mip-chain.md` answer 1); the exact skip is rule M's per-draw proof — that the draw's sampler never minifies: magnification only, or the min filter reads no level below 0 (explicit LOD, `texture2DLod` in the vertex shader or a `bias` in the fragment shader, counts as able to minify) — and that proof belongs to the GL core's draw preparation, `src/gl/draw.rs` (plan #397): the backend sees the `glGenerateMipmap` call's state, not the next draw's sampling. Without the proof the terrain TFU count stays at 5 a frame. The item ended with this finding: no commit, no new test. **The exact part is not backend-only**: it needs the magnification proof in `src/gl/draw.rs` (plan #397); the backend cannot make it alone | **0.10 ms exact, a prediction** (`lazy-mip-chain.md`, a prediction, unlocked only by the proof above); 0.1 to 1.8 ms with the inexact chains (`v3d-terrain-gpu.md` candidate 2). `v3d-tfu-raster-chain.md` adds nothing here: the chains already run on the TFU (`tile.ns` 0.16 ms a frame, `tiled.n` 0) | `lazy-mip-chain.md`, `v3d-terrain-gpu.md`, `terrain-mip-usage.md` | `glmark2-counters` terrain: `mip.queued` 4.986 to about 3.99 a frame (unreachable until the proof exists); `glmark2-jobs` frame 10: `tfu` count 5 to 4 and its sum 2632 us down by about 113 us |
 | 3 | **D16 depth for a `DEPTH_COMPONENT16` renderbuffer** (Z only, as Mesa; the backend keeps D24S8, 5.76 MB of depth traffic a frame). **Blocked in the GL core (2026-11-27, items `d16-study` and `d16-depth`): the backend cannot learn the renderbuffer's depth format, and a guess is not exact under ES 2.0.** `GlesDraw` names the depth buffer by id, generation and size (`depth_id`, `ds_w`, `ds_h`) and carries no format the way `GlesDrawTarget` carries a `GLES_SURF_*` colour format, so `src/v3d/**` cannot pick the storage from a fact. It needs a depth-format field on the backend draw record — for example `GlesDraw.depth_bits` — in `src/backend.rs` (plan #417), filled by `src/gl/draw.rs` (plan #397). The items ended with this finding: no commit, no new test. **Blocked**: the backend gets no depth format, and it needs `GlesDraw.depth_bits` (`src/backend.rs`, plan #417, and `src/gl/draw.rs`, plan #397) | **about 0.4 ms, a prediction** on the overlay job, plus up to 0.2 ms hidden in the terrain draw (`v3d-blur-jobs.md` candidate 1, bytes at 4.4 MB/ms); it stays a prediction until the field exists | `v3d-blur-jobs.md`, `v3d-depth-store-terrain.md` (the traffic) | `glmark2-jobs` frame 10: `render` of entry 7 (the overlay, 1754 us now) down about 0.4 ms; `glmark2-frame` frame down about the same |
 | 4 | **Overlap job N+1's bin with job N's render** (a second tile-state and binner pool, 6.8 MiB) | **0.2 to 2 ms estimated, likely under 1** (`v3d-bin-overlap.md`). The board `bin` values bound the pairs that can hide at **0.29 ms** (`pi4-terrain-board-jobs.md`: the sum of min(bin N+1, render N)). Job 4's 3.53 ms bin follows the 191 us render of job 3 and hides only after a reorder, which is not this candidate | `v3d-bin-overlap.md`, `pi4-terrain-board-jobs.md` | `glmark2-jobs` frame 10: `bin` sum 3672 us (entry 4 is 3529 of it) and the `bin` of entries 2 and 5 to 8 (about 0.1 ms, the part that can hide). After a change: `glmark2-frame` frame and `wait.ns` down by that sum; `idle` stays near 95 us |
@@ -731,17 +731,30 @@ accumulators kept, noise 1495 to 1090 words). Values, read from the
 
 | | `ce73e98e` | `3e950f0f` |
 |---|---:|---:|
-| terrain, ms a frame | 34.758 (29 fps) | **31.906** (32 fps) |
-| noise entry (job 2) `render` | 7930 us | **5791 us** |
-| terrain entry (job 4) `render` | 9373 us | **8819 us** |
-| `wait.ns` a frame | 28.34 ms | **25.57 ms** |
+| terrain, ms a frame | 34.745 (29 fps) | **31.899** (32 fps) |
+| entry 1, tilt-shift V (previous frame) `render` | 4443 us | 4445 us |
+| entry 2, noise (job 2) `render` | 7930 us | **5790 us** |
+| entry 3, normal map `render` | 191 us | 191 us |
+| entry 4, terrain draw (job 4) `render` | 9394 us | **8847 us** |
+| entry 5, bloom H (blur) `render` | 459 us | 457 us |
+| entry 6, bloom V (blur) `render` | 287 us | 287 us |
+| entry 7, overlay `render` | 1765 us | 1769 us |
+| entry 8, tilt-shift H (blur) `render` | 2797 us | 2807 us |
+| render sum / TFU (5 jobs) | 27266 / 2638 us | 24593 / 2629 us |
+| `wait.ns` a frame | 28.331 ms | **25.584 ms** |
 
-The frame is still GPU-bound (render plus TFU about 27 ms, `wait.ns` 25.6).
-The baseline run of the plan (item `pi4-baseline`) is the "before" column;
-the records are under the gitignored, redacted `records/pi4/` of the runner
-host, one directory per run named `<YYYYMMDD-HHMM>-<name>-<sha8>`; their
-directory names were not handed to this note and are not written here, so
-they are in the #1209 comment of the plan's report. Rows 2 and 3 were not
+Records (gitignored, redacted, kept on the runner host): before
+`records/pi4/20261128-0119-glmark2-ce73e98e-7770c817/`, after
+`records/pi4/20261128-0126-glmark2-3e950f0f-6b9aa4fb/`;
+both `rc=0 verdict=done`, score 195, 33 scenes, 0 failed, 0 resets, 8.003
+jobs a frame. The job entries are frame 10's `glmark2-jobs` line. An earlier,
+unrecorded run of the same two commits gave 34.758 -> 31.906 ms, noise
+7930 -> 5791 us and job 4 9373 -> 8819 us, within 0.03 ms of these.
+
+The frame is still GPU-bound (render plus TFU about 27.2 ms, `wait.ns`
+25.6). The blur entries confirm the render model: the bloom pair reads 0.46
+and 0.29 ms and the tilt-shift pair 2.8 and 4.4 ms, not 7 to 9 ms, and the
+scheduler change moved none of them, so no TMU cache study follows. Rows 2 and 3 were not
 run: nothing was built (they wait on `src/gl`). The images' build logs and
 run logs were kept in the session's scratch, not in the tree.
 

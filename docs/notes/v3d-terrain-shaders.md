@@ -327,20 +327,20 @@ us.
 
 | job | model before | measured before | model at the new count | measured after |
 |---|---:|---:|---:|---:|
-| noise (1495 -> 1090 words) | 6.1 ms | 7930 us | about 4.5 ms | **5791 us** |
-| terrain draw (VS 172 -> 156, FS 160 -> 146) | 8.65 ms | 9373 us | about 7.8 ms | **8819 us** |
+| noise (1495 -> 1090 words) | 6.1 ms | 7930 us | about 4.5 ms | **5790 us** |
+| terrain draw (VS 172 -> 156, FS 160 -> 146) | 8.65 ms | 9394 us | about 7.8 ms | **8847 us** |
 
 Noise moved by -2.14 ms for -405 words (5.3 us a word; the model's slope is
 4.1 us a word), so the noise job is a little above its ALU model, as before.
 Job 4 moved by -0.55 ms: its words fell by 16 (VS) and 14 (FS) a lane-pass,
 and the model's -2 ms rested on reaching about 115 and 125 words, the floors,
 which no compiler reaches; Mesa's counts (154 / 153) are already reached by
-ours on the FS side (146 against 153). The frame fell 34.758 -> 31.906 ms, `wait.ns` 28.34 ->
-25.57 ms. **The blur model:** render plus TFU is about 27 ms, noise 5.8 and
-terrain 8.8 ms, which leaves about 12 ms for six small entries; two blurs of
-7 to 9 ms would need 14 to 18 ms, so the blurs did not read 7 to 9 ms. The
-per-entry blur values were not read into this note, so that is an
-inference from the sums, and no TMU cache study is indicated by it.
+ours on the FS side (146 against 153). The frame fell 34.745 -> 31.899 ms, `wait.ns` 28.331 ->
+25.584 ms (records `records/pi4/20261128-0119-glmark2-ce73e98e-7770c817/`
+and `records/pi4/20261128-0126-glmark2-3e950f0f-6b9aa4fb/`,
+`pi4-slow-terrain.md` "Board runs"). **The blur model holds:** the bloom
+blurs read 459 -> 457 and 287 -> 287 us, the tilt-shift blurs 2797 -> 2807
+and 4443 -> 4445 us, none 7 to 9 ms, so no TMU cache study is indicated.
 
 ## 5. Fix candidates, ranked
 
@@ -350,7 +350,7 @@ entries before the terrain draw; "the terrain entry" is the one before the
 `tfu 1/8xxus` entry (section 4).
 
 1. **Noise: pair the add and mul halves better in the V3D scheduler. Done at
-   `3e950f0f`: 1495 -> 1090 words (below Mesa's 1161), render 7930 -> 5791 us
+   `3e950f0f`: 1495 -> 1090 words (below Mesa's 1161), render 7930 -> 5790 us
    measured (the prediction of about 5000 us was not reached).** Before it: 1495
    words for 872 add and 830 mul operations; a floor of about 872 to 900
    words. Mesa 4.2's count for the same text is now measured (2026-11-27):
@@ -383,7 +383,7 @@ entries before the terrain draw; "the terrain entry" is the one before the
      unknown until the listings are compared.
 2. **Terrain draw: the same pairing for its VS (172 words for 109 add / 98
    mul) and FS (160 for 89 / 119). Done in part at `3e950f0f`: VS 156 (2
-   threads), FS 146, CS 87; the terrain entry's `render` 9373 -> 8819 us
+   threads), FS 146, CS 87; the terrain entry's `render` 9394 -> 8847 us
    measured (about 7000 was predicted). What is left: the VS at 4 threads as
    Mesa, the FS's duplicate `rsqrt`, look-up placement.** Floors of about 115 and 125, again
    below what Mesa reaches: its measured 4.2 counts for the same programs
