@@ -153,6 +153,17 @@ want tests/mali_deqp_mixprec3.rs "mali treekey"
 want tests/mali_ref_selftest.rs "mali treekey"
 want tests/mali_ref/mod.rs "mali treekey"
 want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
+# plan #367's glmark2 tests on the Mali: the compile pins, the GL-level pins
+# and the corpus test are scope mali; the corpus test's fixture is a tests/
+# fixture (scope tests)
+want tests/mali_bool_and.rs "mali treekey"
+want tests/mali_vs_fma.rs "mali treekey"
+want tests/mali_depthonly_gl.rs "mali treekey"
+want tests/mali_depth_texture.rs "mali treekey"
+want tests/mali_glmark2_scene_draw.rs "mali treekey"
+want tests/mali_shadow_pass.rs "mali treekey"
+want tests/mali_glmark2_corpus.rs "mali treekey"
+want tests/fixtures/mali_glmark2_verdicts.txt tests
 want src/mali/genxml/v10.rs "mali treekey"
 want src/shaderc/online/mali/mod.rs "mali treekey"
 want tools/mali/gen_pack_rs.py mali
@@ -432,6 +443,50 @@ expect "mali: its test row" '^plan  test    yakogl-mali-panthor$' "$out"
 # a gap line where it does not; either way it is named (the board binary's
 # link is a hand step, not a row)
 count "mali: its aarch64 clippy row (a plan row or a gap)" '^(plan  |.*gap   )clippy +yakogl-mali-panthor \(aarch64-unknown-linux-gnu' 1 "$out"
+# plan #367's glmark2 tests on the Mali. Every one of them is run by exactly
+# one row, with its header's feature set (the headers of mali_depth_texture
+# and mali_shadow_pass name two, so the report-es2 row runs them as well), and
+# is named in that row's
+# label; a change of one plans the mali rows and the tree key row, nothing else.
+m367_pins="bool_and const_fold effect2d_tex fragcoord16 fs_operand ideas int_loops locals mploop
+  nonfinite_const tex_multi tex_vertex texcoord_425b texcoord_lane vs_arith vs_fma
+  depthonly_gl depthtex_gl npot_mip_gl glmark2_scene_draw"
+m367_args=$(grep -e '--test mali_' tools/check.sh)
+out=$(plan tests/mali_glmark2_scene_draw.rs)
+for t in $m367_pins glmark2_corpus; do
+  count "mali #367: one row runs mali_$t" " --test mali_$t( |\$)" 1 "$m367_args"
+done
+for t in $m367_pins depth_texture shadow_pass; do
+  expect "mali #367: mali_$t is named in the glmark2 pins row" \
+    "^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \\(tests/mali_\\{arith_const,[a-z0-9_,]*,$t[,}]" "$out"
+done
+for t in depth_texture shadow_pass; do
+  count "mali #367: two rows run mali_$t (its header's two feature sets)" " --test mali_$t( |\$)" 2 "$m367_args"
+done
+expect "mali #367: the second feature set of mali_depth_texture and mali_shadow_pass, the report-es2 row" \
+  '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table,report-es2 \(tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs, mali_depth_texture.rs, mali_shadow_pass.rs\)$' "$out"
+expect "mali #367: a GL-level test change, the mali rows and the tree key row only" '^check.sh: .*\(--changed HEAD, scopes: mali treekey \)' "$out"
+# The Mali corpus test runs from its own row beside the glmark2 corpus row: a
+# change of the test, of the compiler, of the verdict fixture or of the
+# harness script that generates the corpus plans it; the other back ends'
+# corpus row is not a Mali row.
+expect "mali #367: the Mali corpus row" '^plan  test    glmark2 corpus through the Mali compiler, per-scene verdicts \(tests/mali_glmark2_corpus.rs\)$' "$out"
+count "mali #367: mali_glmark2_corpus is named in that row only" '^(plan|gap|skip) .*mali_glmark2_corpus' 1 "$out"
+expect "mali #367: a Mali change does not plan the other back ends' corpus row" '^skip  test    glmark2 corpus generated from GLMARK2_SRC' "$out"
+expect "mali #367: the compiler reaches the Mali corpus row" '^plan  test    glmark2 corpus through the Mali compiler' "$(plan src/shaderc/online/mali/mod.rs)"
+expect "mali #367: the verdict fixture reaches the Mali corpus row" '^plan  test    glmark2 corpus through the Mali compiler' "$(plan tests/fixtures/mali_glmark2_verdicts.txt)"
+expect "mali #367: the harness script reaches the Mali corpus row" '^plan  test    glmark2 corpus through the Mali compiler' "$(plan tools/hostharness/glmark2/run.sh)"
+# Without a glmark2 tree the row is a gap naming GLMARK2_SRC, never a pass
+# (a directory without src/ stands in: an empty value is filled from the
+# dependency layout where the host has one).
+mkdir -p build/check/plan-nogm2
+out=$(ZEPHYR_WS=$PWD/build/check/plan-ws GLMARK2_SRC=$PWD/build/check/plan-nogm2 MESA_V3D_TREE= \
+  YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS=tests/mali_glmark2_corpus.rs tools/check.sh --changed HEAD 2>&1 |
+  sed 's/\x1b\[[0-9;]*m//g')
+expect "mali #367: the Mali corpus row is a gap without a glmark2 tree" \
+  "^gap   glmark2 corpus through the Mali compiler: no glmark2 tree at GLMARK2_SRC='.*plan-nogm2' \\(set GLMARK2_SRC\\): tests/mali_glmark2_corpus.rs was NOT run\$" "$out"
+count "mali #367: no Mali corpus plan row without a glmark2 tree" '^plan  test    glmark2 corpus through the Mali compiler' 0 "$out"
+expect "mali #367: the gap is counted" '^check.sh: [0-9]+ ok, 0 failed, [1-9][0-9]* gap\(s\)' "$out"
 expect "mali: no PowerVR row" '^skip  clippy  host-test,gpu-powervr$' "$out"
 out=$(YAKOGL_CHECK_CONFIGS="host-test,gpu-powervr" plan src/pvr/draw.rs)
 expect "narrowed CONFIGS: the no-compiler rows" "^${nocomp//[()]/.}\$" "$out"
