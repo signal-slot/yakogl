@@ -22,6 +22,9 @@ unset MESA_PAN_TREE
 # And DEQP_GLES3_TEST_DIR: without the corpus the shaderc rows carry a gap
 # naming it; the plans below are made without it.
 unset DEQP_GLES3_TEST_DIR
+# And DEQP_GLES2_TEST_DIR: without the library the shaderc71_es2_corpus row
+# is a gap naming it; the plans below are made without it.
+unset DEQP_GLES2_TEST_DIR
 # check.sh fills an unset input from the dependency layout (tools/cts/deps.toml),
 # which would bring every variable above back on a host that has one: the plans
 # are made with no layout (a directory that does not exist).

@@ -239,12 +239,15 @@ jobs:
         # built without root with the build tools its entry names (the
         # package step above installs any the runner lacks); about 7 minutes
         # on 4 cores, once per runner, and never again while its binary is
-        # there. Every other entry is a tree a host is prepared with, never
+        # there. So is DEQP_GLES2_TEST_DIR, the gles2 twin of the GLES3 corpus
+        # (VK-GL-CTS data/gles2/shaders at the same commit, a few seconds),
+        # which check.sh's shaderc71_es2_corpus row compiles at V3D 7.1.
+        # Every other entry is a tree a host is prepared with, never
         # built here. The LLVM directories go on PATH first: that build runs
         # clang and llvm-spirv.
         run: |
           for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
-          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4 MP2_QEMU
+          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR DEQP_GLES2_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4 MP2_QEMU
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {
