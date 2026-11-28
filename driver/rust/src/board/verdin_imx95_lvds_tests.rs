@@ -268,14 +268,15 @@ fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the
     let ensts = dlog.iter().position(|x| matches!(x, Access::R("dpu", 0x2b_0094, _))).unwrap();
     let gate = at(Access::W("ldb", 0x0, 0x1E));
     assert!(fg_off < seq && seq < ensts && ensts < gate, "{dlog:?}");
-    // the frame counter is read before the first FGENSTS poll and again
-    // when the wait ends, both after the sequence complete and before the
-    // LDB gate
+    // the frame counter is read just before FGENABLE = 0 (for the
+    // sequence wait's report), then before the first FGENSTS poll and again
+    // when that wait ends, all before the LDB gate
     let ts: Vec<usize> =
         dlog.iter().enumerate().filter(|(_, x)| matches!(x, Access::R("dpu", 0x2b_0098, _))).map(|(i, _)| i).collect();
     let before_gate: Vec<usize> = ts.into_iter().filter(|&i| i < gate).collect();
-    assert!(before_gate.len() == 2 && before_gate[0] > seq && before_gate[0] < ensts, "{dlog:?}");
-    assert!(before_gate[1] > ensts, "{dlog:?}");
+    assert!(before_gate.len() == 3 && before_gate[0] < fg_off, "{dlog:?}");
+    assert!(before_gate[1] > seq && before_gate[1] < ensts, "{dlog:?}");
+    assert!(before_gate[2] > ensts, "{dlog:?}");
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
 }
@@ -423,10 +424,16 @@ fn down_gates_the_ldb_only_after_frame_gen_reports_its_sequence_complete() {
     assert_eq!(&waits[..4], &[dpu::POLL_STEP_US; 4]);
     let lines = r.env.lines.borrow();
     assert_eq!(
-        lines[0],
-        "verdin-imx95 LVDS down: FGENABLE 0 (no FGSLR token), waiting up to 1000000 us for SeqComplete0 in DISPIRQ0 (DPU+0x38102c bit 20)"
+        &lines[..5],
+        &[
+            "verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS 0x0: unlocked, privilege off, freeze off",
+            "verdin-imx95 X12 down: DISPIRQ0 ENABLE0 0x00100000 (wrote 0x00100000)",
+            "verdin-imx95 X12 down: FGENABLE 0 (no FGSLR token), FGTIMESTAMP 0x0000c000",
+            "verdin-imx95 X12 down: waiting <= 1000000 us for SeqComplete0 (DPU+0x38102c bit 20)",
+            "verdin-imx95 X12 down: SeqComplete0 after 400 us (5 polls), FGENSTS stopped",
+        ],
+        "{lines:?}"
     );
-    assert!(lines[1].starts_with("verdin-imx95 LVDS down: SeqComplete0 after 400 us, FGENSTS stopped"), "{lines:?}");
     drop(lines);
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38));
     assert!(r.m.display.refused().is_empty());
@@ -444,9 +451,16 @@ fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
     r.m.display.seq_after = None;
     r.log.borrow_mut().clear();
     let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
-    let Error::SeqTimeout { waited_us, irq, comctrl, fg } = e else { panic!("{e:?}") };
+    let Error::SeqTimeout { waited_us, irq, comctrl, enable, lock, fg } = e else { panic!("{e:?}") };
     assert_eq!(waited_us, lv::SEQ_COMPLETE_BUDGET_US);
     assert_eq!((irq & SEQ_BIT, comctrl & SEQ_BIT), (0, 0));
+    // the block was open: the enable landed
+    assert_eq!((enable, lock), (SEQ_BIT, lv::Dirq0Lock(0)));
+    let w = fg.stop.expect("the wait is in the error");
+    assert_eq!(
+        (w.waited_us, w.polls),
+        (lv::SEQ_COMPLETE_BUDGET_US, lv::SEQ_COMPLETE_BUDGET_US / dpu::POLL_STEP_US + 1)
+    );
     // the event is masked again on the way out
     assert_eq!(r.m.display.peek("dpu", DIRQ0_ENABLE0), 0);
     assert_eq!(fg.fgenable, 0);
@@ -466,12 +480,22 @@ fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
     // the LDB still reads as the up left it (`ldb::up`: 0x14, not gated)
     assert_eq!(r.m.display.peek("ldb", 0x0), 0x14);
     assert!(sm.sm.borrow().on(13) && sm.sm.borrow().enabled(38));
-    assert!(r
-        .env
-        .lines
-        .borrow()
-        .iter()
-        .any(|l| l.contains("no SeqComplete0 in 1000000 us (DISPIRQ0 INTERRUPTSTATUS0 0x")));
+    let lines = r.env.lines.borrow();
+    let at = lines.iter().position(|l| l.contains("no SeqComplete0")).expect("a timeout line");
+    assert_eq!(
+        &lines[at..],
+        &[
+            "verdin-imx95 X12 down: no SeqComplete0 after 1000000 us (10001 polls)",
+            "verdin-imx95 X12 down: FGENABLE 0 FGENSTS 0x0 FGCHSTAT 0x0",
+            "verdin-imx95 X12 down: DISPIRQ0 STATUS0 0x00000000 ENABLE0 0x00100000",
+            "verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS 0x0",
+            "verdin-imx95 X12 down: COMCTRL IRQ_INTERRUPTSTATUS0 0x00000008",
+            "verdin-imx95 X12: frame counter 3 -> 3 (0 frames): frozen, the pixel clock is dead",
+            "verdin-imx95 X12: FGTIMESTAMP 0x0000c000 -> 0x0000c000",
+            "verdin-imx95 X12 down: the LDB and the power stay on",
+        ],
+        "{lines:?}"
+    );
 }
 
 /// As the board after 211ed16a: the sequence complete never shows in the
@@ -502,6 +526,195 @@ fn a_stop_that_succeeds_logs_the_wait_and_the_frame_counter() {
     r.env.lines.borrow_mut().clear();
     display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
     let lines = r.env.lines.borrow();
-    let l = lines.iter().find(|l| l.contains("FrameGen0 stopped after")).expect("a success line");
-    assert!(l.contains(" us (") && l.contains("frame counter") && l.contains("FGTIMESTAMP 0x"), "{l}");
+    let at = lines.iter().position(|l| l.contains("FrameGen0 stopped after")).expect("a success line");
+    assert!(lines[at].contains(" us (") && lines[at].contains(" polls)"), "{lines:?}");
+    assert!(lines[at + 1].starts_with("verdin-imx95 X12: frame counter "), "{lines:?}");
+    assert!(lines[at + 2].starts_with("verdin-imx95 X12: FGTIMESTAMP 0x"), "{lines:?}");
+}
+
+const DIRQ0_LOCKUNLOCK: u32 = 0x38_1000;
+const DIRQ0_LOCKSTATUS: u32 = 0x38_1004;
+
+/// The DISPIRQ0 lock words are where `PERI_DISPLAY_SEERIS.h` has them and
+/// the keys are its (and Linux's `CMDSEQ_LOCKUNLOCK`) values.
+#[test]
+fn the_dispirq0_lock_words_and_keys() {
+    assert_eq!(lv::DISP_IRQ0 + lv::dirq_lock::LOCKUNLOCK, DIRQ0_LOCKUNLOCK);
+    assert_eq!(lv::DISP_IRQ0 + lv::dirq_lock::LOCKSTATUS, DIRQ0_LOCKSTATUS);
+    assert_eq!((lv::dirq_lock::LOCK_KEY, lv::dirq_lock::UNLOCK_KEY), (dm::key::LOCK, dm::key::UNLOCK));
+    assert_eq!(lv::dirq_lock::FREEZE_KEY, dm::key::FREEZE);
+    assert_eq!(
+        (lv::dirq_lock::PRIVILEGE_ON_KEY, lv::dirq_lock::PRIVILEGE_OFF_KEY),
+        (dm::key::PRIVILEGE_ON, dm::key::PRIVILEGE_OFF)
+    );
+    let l = lv::Dirq0Lock(0x111);
+    assert!(l.locked() && l.privileged() && l.frozen());
+    assert!(!lv::Dirq0Lock(0).locked());
+}
+
+/// Lock DISPIRQ0 in the model the way a key writer would: the counter
+/// from 1 to 0.
+fn lock_dirq0(m: &Joined) {
+    m.write32(dm::DPU + DIRQ0_LOCKUNLOCK as usize, lv::dirq_lock::LOCK_KEY);
+    assert_eq!(m.read32(dm::DPU + DIRQ0_LOCKSTATUS as usize) & lv::dirq_lock::LOCK_STATUS, 1);
+}
+
+/// Unlocked (the reset state): LOCKSTATUS is read before the block is
+/// written, the down reports it unlocked, writes no key and its enable lands.
+#[test]
+fn an_unlocked_dispirq0_is_read_before_the_enable_and_reported() {
+    let r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.m.display.clear_log();
+    r.env.lines.borrow_mut().clear();
+    display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
+    let dlog = r.m.display.log();
+    let at = |a: &Access| dlog.iter().position(|x| x == a).unwrap_or_else(|| panic!("{a:?} not in the log"));
+    let read = at(&Access::R("dpu", DIRQ0_LOCKSTATUS, 0));
+    let first_write =
+        dlog.iter().position(|a| matches!(a, Access::W("dpu", o, _) if (0x38_1000..0x38_1038).contains(o))).unwrap();
+    assert!(read < first_write, "{dlog:?}");
+    assert!(!dlog.iter().any(|a| matches!(a, Access::W("dpu", DIRQ0_LOCKUNLOCK, _))), "no key written: {dlog:?}");
+    // the enable read back as written
+    assert!(dlog.contains(&Access::R("dpu", DIRQ0_ENABLE0, SEQ_BIT)), "{dlog:?}");
+    let lines = r.env.lines.borrow();
+    assert!(
+        lines.contains(&"verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS 0x0: unlocked, privilege off, freeze off".into())
+    );
+    assert!(!lines.iter().any(|l| l.contains("DISPIRQ0 locked")), "{lines:?}");
+    // the bit was cleared after the wait
+    assert_eq!(r.m.display.peek("dpu", DIRQ0_STATUS0) & SEQ_BIT, 0);
+}
+
+/// Locked: the down says so and why (its clear and enable do not land;
+/// Linux never unlocks the block, so it does not either), writes no key,
+/// and still waits, as Linux would. The status latches without the
+/// enable, so the wait sees the bit; the clear after it does not land.
+#[test]
+fn a_locked_dispirq0_is_reported_and_left_locked() {
+    let r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    lock_dirq0(&r.m);
+    r.m.display.clear_log();
+    r.env.lines.borrow_mut().clear();
+    display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
+    let dlog = r.m.display.log();
+    assert!(!dlog.iter().any(|a| matches!(a, Access::W("dpu", DIRQ0_LOCKUNLOCK, _))), "no key written: {dlog:?}");
+    assert!(dlog.contains(&Access::R("dpu", DIRQ0_ENABLE0, 0)), "the enable did not land: {dlog:?}");
+    assert_eq!(r.m.display.peek("dpu", DIRQ0_STATUS0) & SEQ_BIT, SEQ_BIT, "the clear did not land");
+    // read once, locked, before anything was written to the block
+    assert_eq!(dlog[0], Access::R("dpu", DIRQ0_LOCKSTATUS, 1), "{dlog:?}");
+    let lines = r.env.lines.borrow();
+    assert_eq!(
+        &lines[..4],
+        &[
+            "verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS 0x1: locked, privilege off, freeze off",
+            "verdin-imx95 X12 down: DISPIRQ0 locked: its CLEAR0 and ENABLE0 writes are ignored",
+            "verdin-imx95 X12 down: Linux's dpu95 never unlocks DISPIRQ0; not unlocked here",
+            "verdin-imx95 X12 down: DISPIRQ0 ENABLE0 0x00000000 (wrote 0x00100000)",
+        ],
+        "{lines:?}"
+    );
+}
+
+/// Locked with a sequence complete left from before: the clear cannot take
+/// it away, so the down says the wait cannot tell it from this stop's.
+#[test]
+fn a_stale_seq_complete_under_the_lock_is_reported() {
+    let r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    // a stop and a restart leave the bit set
+    r.m.write32(FGENABLE, 0);
+    assert_eq!(r.m.read32(dm::DPU + DIRQ0_STATUS0 as usize) & SEQ_BIT, SEQ_BIT);
+    r.m.write32(FGENABLE, 1);
+    lock_dirq0(&r.m);
+    r.env.lines.borrow_mut().clear();
+    display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
+    let lines = r.env.lines.borrow();
+    assert!(
+        lines.contains(&"verdin-imx95 X12 down: stale SeqComplete0 under the lock: the wait cannot tell".into()),
+        "{lines:?}"
+    );
+    assert!(lines.iter().any(|l| l.contains("SeqComplete0 after 0 us (1 polls)")), "{lines:?}");
+}
+
+/// Locked, privileged and frozen, and the sequence never completes: the
+/// timeout carries the lock and the enable as read back, and says the
+/// enable did not land.
+#[test]
+fn a_locked_dispirq0_that_times_out_names_the_lock() {
+    let mut r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.m.write32(dm::DPU + DIRQ0_LOCKUNLOCK as usize, lv::dirq_lock::PRIVILEGE_ON_KEY);
+    lock_dirq0(&r.m);
+    r.m.write32(dm::DPU + DIRQ0_LOCKUNLOCK as usize, lv::dirq_lock::FREEZE_KEY);
+    // frozen: an unlock key has no effect
+    r.m.write32(dm::DPU + DIRQ0_LOCKUNLOCK as usize, lv::dirq_lock::UNLOCK_KEY);
+    r.m.display.seq_after = None;
+    r.env.lines.borrow_mut().clear();
+    let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+    let Error::SeqTimeout { enable, lock, .. } = e else { panic!("{e:?}") };
+    assert_eq!((enable, lock), (0, lv::Dirq0Lock(0x111)));
+    assert!(lock.locked() && lock.privileged() && lock.frozen());
+    let lines = r.env.lines.borrow();
+    assert_eq!(lines[0], "verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS 0x111: locked, privilege on, freeze on");
+    assert!(
+        lines.contains(&"verdin-imx95 X12 down: DISPIRQ0 STATUS0 0x00000000 ENABLE0 0x00000000".into()),
+        "{lines:?}"
+    );
+    assert!(lines.contains(&"verdin-imx95 X12 down: DISPIRQ0 LOCKSTATUS 0x111".into()), "{lines:?}");
+    assert!(lines.contains(&"verdin-imx95 X12 down: DISPIRQ0 was locked: the enable did not land".into()), "{lines:?}");
+    assert_eq!(lines.last().unwrap(), "verdin-imx95 X12 down: the LDB and the power stay on");
+}
+
+/// Every line the down prints, on every path (completed, FrameGen0 still
+/// running, timed out open, timed out locked and frozen, a stale bit under
+/// the lock),
+/// is one value group under the console's cut.
+#[test]
+fn every_down_line_fits_the_console() {
+    let paths: [fn(&mut Rig); 5] = [
+        |_| {},
+        |r| r.m.display.faults.fg_stuck = true,
+        |r| r.m.display.seq_after = None,
+        |r| {
+            r.m.write32(dm::DPU + DIRQ0_LOCKUNLOCK as usize, lv::dirq_lock::PRIVILEGE_ON_KEY);
+            lock_dirq0(&r.m);
+            r.m.write32(dm::DPU + DIRQ0_LOCKUNLOCK as usize, lv::dirq_lock::FREEZE_KEY);
+            r.m.display.seq_after = None;
+        },
+        |r| {
+            r.m.write32(FGENABLE, 0);
+            r.m.read32(dm::DPU + DIRQ0_STATUS0 as usize);
+            r.m.write32(FGENABLE, 1);
+            lock_dirq0(&r.m);
+        },
+    ];
+    let mut seen = 0;
+    for (i, f) in paths.iter().enumerate() {
+        let mut r = rig();
+        let cfg = Config::verdin(FB);
+        let up = display_up(&mut r.sm, &r.m, &r.env, &cfg).unwrap();
+        f(&mut r);
+        r.env.lines.borrow_mut().clear();
+        let res = display_down(&mut r.sm, &r.m, &r.env, &cfg, &up.stream);
+        assert_eq!(res.is_ok(), i == 0 || i == 4, "path {i}: {res:?}");
+        let lines = r.env.lines.borrow();
+        assert!(lines.len() >= 5, "path {i}: {lines:?}");
+        for l in lines.iter() {
+            assert!(l.chars().count() <= lv::DOWN_LINE_MAX, "path {i}: {} chars: {l}", l.chars().count());
+            assert!(!l.ends_with("..."), "path {i}: cut: {l}");
+        }
+        seen += lines.len();
+    }
+    const _: () = assert!(lv::DOWN_LINE_MAX < 100);
+    assert!(seen > 30);
 }
