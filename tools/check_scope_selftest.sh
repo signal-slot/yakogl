@@ -125,6 +125,7 @@ want tests/es3_half_float_mrt_gc.rs "vivante treekey"
 want src/mali/backend.rs "mali treekey"
 want tests/mali_blend_states.rs "mali treekey"
 want tests/mali_vcube_magswitch.rs "mali treekey"
+want tests/mali_glmark2_uniforms.rs "mali treekey"
 # plan #373 later pins (check-rows2)
 want tests/mali_vcube_lod.rs "mali treekey"
 want tests/mali_draw_inval.rs "mali treekey"
