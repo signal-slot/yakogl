@@ -1473,6 +1473,97 @@ fn const_tree32(m: &Module<'_>, s: ir::Src, i: usize, depth: u8) -> Option<(f32,
     nir::plain(r.0.to_bits()).then_some(r)
 }
 
+/// Lane `i` of IR source `s` in a mediump shader as Mesa folds a tree of
+/// highp constants: every value of the tree is [`ir::Prec::High`], so
+/// lower_precision narrows none of it and GLSL's constant propagation and
+/// folding compute it at fp32 (`a / b` as `op[0] / op[1]`,
+/// ir_constant_expression.cpp `ir_binop_div`; the IR's `fmul(a, frcp(b))`
+/// is that quotient), rounded once to fp16 where a mediump value takes it
+/// (deqp_vsconst_fsdiv_highp_mat2's `const highp mat2 in0 / in1`, lane 2
+/// `0.7/0.7 + 0.4/-0.8` = 0x3800 where the mediump fold gives 0x37fe). The
+/// leaves are constants and loads of highp locals whose lane one store
+/// writes, before the load. The value and whether the tree holds an
+/// operation (not a bare constant or load); None: a value is not highp,
+/// not such a leaf or not zero or a normal float, or the tree is deeper
+/// than 8.
+fn highp_tree32(m: &Module<'_>, s: ir::Src, i: usize, depth: u8) -> Option<(f32, bool)> {
+    if depth > 8 || m.prec_of(s.val) != ir::Prec::High {
+        return None;
+    }
+    let c = s.swizzle[i] as usize & 3;
+    let r = match *m.def(s.val)? {
+        ir::Op::ConstF32(bits) => (f32::from_bits(bits[c]), false),
+        ir::Op::Alu(AluOp::Frcp, x) => (1.0 / highp_tree32(m, x[0], c, depth + 1)?.0, true),
+        ir::Op::Alu(AluOp::Fmul, x) => {
+            let (p, _) = highp_tree32(m, x[0], c, depth + 1)?;
+            match *m.def(x[1].val)? {
+                /* the quotient, one rounding */
+                ir::Op::Alu(AluOp::Frcp, d) if m.prec_of(x[1].val) == ir::Prec::High => {
+                    let (q, _) = highp_tree32(m, d[0], x[1].swizzle[c] as usize & 3, depth + 2)?;
+                    (p / q, true)
+                }
+                _ => (p * highp_tree32(m, x[1], c, depth + 1)?.0, true),
+            }
+        }
+        ir::Op::Alu(AluOp::Fadd, x) => {
+            (highp_tree32(m, x[0], c, depth + 1)?.0 + highp_tree32(m, x[1], c, depth + 1)?.0, true)
+        }
+        ir::Op::Alu(AluOp::Fneg, x) => (-highp_tree32(m, x[0], c, depth + 1)?.0, true),
+        ir::Op::LoadLocal { local, index: None, .. } => {
+            if m.local_prec_of(local) != ir::Prec::High
+                || m.instrs
+                    .iter()
+                    .any(|op| matches!(*op, ir::Op::StoreLocal { local: l, index: Some(_), .. } if l == local))
+            {
+                return None;
+            }
+            let mut lane = m.instrs.iter().enumerate().filter_map(|(at, op)| match *op {
+                ir::Op::StoreLocal { local: l, src, write_mask, .. } if l == local && write_mask >> c & 1 != 0 => {
+                    Some((at, src))
+                }
+                _ => None,
+            });
+            let (at, src) = lane.next()?;
+            if lane.next().is_some() || at >= s.val.0 as usize {
+                return None;
+            }
+            highp_tree32(m, src, c, depth + 1)?
+        }
+        _ => return None,
+    };
+    nir::plain(r.0.to_bits()).then_some(r)
+}
+
+/// IR value `id` of a mediump shader as [`highp_tree32`] folds it, each
+/// lane rounded once to fp16 ([`round16`]): Some when every lane folds,
+/// an operation is in the tree and every lane rounds to a normal half or
+/// zero.
+fn highp_const16(m: &Module<'_>, id: u32) -> Option<[Val; 4]> {
+    let w = width_of(m, ir::ValueId(id));
+    let s = ir::Src::id(ir::ValueId(id));
+    let mut out = [Val::Undef; 4];
+    let mut any = false;
+    for (i, o) in out.iter_mut().enumerate().take(w) {
+        let (v, b) = highp_tree32(m, s, i, 0)?;
+        any |= b;
+        *o = Val::Const(round16(v.to_bits()).ok()?);
+    }
+    any.then_some(out)
+}
+
+/// Every float operation of the mediump shader that is highp is a tree of
+/// highp constants [`highp_tree32`] folds: the shape a `const highp`
+/// global makes (deqp_vsconst_fsdiv_highp_mat2's `in0 / in1`), whose fp32
+/// values meet the mediump ones only as folded constants.
+pub(super) fn highp_consts_fold(m: &Module<'_>) -> bool {
+    m.instrs.iter().enumerate().all(|(id, op)| {
+        let v = ir::ValueId(id as u32);
+        !matches!(op, ir::Op::Alu(..))
+            || m.prec_of(v) != ir::Prec::High
+            || (0..width_of(m, v)).all(|i| highp_tree32(m, ir::Src::id(v), i, 0).is_some())
+    })
+}
+
 /// `a` of two constant lanes at fp32, the result rounded once to fp16
 /// ([`round16`]): a lone product or sum the GLSL front end folds. An
 /// operand or result that is not zero or a normal float is refused.
@@ -5264,6 +5355,8 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
      * in a highp tree, where Mesa reads it at fp32: no reference */
     let copies = highp_locals_copy(m, &prec, vals, &|v| f.hp32(v, 0))?;
     f.mixed |= !copies || (f.fc_copy && f.frag16.is_some());
+    /* a global highp `const` whose highp operations GLSL folds whole */
+    f.mixed |= prec.highp_consts && !highp_consts_fold(m);
     f.ir_vals = vals;
     f.mark_live();
     bcsel_const_ops(&mut f);
@@ -7090,6 +7183,22 @@ fn walk_nodes(
                     let x = f.add_sub_cancel(lane(vals, s[0], i), lane(vals, s[1], i));
                     *o = x.ok_or(MaliError::Defect(Defect::IrIndex))?;
                 }
+            }
+            /* an operation on highp constants in a mediump shader (a
+             * quotient, a sum, a product): GLSL folds the tree at fp32,
+             * and the mediump value that takes it rounds once to fp16
+             * ([`highp_const16`]; deqp_vsconst_fsdiv_highp_mat2/_mat3, the FAU words
+             * `4100bccd 3c003800` and `b639bcab 3c003db7`;
+             * deqp_mixprec2_hp_mat2_add's `in0 + in1`). Only in a shader
+             * that declares a global `const highp`: a mediump shader's
+             * constant initializers are highp in the IR too, and the
+             * front end's expansion of a built-in on them (`atan`) is
+             * not what GLSL folds (libm, step B of
+             * docs/notes/mali-deqp-cfold2.md) */
+            ir::Op::Alu(AluOp::Frcp | AluOp::Fmul | AluOp::Fadd | AluOp::Fneg, _)
+                if !prec.highp && prec.highp_consts && highp_const16(m, id.0).is_some() =>
+            {
+                out = highp_const16(m, id.0).ok_or(MaliError::Defect(Defect::IrIndex))?;
             }
             /* a built-in call on constants in a mediump shader (`normalize`,
              * `length`, `dot`, `distance` of a `const` or a literal):
