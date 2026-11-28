@@ -7533,6 +7533,32 @@ fn walk_nodes(
                                 }
                             }
                         }
+                        /* the same of `fadd(fmul(a, 1.0), fmul(a, #c))` where
+                         * the walk folded the unit product to `a` (or a sum
+                         * of it and zero products, [`unit_product`]): the
+                         * lane is `fmul(a, 1.0 + c)` (deqp_opform_matmul_const's
+                         * `res[0] + res[1] + res[2]` of `mat3(1.0, 0.0, 0.0,
+                         * 0.0, 1.0, 0.0, 0.2, -0.3, 1.0) * v`: `FMA.v2f16 r1,
+                         * r0.h00, u2.w0, 0x0.neg` by `0x399a3ccd`, 1.2 and
+                         * 0.7) */
+                        if a == AluOp::Fadd {
+                            for k in 0..2 {
+                                let other = [x, y][1 - k];
+                                let me = [x, y][k];
+                                if !matches!(me, Val::Lane(..)) || f.prod_of(other) != Some(me) {
+                                    continue;
+                                }
+                                if unit_product(f, m, vals, s[k], i, 0) == Some(me) {
+                                    let z = f.node(Alu::Fmul, [me, Val::Const(F32_ONE), Val::Undef], at)?;
+                                    if k == 0 {
+                                        x = z;
+                                    } else {
+                                        y = z;
+                                    }
+                                    rule = Rule::None;
+                                }
+                            }
+                        }
                         out[i] = f.op(a, x, y, at, rule, Some(vec_neg))?;
                         if split && f.nsplit < f.split.len() {
                             f.split[f.nsplit] = out[i];
@@ -9311,6 +9337,53 @@ fn zero_product(f: &Fs<'_>, m: &Module<'_>, vals: &[[Val; 4]], s: ir::Src, i: us
         ir::Op::Alu(AluOp::Fadd, zs) => {
             let p = zero_product(f, m, vals, zs[0], c, depth + 1)?;
             (zero_product(f, m, vals, zs[1], c, depth + 1)? == p).then_some(p)
+        }
+        _ => None,
+    }
+}
+
+/// Lane `i` of IR source `s` is a value the walk folded from its product
+/// with 1.0, or from a sum of that product and [`zero_product`]s of the
+/// same value: Some(the value), the `a` of `fmul(a, 1.0)` that the link's
+/// vector factoring still sees (as [`zero_product`]).
+fn unit_product(f: &Fs<'_>, m: &Module<'_>, vals: &[[Val; 4]], s: ir::Src, i: usize, depth: u8) -> Option<Val> {
+    let c = s.swizzle[i] as usize & 3;
+    let at = |s: ir::Src, c: usize| vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[c] as usize & 3]);
+    if depth > 8 {
+        return None;
+    }
+    match m.def(s.val)? {
+        /* a local's lane: the last whole store before the read, in a body
+         * without control flow ([`zero_product`]) */
+        ir::Op::LoadLocal { local, index: None, .. } => {
+            if m.nodes.iter().any(|nd| matches!(nd, Node::If { .. } | Node::Loop { .. })) {
+                return None;
+            }
+            let st = (0..s.val.0 as usize).rev().find_map(|j| match m.instrs[j] {
+                ir::Op::StoreLocal { local: l, index, src, write_mask } if l == *local => {
+                    Some((index, src, write_mask))
+                }
+                _ => None,
+            })?;
+            let (None, src, mask) = st else { return None };
+            if mask >> c & 1 == 0 {
+                return None;
+            }
+            let mut sw = [0u8; 4];
+            sw[0] = src.swizzle[c];
+            unit_product(f, m, vals, ir::Src { val: src.val, swizzle: sw }, 0, depth + 1)
+        }
+        ir::Op::Alu(AluOp::Fmul, zs) => match (at(zs[0], c), at(zs[1], c)) {
+            (Val::Const(F32_ONE), p) | (p, Val::Const(F32_ONE)) if matches!(p, Val::Lane(..)) => Some(p),
+            _ => None,
+        },
+        ir::Op::Alu(AluOp::Fadd, zs) => {
+            let unit = |k: usize| unit_product(f, m, vals, zs[k], c, depth + 1);
+            let zero = |k: usize| zero_product(f, m, vals, zs[k], c, depth + 1);
+            match (unit(0), zero(1), zero(0), unit(1)) {
+                (Some(p), Some(q), ..) | (.., Some(q), Some(p)) if p == q => Some(p),
+                _ => None,
+            }
         }
         _ => None,
     }
@@ -12537,9 +12610,6 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     for r in roots {
         pr.note(r, Place::Output, &mut f.prods);
     }
-    /* a uniform half in both lanes of an output word (`MOV.i32` takes no
-     * half swizzle; no reference draws the form Mesa makes of it) */
-    let splat = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::Uniform { swz: Swz::H00 | Swz::H11, .. }));
     /* a matrix column's pair across two slots ([`vectorise`]'s cross-slot
      * [`Leaf::Lanes`]) first in a sum, and the sum read second: drawn with
      * that pair alone (deqp_constop_matrix_preinc_mediump_mat3_fs:
@@ -12592,7 +12662,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             .filter(|n| mk_first(n))
             .all(|n| matches!(*n, P::Op(Alu::Fmin | Alu::Fmax, [x, ..]) if packed(x)));
     let admitted = if minmax_pack { admitted | prod(Form::Mk, Place::AbsSrc) } else { admitted };
-    if f.prods & !admitted != 0 || roots.iter().any(|&r| splat(r)) {
+    if f.prods & !admitted != 0 {
         return Err(MaliError::FsOperandForm);
     }
     /* a look-up's word swapped is an output word: an operation reading it
@@ -13308,6 +13378,14 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
             }
             P::Leaf(Leaf::Const(c)) => Src::of(Idx::Const(c)),
+            /* a uniform's half in both lanes of the word: `MKVEC.v2i16
+             * u.hN, u.hN`, which opt.rs `lower_mkvec_swz` makes
+             * `IADD.v2u16 r1, u2.w0.h00, 0x0` (deqp_opform_rnd_splat18's
+             * `vec4(c, c, b, 0.0)`) */
+            P::Leaf(Leaf::Uniform { swz: swz @ (Swz::H00 | Swz::H11), .. }) => {
+                let w = operand(&pr, roots[k], &lv, &val)?.swz(swz);
+                Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &[w, w])?)
+            }
             P::Leaf(Leaf::WideInt { .. }) => val[roots[k] as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
             /* the look-up's word swapped: `MKVEC.v2i16 w.h1, w.h0`, which
              * opt.rs `lower_mkvec_swz` makes `IADD.v2u16 r0, r0^.h10, 0x0`

@@ -402,3 +402,29 @@ Byte-equal now: `deqp_opform_min_vec3`, `deqp_opform_clamp_vec3_float`,
 `deqp_highpfs_pt_clamp_vec3`, `deqp_highpfs_pt_min_vec3`,
 `deqp_highpfs_pt_min_vec3_float`. `--lib mali::` and every
 `tests/mali_*.rs`: 1,410 passed, 0 failed.
+
+### O8 (classes SC and SO; CN not landed)
+
+- **SC, `matmul_const`.** The class's name (a splat as an FMA's addend)
+  described our words, not Mesa's. `res[0] + res[1] + res[2]` of `mat3(1.0,
+  0.0, 0.0, 0.0, 1.0, 0.0, 0.2, -0.3, 1.0) * v` is, at the link,
+  `fadd(fadd(fmul(v, 1.0), fmul(v, 0.0)), fmul(v, 0.2))`: the factoring
+  (`nir_opt_algebraic.py:246`) runs on the inner sum first and then on the
+  outer one, so the lane is `fmul(v, 1.2)` (`FMA.v2f16 r1, r0.h00, u2.w0,
+  0x0.neg` by `0x399a3ccd`, 1.2 and 0.7). The walk had folded the inner
+  sum to `v` and so made `v * 0.2 + v`. `unit_product` (the sibling of
+  `zero_product`) finds a value folded from its product with 1.0 in the
+  IR, and the sum arm gives the factoring that product back. No gate
+  change.
+- **SO, `rnd_splat18`.** A uniform's half in both lanes of an output word
+  is `MKVEC.v2i16 u.hN, u.hN`, which `opt.rs` `lower_mkvec_swz` already
+  makes `IADD.v2u16 r1, u2.w0.h00, 0x0`. The gate's `splat` refusal is
+  gone.
+- **CN, `rnd_constneg85`: not landed**, still refused (`Const@NegSrc`,
+  `Op@AddB`). With the gate off it compiles to 21 words against Mesa's
+  19: Mesa has `i - vec4(-8.0, 4.0, d, 7.5)` as `FADD.v2f16 r0, u2.w1,
+  r0^.neg` (the constant word first, the lane pair a negated source),
+  ours a product and two `FADD_IMM`; the loads' order differs too.
+
+Byte-equal now: `deqp_opform_matmul_const`, `deqp_opform_rnd_splat18`.
+`--lib mali::` and every `tests/mali_*.rs`: 1,412 passed, 0 failed.

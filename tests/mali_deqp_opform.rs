@@ -39,7 +39,20 @@ mod mali_ref;
 /// lane each, two that share an aligned pair are one operation of two
 /// lanes, and the bound may be a varying's lane in both halves (nir_fs.rs
 /// `split_minmax`, `mates`, `mated_apart`).
-const LOWERED: &[&str] = &["matadd_uniform", "matsub_uniform", "mul_float_vec4", "min_vec3", "clamp_vec3_float"];
+/// `matmul_const` and `rnd_splat18` since the same item (opform O8, classes
+/// SC and SO): a sum of a value the walk folded from its product with 1.0
+/// and its product with a constant is the link's factored product
+/// (nir_fs.rs `unit_product`), and a uniform's half in both lanes of an
+/// output word is one `IADD.v2u16`.
+const LOWERED: &[&str] = &[
+    "matadd_uniform",
+    "matsub_uniform",
+    "mul_float_vec4",
+    "min_vec3",
+    "clamp_vec3_float",
+    "matmul_const",
+    "rnd_splat18",
+];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -47,12 +60,10 @@ const DIFFERS: &[&str] = &[];
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("conv_vec3", TEXT_OPERAND),
-    ("matmul_const", TEXT_OPERAND),
     ("matneg_mat3", TEXT_OPERAND),
     ("ret_dynamic", TEXT_OPERAND),
     ("ret_never", TEXT_OPERAND),
     ("rnd_constneg85", TEXT_OPERAND),
-    ("rnd_splat18", TEXT_OPERAND),
 ];
 
 const TEXT_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
@@ -99,7 +110,6 @@ fn matadd_uniform() {
 /// `in0 * v_coords` of a `const mediump mat3`: a lane splat as a fused
 /// multiply-add's addend (class SC).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn matmul_const() {
     mali_ref::assert_matches("deqp_opform_matmul_const");
 }
@@ -159,7 +169,6 @@ fn rnd_constneg85() {
 /// random.basic_expression.fragment.18: `vec4(c, c, b, 0.0)`, a uniform's
 /// half in both lanes of an output word (class SO).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn rnd_splat18() {
     mali_ref::assert_matches("deqp_opform_rnd_splat18");
 }
