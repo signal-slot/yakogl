@@ -975,6 +975,10 @@ void *gl_test_v3d_osal_arg(void);
 #define GL_TEST_PVR 1
 #include "pvr/pvr_backend.h"   /* PowerVR options and debug hooks */
 #include "pvr_render.h"
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+/* driver/src/pvr_drv.h, only under the HWPerf knob; case 216 drains it */
+extern int pvr_fw_hwperf_drain(void);
+#endif
 #endif
 #include "osal_internal.h"
 /* The library's test knobs (the crate's `test-knobs` feature): a Zephyr
@@ -20580,6 +20584,12 @@ static int case_mipchains(void)
 
 	/* the frames: terrain, bloom, overlay, tilt-shift, the window */
 	glFinish();
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+	/* HWPerf (docs/notes/pvr-hwperf.md): this call only moves the drain's
+	 * start mark; the block between the markers is the measured frames */
+	pr_info("pvr-hwperf-case216: begin\n");
+	(void)pvr_fw_hwperf_drain();
+#endif
 	seq0 = gl_test_kicks_done();
 	rp0 = gl_test_reposts();
 	rt0 = gl_test_reposts_total();
@@ -20601,6 +20611,11 @@ static int case_mipchains(void)
 	seq1 = gl_test_kicks_done();
 	rp1 = gl_test_reposts();
 	rt1 = gl_test_reposts_total();
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+	/* outside the timed span (t1 is read): the packets of the frames above */
+	(void)pvr_fw_hwperf_drain();
+	pr_info("pvr-hwperf-case216: end\n");
+#endif
 	/* check 3 */
 	ok &= expect_u32("mipchains: error after the frames", glGetError(), GL_NO_ERROR);
 	{
