@@ -447,3 +447,37 @@ one place:
 
 Byte-equal now: `deqp_opform_matneg_mat3`. `--lib mali::` and every
 `tests/mali_*.rs`: 1,413 passed, 0 failed.
+
+### Not landed in `mali-train-3c`
+
+Their references stay in `REFUSED` with the operand-form text.
+
+- **O5 (class BM, `conv_vec3`)**, site `lane_tree`'s `B2f` arm. Mesa's
+  29 words hold three things the pair graph does not build: `bool(v)` as
+  `FCMP_OR.v2f16.ne.f1` paired with a raw lane by `MKVEC`; `int(v *
+  1.0025)` as `F16_TO_F32`, `FROUND.f32.rtz`, `FADD.f32 r1.h0` (an fp32
+  island inside an fp16 tree); and the `all()` of the two compare words as
+  two `LSHIFT_AND.v2i16` before one `MUX.v2i16`. Each is a new node kind
+  of the graph, not an admission.
+- **O7 (class IF, `ret_dynamic`)**, site `cmp_node`. Mesa selects the
+  varying's fp32 words (`CSEL.u32.eq` three times on `S16_TO_S32` of the
+  16-bit compare) and narrows after; our flattened `if` selects fp16
+  lanes (`MUX.v2i16`). Letting `cmp_node` take a computed operand would
+  compile other words than Mesa's. The compare itself is `x < -y` with
+  the arms swapped (`FCMP_OR.v2f16.lt.m1 r4, r4^.h00, r4^.neg.h11`).
+- **O8's class CN (`rnd_constneg85`)**: above.
+- **O3's class HO (`ret_never`)** is train 3a's and was not touched.
+
+`FsVaryingLoad` (`varyload-lower-1`): `deqp_varyload_tex110` became
+byte-equal through mixprec2 M2-1 (its refused conversions were in
+overwritten stores). The other seven `deqp_varyload_*` stay refused, at
+three sites of `nir_fs.rs` (probed at this item's tip):
+
+| site | references | what it refuses |
+|---|---|---|
+| `conversion_order`, `bases.count_ones() > 1` | `rnd57`, `cond36`, `basic33`, `basic8` | two or three float varyings packed in one slot, each converted by a tree: every varying has its own `f2fmp` at its own place |
+| `conversion_order`, `!same` | `rnd31`, `cond19` | a pair Mesa converts with its odd lane low (`V2F32_TO_V2F16 r0, r1^, r0^`) |
+| `whole_load` (`unsure && !all_read`) | `swz41` | a varying's lanes beside values of no measured kind |
+
+No step was written for them: the first two need `conversion_order` to
+place each packed varying's conversions, which no note designs yet.

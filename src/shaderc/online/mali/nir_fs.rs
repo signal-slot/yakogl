@@ -5086,7 +5086,7 @@ impl<'s> Fs<'s> {
 /// `in0 + vec4(in1)`, the sequence's first operand; deqp_mixcol_f2i_dead's
 /// `int d = int(e) - int(i)`, never read).
 fn ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliError> {
-    Ok(super::fragment_live(m, scratch, true, |_| false)?)
+    super::fragment_live(m, scratch, true, |_| false)
 }
 
 pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Result<Fs<'s>, MaliError> {
