@@ -2477,6 +2477,14 @@ pub(super) fn texture_of(
     Ok(sampled(t, &f, level))
 }
 
+/// [`texture_of`] for a host test of `tests/`: on the host `mali_draw`
+/// returns `-ENODEV` before it builds any texture, so a test that wants the
+/// descriptor's levels asks for one binding here.
+#[cfg(feature = "host-test")]
+pub fn host_texture_of(bind: &backend::GlesTextureBind, data: &mut Pool) -> Result<frame::SampledTexture, FrameError> {
+    texture_of(Some(bind), data)
+}
+
 /// GL's wrap mode as the sampler's.
 fn wrap_of(w: backend::GlesWrap) -> WrapMode {
     match w {

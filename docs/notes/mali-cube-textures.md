@@ -310,13 +310,14 @@ the level pitch, `bytes` the stack
 (`src/gl/draw.rs:3795-3830`, `src/backend.rs:764-792`). So the face height is
 `height / layers`. The alternative, `native_layered_textures: true` (the
 GC7000's: `height` is a face's), also changes `npot_mip_chains`
-(`src/gl/texture.rs:1036-1038`) and the 3D layout (`src/gl/texture.rs:1240`),
-so non-power-of-two chains would start to exist for the Mali and meet
-`NOT_BUILT_TEXTURE_NPOT_CHAIN`. **Recommendation: keep `false`** and divide by
-`layers` in `level_at`; flipping it is a separate decision. A
-non-power-of-two cube keeps one level on the Mali today (the core's rule for
-`layers > 1` with `mip_level_align != 0`), which the descriptor's `levels` must
-follow (`levels_of`).
+(`src/gl/texture.rs`) and the 3D layout (`src/gl/texture.rs:1240`),
+so non-power-of-two cube and array chains would start to exist for the Mali
+and meet `NOT_BUILT_TEXTURE_NPOT_CHAIN`. **Recommendation: keep `false`** and
+divide by `layers` in `level_at`; flipping it is a separate decision. A
+non-power-of-two cube keeps one level on the Mali today (`npot_mip_chains` is
+false for `layers > 1` on a back end that does not walk layers), which the
+descriptor's `levels` must follow (`levels_of`). A single non-power-of-two 2D
+image does hold its whole chain (docs/notes/mali-npot-mip.md).
 
 The vertex stage's textures are in `GlesDraw::vs_textures`
 (`src/gl/draw.rs:3810-3814`); `tex-vs` makes the vertex resource table's
