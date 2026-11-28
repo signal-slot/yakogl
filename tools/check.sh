@@ -2575,6 +2575,8 @@ step "test    $V3D_CONFIG (tests/es3_msaa_gl_query.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_query
 step "test    $V3D_CONFIG (tests/es3_msaa_gl_rect.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_rect
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_shared.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_shared
 step "test    $V3D_CONFIG (tests/es3_msaa_gl_srgb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_srgb
 step "test    $V3D_CONFIG (tests/es3_msaa_gl_state.rs)" \
