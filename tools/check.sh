@@ -2953,9 +2953,10 @@ step "run     mali corpus_diff self-test (four committed programs, no Mesa)" mal
 # Plan #367's glmark2 compile pins: each file compiles reductions of glmark2's
 # shader shapes (Mesa 26.2.1 references where the record has one) and pins the
 # program or the refusal. Feature sets are those of each file's header.
-step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
+step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle,glmark2_cfl_draw}.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
-    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
+    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle \
+    --test mali_glmark2_cfl_draw
 step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
     --test mali_zs_sharing --test mali_vcube_magswitch
