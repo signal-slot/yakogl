@@ -17,12 +17,24 @@ the TSV came from; merge.py's board_of() tells the board of each. When one is an
 (three-word records, begun '-' allowed; `board.sh x2` lines; a README naming the Armadillo-X2) every draft says
 `measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2` and names the 8-hex commit and
 the slice directories as the records. Without --slices, or with Verdin slices only, the text is unchanged.
-Nothing but the TSV's case names, entry ids and outcomes is printed (no address, no path).
+A hang, abort or WDOG1 cause id (gc-gpu-hang-*, gc-wdog1-*, gc-abort-*; "event" ids) is drafted as an event
+issue: its title says hang/abort/WDOG1 reset, the body names the cause id, every glob of the id, the table
+entries (from the cases, or "see the slice README" when none), the Vivante back-end area (the src/ or driver/
+path in the cause's title, else src/vivante and driver) and a 'Record: <slice record> at <commit>' placeholder
+line. --events also drafts every event id of --causes that has no case in the TSV (a hang gets no result, so
+the compare may not list it). Nothing but the TSV's case names, entry ids and outcomes is printed
+(no address, no path).
 """
 import argparse
 import importlib.util
 import os
+import re
 import sys
+
+EVENT_RE = re.compile(r"^gc-(gpu-)?(hang|wdog1|abort)-")
+KIND = {"hang": "GPU hang", "wdog1": "WDOG1 reset", "abort": "abort"}
+ENTRIES_RE = re.compile(r"entr(?:y|ies) (\d+(?:-\d+)?)")
+AREA_RE = re.compile(r"((?:src|driver)/[\w./-]*\w)")
 
 
 def load_board_of(here):
@@ -41,6 +53,7 @@ def main():
     ap.add_argument("--examples", type=int, default=5)
     ap.add_argument("--verdict", default="board-only")
     ap.add_argument("--strict", action="store_true", help="exit 1 if a no-record/unexplained cause has cases")
+    ap.add_argument("--events", action="store_true", help="also draft event ids of --causes without cases")
     ap.add_argument("--slices", nargs="+", default=[], metavar="DIR", help="slice directories the TSV came from")
     a = ap.parse_args()
 
@@ -56,12 +69,14 @@ def main():
         return 2
 
     titles = {}
+    globs = {}
     try:
         with open(a.causes, encoding="utf-8") as f:
             for ln in f:
                 p = ln.rstrip("\n").split("\t")
                 if len(p) >= 3 and p[0] and not p[0].startswith("#"):
-                    titles[p[0]] = p[2]
+                    titles.setdefault(p[0], p[2])
+                    globs.setdefault(p[0], []).append(p[1])
     except OSError as e:
         print("imx8mp-gles3-issues: cannot read causes: %s" % e.strerror, file=sys.stderr)
         return 2
@@ -93,9 +108,44 @@ def main():
               % (c, len(groups[c])), file=sys.stderr)
 
     commit = a.commit or "not given"
+    if a.events:
+        for c in titles:
+            if EVENT_RE.match(c):
+                groups.setdefault(c, [])
     order = sorted(groups, key=lambda c: (-len(groups[c]), c))
     for cause in order:
         rows = groups[cause]
+        if EVENT_RE.match(cause):
+            kind = KIND[EVENT_RE.match(cause).group(2)]
+            ents = sorted({r[0] for r in rows}, key=eidx)
+            area = sorted(set(AREA_RE.findall(titles.get(cause, "")))) or ["src/vivante", "driver"]
+            print("## GC7000UL: %s (cause %s)" % (titles.get(cause, cause).split(" (")[0], cause))
+            print()
+            print("- Cause id: %s" % cause)
+            print("- Kind: %s" % kind)
+            print("- Cause: %s" % titles.get(cause, cause))
+            print("- Glob: %s" % ", ".join("`%s`" % g for g in globs.get(cause, [])))
+            if not ents:
+                m = ENTRIES_RE.search(titles.get(cause, ""))
+                ents = [m.group(1)] if m else []
+            print("- Table entries: %s" % (", ".join(ents) if ents else "see the slice README (markers)"))
+            print("- Vivante back-end area: %s" % ", ".join(area))
+            print("- Cases: %d" % len(rows))
+            if a.examples > 0 and rows:
+                print("- Examples:")
+                for e, o, c in sorted(rows, key=lambda r: (eidx(r[0]), r[2]))[:a.examples]:
+                    print("  - `%s` (%s, %s)" % (c, e, o))
+            if x2:
+                print("- Board: measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2")
+                print("- Campaign commit: %s" % commit[:8])
+                print("- Records: %s" % records)
+            else:
+                print("- Campaign commit: %s" % commit)
+            print("- Record: <slice record> at <commit>")
+            print("- Reproduce: docs/es3/board-recipe-imx8mp.md ('Running a GLES3 slice session'), "
+                  "the table entries above; last case from the console scan")
+            print()
+            continue
         title = titles.get(cause, "unclassified failures" if cause == "unclassified" else cause)
         ents = sorted({r[0] for r in rows}, key=eidx)
         print("## GC7000UL: %s: %d dEQP-GLES3 cases fail on the board only" % (title, len(rows)))
