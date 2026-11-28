@@ -564,3 +564,38 @@ sha256 values above (images from `02c5c9af`, about 1.5 min a build on that
 machine) once the loader accepts the X2 — the change to
 `driver/tools/kexec-zephyr/**` named in `gc-depth-sample.md`'s session
 section. Until it lands no cell of this table can fill.
+
+### Before and after, one row per scene (measured on the Armadillo-X2 in place of the Verdin iMX8MP)
+
+The summary of the table above: ms a frame from PERF page 0 v0
+(10 000 / v0) and KiB a frame of the counted CPU passes from page 4 v3,
+before and after the depth view with the texture-cache flush became the
+product default (dtpu mode 4, `DEPTH_TPU_DEFAULT` in
+`src/vivante/depth_sample.rs` — outcome (a) plus the flush, the verdict
+code 3 of `gc-depth-sample-wire.md`).
+
+| scene | before ms a frame | after ms a frame | page 4 v3 before, KiB a frame | page 4 v3 after, KiB a frame | origin/main commit | record directory under `records/x2/` |
+|---|---:|---:|---:|---:|---|---|
+| shadow | about 500 (the 2 FPS i.MX8MP record `a917d123`, this note's first section) | **33.1** at the mode 4 default, measured on the Armadillo-X2 in place of the Verdin iMX8MP | pending (the `02c5c9af` record holds no figures) | pending (board run) | before `02c5c9af` (not run), after `bd489c01` | before `20261127-0538-gm-before-shadow-02c5c9af/` (no figures); after: record name pending (image sha256 `9be06df115d785f343d68ec466d0beec376d8d63ef7c2bc0d72ee05ca8aa69de`) |
+| refract | about 500 (the 2 FPS i.MX8MP record `a917d123`) | pending (board run) | pending (the before run was never reached) | pending (board run) | before `02c5c9af` (not run), after pending (board run) | before none (dry run only); after pending (board run) |
+| terrain (control) | 250 to 333 (the 4 FPS reading, "Answer in short" item 1) | pending (board run) | pending (the before run was never reached) | pending (board run) | before `02c5c9af` (not run), after pending (board run) | before none (dry run only); after pending (board run) |
+
+The before ms a frame are this note's own i.MX8MP record figures (2 FPS
+for shadow and refract at `a917d123`; 4 FPS for terrain), not X2
+readings: the 2026-11-27 X2 before session produced none, its jump was
+refused (above). The one after figure is the shadow run at `bd489c01`
+with the mode 4 default.
+
+**Host prediction for page 4 v3.** The v3 counter now holds the CPU
+depth resolve's bytes (`count_resolve_bytes(w * h * 4)` in
+`src/vivante/ds_cache.rs`, on top of the CPU mipmap filter and the CPU
+tiled copy): about 7,500 KiB a frame in mode 0 for shadow and refract —
+it scales with `w*h*4` (1600x1200 at 4 bytes: 7,500 KiB) — and 0 in mode
+4, and 0 for terrain in every mode. A nonzero v3 in mode 4 means a CPU
+resolve still runs: an exact-depth reader, a refused view, or the
+`gc_tiled_rt` path.
+
+**Host harness finding.** With `tools/hostharness/glmark2/run.sh`
+(`YAKOGL_GC_DEPTH_TPU=0` against the mode 4 default) the mode 4
+depth-view path engages in shadow and in refract, not in terrain, with
+no GL errors and no refused draws.
