@@ -2908,6 +2908,33 @@ step "test    $MALI_CONFIG (tests/mali_deqp_{loops2,loops3,loops4,misc2,misc3,mi
     --test mali_deqp_vsconst --test mali_deqp_vsloop --test mali_deqp_vsloop2 \
     --test mali_deqp_vsmix --test mali_deqp_vsuarr --test mali_deqp_vsuniarr \
     --test mali_deqp_vsuniarr2 --test mali_deqp_vsunif
+# gate-coverage-audit (plan #395; cov-run-mali, cov-run-other): the Mali test
+# files no row above ran. Each passes with its header's feature set; the three
+# that failed in cov-run-mali are not here (mali_deqp_boolpix and
+# mali_deqp_constrnd run above; mali_locals fails and has no row). The files
+# mali_depth_texture, mali_shadow_pass and mali_vs_cube_edge_gl also have ES 2.0
+# cases, which need `report-es2`.
+step "test    $MALI_CONFIG (tests/mali_*.rs and es3_*_mali.rs not run above: 40 files)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test es3_blit_ds_layers_mali --test es3_blit_ds_mali \
+    --test es3_blit_ds_window_mali --test es3_depth_image_switch_mali \
+    --test mali_3d_levels --test mali_attr_inactive_loc \
+    --test mali_attr_records_gl --test mali_bool_and --test mali_bool_uniform \
+    --test mali_const_fold --test mali_depth_texture --test mali_depthonly_gl \
+    --test mali_depthtex_gl --test mali_deqp_highpfs --test mali_deqp_kfold \
+    --test mali_deqp_t3gap --test mali_effect2d_tex --test mali_fragcoord16 \
+    --test mali_fs_operand --test mali_glmark2_corpus \
+    --test mali_glmark2_scene_draw --test mali_ideas --test mali_int_loops \
+    --test mali_libm_fold --test mali_link_varying_offsets --test mali_mploop \
+    --test mali_nonfinite_const --test mali_npot_mip_gl \
+    --test mali_shadow_pass --test mali_tex_multi --test mali_tex_vertex \
+    --test mali_texcoord_425b --test mali_texcoord_lane --test mali_vs_arith \
+    --test mali_vs_cube_edge --test mali_vs_cube_edge_gl --test mali_vs_fma \
+    --test mali_vs_tex2d_cube --test mali_vs_tex2d_cube_gl \
+    --test mali_vsmin_compile
+step "test    $MALI_CONFIG,report-es2 (tests/mali_{depth_texture,shadow_pass,vs_cube_edge_gl}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
+    --test mali_depth_texture --test mali_shadow_pass --test mali_vs_cube_edge_gl
 # The corpus differential (tools/mali/corpus_diff.py, issue #11252): our side,
 # tests/mali_corpus_diff.rs, checks itself on committed references; then the
 # tool's self-test without Mesa or the CTS: the pairing of single shaders and
