@@ -486,3 +486,76 @@ fn resolve_a_4x_fbo_into_a_1x_window() {
     assert!(PENDING.lock().unwrap().is_empty(), "the blit waited for the 4x job");
     assert!(read(0).iter().all(|p| *p == RESOLVED), "the resolved colour, every pixel");
 }
+
+/// A 4x FBO into a 1x window is a resolve: a moved rectangle is
+/// GL_INVALID_OPERATION as well, and a failed blit copies nothing.
+#[test]
+fn resolve_a_4x_fbo_into_a_1x_window_with_another_rectangle() {
+    let _g = context_ms4();
+    let _w = Window::new(1);
+    let src = drawn_4x();
+    assert_eq!(blit(src.fb, 0, [0, 0, 4, 4], [4, 4, 8, 8]), GL_INVALID_OPERATION, "moved");
+    assert_eq!(blit(src.fb, 0, [0, 0, 4, 4], [0, 0, 8, 8]), GL_INVALID_OPERATION, "enlarged");
+    assert!(window_pixels().iter().all(|p| *p == [0; 4]), "nothing copied");
+}
+
+/// 4.3.3: a resolve needs the same format on both sides: a 4x window
+/// (RGBA8) into a 1x RGB565 FBO is GL_INVALID_OPERATION.
+#[test]
+fn resolve_the_4x_window_into_another_format_is_invalid_operation() {
+    let _g = context_ms4();
+    let _w = Window::new(4);
+    let (mut fb, mut rb) = (0, 0);
+    // SAFETY: plain GL calls; one name each out.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB565, 8, 8);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+    }
+    assert_eq!(blit(0, fb, FULL, FULL), GL_INVALID_OPERATION, "RGBA8 window to RGB565");
+    // SAFETY: names made above.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fb);
+        glDeleteRenderbuffers(1, &rb);
+    }
+}
+
+/// The same cases with the capability off (`max_samples` 0): the window can
+/// still be 4x, and the blit rules about the draw framebuffer's sample
+/// buffers hold; a 1x FBO is a plain copy.
+#[test]
+fn capability_off_for_comparison() {
+    let _g = context_on(&BACKEND);
+    {
+        let _w = Window::new(4);
+        let dst = fbo(0);
+        let src = fbo(0);
+        assert_eq!(blit(src.fb, 0, FULL, FULL), GL_INVALID_OPERATION, "1x FBO to 4x window");
+        assert_eq!(blit(0, 0, FULL, FULL), GL_INVALID_OPERATION, "4x window to itself");
+        assert_eq!(blit(0, dst.fb, FULL, [0, 0, 4, 4]), GL_INVALID_OPERATION, "4x window scaled");
+        assert_eq!(blit(0, dst.fb, [0, 0, 4, 4], [4, 4, 8, 8]), GL_INVALID_OPERATION, "4x window moved");
+        assert_eq!(blit(0, dst.fb, FULL, FULL), GL_NO_ERROR, "4x window resolved into a 1x FBO");
+    }
+    let _w = Window::new(1);
+    let f = fbo(0);
+    window_pixels().fill([5, 6, 7, 8]);
+    assert_eq!(blit(0, f.fb, FULL, FULL), GL_NO_ERROR, "1x window to 1x FBO");
+    assert_eq!(blit(f.fb, 0, FULL, FULL), GL_NO_ERROR, "1x FBO to 1x window");
+    /* without the capability a multisample renderbuffer is refused */
+    let mut rb = 0;
+    // SAFETY: plain GL calls.
+    unsafe {
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        while glGetError() != GL_NO_ERROR {}
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, 8, 8);
+    }
+    assert_eq!(err(), GL_INVALID_OPERATION, "no 4x FBO without the capability");
+    // SAFETY: plain GL call.
+    unsafe { glDeleteRenderbuffers(1, &rb) };
+}
