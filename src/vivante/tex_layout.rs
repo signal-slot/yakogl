@@ -145,6 +145,8 @@ pub enum Error {
     TsLinear,
     /// The sampler TS reads level 0 only.
     TsMipped,
+    /// [`tiled_chain`] was given a linear layout.
+    NotTiled,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -269,6 +271,108 @@ pub const fn tex_words(i: &Input) -> Result<Words, Error> {
     }
     w.size = at;
     Ok(w)
+}
+
+/// One level of a [`Chain`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChainLevel {
+    /// The level's size in texels (`max(1, side >> level)`).
+    pub width: u32,
+    pub height: u32,
+    /// Byte offset of the level from the chain's `base` ([`Words::level_offset`]).
+    pub offset: u64,
+    /// Row pitch of the padded level in bytes ([`Words::level_stride`]), the
+    /// `stride` that [`crate::vivante::layout::offset`] takes.
+    pub stride: u32,
+    /// Bytes the padded level spans: `stride` times the padded height.
+    pub bytes: u64,
+}
+
+/// A tiled mipmap chain (W11b, docs/notes/gc-tiled-wire.md): the sampler
+/// words of [`tex_words`] and, per level, its size and placement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Chain {
+    pub layout: Layout,
+    pub bpp: u32,
+    pub levels: u32,
+    pub words: Words,
+    /// Levels `0..levels`; the rest are zero.
+    pub level: [ChainLevel; MAX_LEVELS],
+}
+
+/// [`tex_words`] for a TILED or SUPER_TILED chain, with each level's size,
+/// offset, pitch and byte span. A thin wrapper: the offsets and pitches are
+/// `tex_words`'s own; a linear `i` is [`Error::NotTiled`]. **Not wired.**
+pub const fn tiled_chain(i: &Input) -> Result<Chain, Error> {
+    if matches!(i.layout, Layout::Linear) {
+        return Err(Error::NotTiled);
+    }
+    let words = match tex_words(i) {
+        Ok(w) => w,
+        Err(e) => return Err(e),
+    };
+    let zero = ChainLevel { width: 0, height: 0, offset: 0, stride: 0, bytes: 0 };
+    let mut c = Chain { layout: i.layout, bpp: i.bpp, levels: i.levels, words, level: [zero; MAX_LEVELS] };
+    let mut l = 0;
+    while l < i.levels {
+        let height = minify(i.height, l);
+        let stride = words.level_stride[l as usize];
+        c.level[l as usize] = ChainLevel {
+            width: minify(i.width, l),
+            height,
+            offset: words.level_offset[l as usize],
+            stride,
+            bytes: stride as u64 * lay::align_up(height, words.align.height) as u64,
+        };
+        l += 1;
+    }
+    Ok(c)
+}
+
+impl Chain {
+    /// The bytes of `level` inside `chain` (a buffer laid out from `base`).
+    fn span(&self, level: u32) -> (usize, usize) {
+        assert!(level < self.levels, "tex_layout: level {level} outside the chain");
+        let l = &self.level[level as usize];
+        (l.offset as usize, (l.offset + l.bytes) as usize)
+    }
+
+    /// CPU untile of `level`: its texels, read from the chain buffer `chain`
+    /// through [`crate::vivante::layout::offset`] (the default super-tile
+    /// order), into linear `dst` with rows `dst_stride` bytes apart.
+    pub fn untile_level(&self, level: u32, chain: &[u8], dst: &mut [u8], dst_stride: u32) {
+        let (a, b) = self.span(level);
+        let l = &self.level[level as usize];
+        lay::layout_to_linear(
+            self.layout,
+            lay::SUPER_ORDER,
+            dst,
+            dst_stride,
+            &chain[a..b],
+            l.stride,
+            l.width,
+            l.height,
+            self.bpp,
+        );
+    }
+
+    /// The inverse of [`Chain::untile_level`]: linear `src` (rows `src_stride`
+    /// bytes apart) laid into `level` of `chain`; padding bytes keep their value.
+    pub fn tile_level(&self, level: u32, chain: &mut [u8], src: &[u8], src_stride: u32) {
+        let (a, b) = self.span(level);
+        let l = &self.level[level as usize];
+        lay::linear_to_layout(
+            self.layout,
+            lay::SUPER_ORDER,
+            &mut chain[a..b],
+            l.stride,
+            src,
+            src_stride,
+            l.width,
+            l.height,
+            self.bpp,
+        );
+    }
 }
 
 #[cfg(test)]
