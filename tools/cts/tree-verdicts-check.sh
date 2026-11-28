@@ -10,7 +10,10 @@
 # board.sh name them), takes every tools/cts/log/*-<set>-<sha8>* directory
 # (<set> = the tree file's stem minus the board, e.g. am62p-gles3-tree.txt ->
 # am62p-gles3), and for each row finds its verdict line, as board.sh prints
-# it: "board.sh <board> <label> rc=N verdict=<v> ...". When a row has several
+# it: "board.sh <board> <label> rc=N verdict=<v> ...". board.sh labels an
+# unlabelled row img<N>-<TREE_TAG> (tag may be empty) when TREE_IMAGE_DIR is
+# set, N counted over the whole table; when no line has the exact label
+# img<N>, the lines labelled img<N>-<tag> count (img2 never matches img20-x). When a row has several
 # lines (a rerun) the last one in directory-name, then file, order counts.
 # Prints one line per row: "<label> <verdict|missing>", then the leaks
 # (IPv4 addresses, /dev/tty*, /dev/serial* paths in any file of the
@@ -57,20 +60,32 @@ done
 
 status=$(awk '
   FILENAME == ARGV[1] {
-    if ($1 == "board.sh" && !seen[$0]++) { last[$3] = $5; n[$3]++ }
+    if ($1 == "board.sh" && !seen[$0]++) { last[$3] = $5; n[$3]++; seq[$3] = ++c }
     next
   }
   /^# image / { l = $3; sub(/:.*/, "", l); pending = l; next }
   /^#/ || /^[ \t]*$/ { next }
   {
     idx++
-    lab = (pending != "") ? pending : "img" idx
+    explicit = (pending != "")
+    lab = explicit ? pending : "img" idx
     pending = ""
     rows++
     v = last[lab]
+    cnt = n[lab]
+    if (v == "" && !explicit) {
+      # board.sh labels an unlabelled row img<N>-<TREE_TAG> (tag may be empty)
+      pre = lab "-"; best = 0
+      for (k in last) {
+        if (substr(k, 1, length(pre)) == pre) {
+          cnt += n[k]
+          if (seq[k] > best) { best = seq[k]; v = last[k] }
+        }
+      }
+    }
     if (v == "") { v = "missing"; miss++ }
     else { sub(/^verdict=/, "", v); if (v != "done") bad++ }
-    extra = (n[lab] > 1) ? "  (" n[lab] " lines, last counts)" : ""
+    extra = (cnt > 1) ? "  (" cnt " lines, last counts)" : ""
     printf "%s %s%s\n", lab, v, extra
     if (v == "done") ok++
   }
