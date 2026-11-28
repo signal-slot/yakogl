@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Pi 4 dEQP-GLES3 at 625b9f5c, 2026-11-27, S03a3a S03a3b S03a3c S03a4a S03a4b S03a5a S03a5b S03a6a S03a6b S03a6c S03a6d S03a7a S03a7b T14a1 T14aa T14aa1 (16 images): deqp-uart-tally.py --table over the consoles, in the table's order (README.md)
-== mustpass: 967 cases in these records' case filters (41843 outside them, not run, left out); 967 with a result (1075 case lines seen)
+# Pi 4 dEQP-GLES3 at 625b9f5c, 2026-11-27/28, S03a1 S03a2a S03a2b S03a3a S03a3b S03a3c S03a4a S03a4b S03a5a S03a5b S03a6a S03a6b S03a6c S03a6d S03a7a S03a7b T05ca T05cb T05cc T14a1 T14aa T14aa1 T17a1 T17aa T17aaa T17aaaa TF1a1 TF1aa TF1aaa TF1aaaa TF1b1 TF1ba TF1baa TF1baaa TF2a1 TF2aa TF2aaa TF2aaaa TF2b1 TF2ba TF2baa TF2c1 TF2ca TF2caa (44 images): deqp-uart-tally.py --table over the consoles, in the table's order (README.md)
+== mustpass: 1989 cases in these records' case filters (40821 outside them, not run, left out); 1989 with a result (2169 case lines seen)
 group                           pass   fail   n.s.     QW  other   none
-shaders                          896     54      0      0      0      0
-texture                           16      1      0      0      0      0
-TOTAL                            912     55      0      0      0      0
+shaders                         1087     54      0      0      0      0
+texture                           90      1      0      0      0      0
+transform_feedback               757      0      0      0      0      0
+TOTAL                           1934     55      0      0      0      0
 == the totals above are the result lines seen; the image's own counters, beside them:
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 94 cases begun, 94 with a result; deqp: done 94 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 94 cases, P 94 F 0 R 0 N 0 other 0; 94 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 168 cases begun, 168 with a result; deqp: done 168 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 168 cases, P 168 F 0 R 0 N 0 other 0; 168 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 83 cases begun, 83 with a result; deqp: done 83 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 83 cases, P 83 F 0 R 0 N 0 other 0; 83 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 96 cases begun, 96 with a result; deqp: done 96 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 96 cases, P 96 F 0 R 0 N 0 other 0; 96 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 38 cases begun, 38 with a result; deqp: done 38 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 38 cases, P 38 F 0 R 0 N 0 other 0; 38 result lines seen
@@ -20,9 +24,34 @@ TOTAL                            912     55      0      0      0      0
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 135 cases begun, 135 with a result; deqp: done 135 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 135 cases, P 135 F 0 R 0 N 0 other 0; 135 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 96 cases begun, 96 with a result; deqp: done 96 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 96 cases, P 96 F 0 R 0 N 0 other 0; 96 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 102 cases begun, 102 with a result; deqp: done 84 passed, 18 failed, 0 not supported, 0 warnings; 625b9f5c DONE: 102 cases, P 84 F 18 R 0 N 0 other 0; 102 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 625b9f5c DONE: 1 cases, P 0 F 1 R 0 N 0 other 0; 1 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 47 cases begun, 47 with a result; deqp: done 41 passed, 6 failed, 0 not supported, 0 warnings; 625b9f5c DONE: 47 cases, P 41 F 6 R 0 N 0 other 0; 47 result lines seen
   2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 68 cases begun, 68 with a result; deqp: done 68 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 68 cases, P 68 F 0 R 0 N 0 other 0; 68 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 2 cases begun, 2 with a result; deqp: done 2 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 2 cases, P 2 F 0 R 0 N 0 other 0; 2 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 177 cases begun, 177 with a result; deqp: done 177 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 177 cases, P 177 F 0 R 0 N 0 other 0; 177 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 2 cases begun, 2 with a result; deqp: done 2 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 2 cases, P 2 F 0 R 0 N 0 other 0; 2 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 177 cases begun, 177 with a result; deqp: done 177 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 177 cases, P 177 F 0 R 0 N 0 other 0; 177 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 21 cases begun, 21 with a result; deqp: done 21 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 21 cases, P 21 F 0 R 0 N 0 other 0; 21 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 21 cases begun, 21 with a result; deqp: done 21 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 21 cases, P 21 F 0 R 0 N 0 other 0; 21 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 114 cases begun, 114 with a result; deqp: done 114 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 114 cases, P 114 F 0 R 0 N 0 other 0; 114 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 21 cases begun, 21 with a result; deqp: done 21 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 21 cases, P 21 F 0 R 0 N 0 other 0; 21 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 156 cases begun, 156 with a result; deqp: done 156 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 156 cases, P 156 F 0 R 0 N 0 other 0; 156 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 6 cases begun, 6 with a result; deqp: done 6 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 6 cases, P 6 F 0 R 0 N 0 other 0; 6 result lines seen
+  2026-11-pi4-gles3-625b9f5c-aborts2: deqp: summary 53 cases begun, 53 with a result; deqp: done 53 passed, 0 failed, 0 not supported, 0 warnings; 625b9f5c DONE, all passed: 53 cases, P 53 F 0 R 0 N 0 other 0; 53 result lines seen
 == not Pass, by name
 Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4
 Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x2
