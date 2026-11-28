@@ -25,11 +25,14 @@
 //!
 //! Not drawn (no reference): comparison_ops.fragment.15, swizzle.fragment.{15,36},
 //! conditionals.fragment.75, scalar_conversion.{fragment,combined}.65: the
-//! eight shapes above are the cap. Every reference is refused, so its test is
-//! `#[ignore]`d and [`refusals_pinned`] (running) holds its refusal and
-//! checks that every `deqp_varyload_*` reference on disk is listed. The
-//! lowering that lifts one (plan #402 item `lower-mixprec3`) removes its
-//! `ignore` and moves it from [`REFUSED`] to [`MATCHED`] in the same commit.
+//! eight shapes above are the cap. Since plan #402's `lower-mixprec3`,
+//! `rnd57`, `rnd31`, `basic33`, `cond19` and `tex110` are byte-equal
+//! ([`MATCHED`]); `cond36` and `basic8` compile with other words than
+//! Mesa's ([`DIFFERS`], held by [`differences_pinned`]), `swz41` is refused.
+//! A refused or differing test is `#[ignore]`d and [`refusals_pinned`]
+//! (running) holds its refusal and checks that every `deqp_varyload_*`
+//! reference on disk is listed. The lowering that lifts one removes its
+//! `ignore` and moves it to [`MATCHED`] in the same commit.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_varyload
@@ -39,19 +42,26 @@ mod mali_ref;
 
 const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
-/// The references byte-equal now, their tests running.
-const MATCHED: &[&str] = &[];
+/// The references byte-equal now, their tests running (plan #402's
+/// lower-mixprec3): `rnd57`, `-0.0 * b` folded to `-0.0` before the link
+/// (nir_fs.rs `walk_nodes`); `rnd31`, the pair (b, a) converted with its
+/// odd lane low (`Conversions::swap` in nir_fs.rs); `basic33`, a slot of
+/// two variables converted at their first reader and the dead colour
+/// stores dropped (mod.rs `overwritten_stores`); `cond19` and `tex110`,
+/// overwritten `gl_FragColor` stores dropped, so their varyings are none.
+const MATCHED: &[&str] = &["rnd57", "rnd31", "basic33", "cond19", "tex110"];
+
+/// The references that compile with other words than Mesa's: `cond36`
+/// (Mesa's product at fp32 of lanes the front end folded to constants,
+/// FAU words `ba00ba00, 00008000` against none) and `basic8` (Mesa splits
+/// the z, w pair and fuses each lane alone: 18 fragment words, 19 Mesa's).
+const DIFFERS: &[&str] = &["cond36", "basic8"];
 
 /// Every refused reference with its whole refusal text.
 const REFUSED: &[(&str, &str)] = &[
-    ("rnd57", LOAD),
-    ("rnd31", LOAD),
-    ("cond36", LOAD),
-    ("basic33", LOAD),
-    ("cond19", LOAD),
+    /* the vertex shader's store of `b`, which only an unselected lane of
+     * `vec3(c, b, a).b` reads (proto-varyload) */
     ("swz41", LOAD),
-    ("basic8", LOAD),
-    ("tex110", LOAD),
 ];
 
 #[test]
@@ -65,8 +75,13 @@ fn refusals_pinned() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> =
-        REFUSED.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).map(str::to_string).collect();
+    let mut listed: Vec<String> = REFUSED
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(MATCHED.iter().copied())
+        .chain(DIFFERS.iter().copied())
+        .map(str::to_string)
+        .collect();
     listed.sort();
     assert_eq!(on_disk, listed, "every deqp_varyload_* reference has a test and a pin");
     let changed: Vec<String> = REFUSED
@@ -76,32 +91,38 @@ fn refusals_pinned() {
     assert!(changed.is_empty(), "{}", changed.join("\n"));
 }
 
+/// Each [`DIFFERS`] reference compiles, with other words than Mesa's.
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
+fn differences_pinned() {
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(&format!("deqp_varyload_{name}"));
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; move it to MATCHED");
+    }
+}
+
+#[test]
 fn rnd57() {
     mali_ref::assert_matches("deqp_varyload_rnd57");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
 fn rnd31() {
     mali_ref::assert_matches("deqp_varyload_rnd31");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
+#[ignore = "differs from its reference; pinned by differences_pinned"]
 fn cond36() {
     mali_ref::assert_matches("deqp_varyload_cond36");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
 fn basic33() {
     mali_ref::assert_matches("deqp_varyload_basic33");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
 fn cond19() {
     mali_ref::assert_matches("deqp_varyload_cond19");
 }
@@ -113,13 +134,12 @@ fn swz41() {
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
+#[ignore = "differs from its reference; pinned by differences_pinned"]
 fn basic8() {
     mali_ref::assert_matches("deqp_varyload_basic8");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
 fn tex110() {
     mali_ref::assert_matches("deqp_varyload_tex110");
 }

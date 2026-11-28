@@ -33,6 +33,9 @@ const LOWERED: &[&str] = &[
     "fma_matmul_const_vs",
     "fma_matmul_mat_vs",
     "litfirst_vs",
+    /* since plan #402's lower-mixprec3: its overwritten `gl_FragColor`
+     * stores dropped (mod.rs `overwritten_stores`) */
+    "constchain_fs",
 ];
 
 /// The references that compile with other words than Mesa's: each has an
@@ -61,10 +64,6 @@ const REFUSED: &[(&str, &str)] = &[
     ),
     (
         "constchain_degrees_vs",
-        "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
-    ),
-    (
-        "constchain_fs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
     ),
     (
@@ -167,7 +166,6 @@ fn constchain_degrees_vs() {
 }
 
 #[test]
-#[ignore = "refused: random.comparison_ops.fragment.38 (pinned by refusals_pinned)"]
 fn constchain_fs() {
     mali_ref::assert_matches("deqp_constprod_constchain_fs");
 }

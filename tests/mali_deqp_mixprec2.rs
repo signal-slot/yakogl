@@ -42,8 +42,10 @@ const REFUSED: &[(&str, &str)] = &[
     ("hp_out_param", MIX),
     ("hp_sqrt_vec3", MIX),
     ("rnd_sconv36", MIX),
-    ("rnd_swz4", MIX),
-    ("rnd_tex140", MIX),
+    /* past the mix since plan #402's lower-mixprec3 (overwritten colour
+     * stores dropped) */
+    ("rnd_swz4", "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet"),
+    ("rnd_tex140", "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"),
     ("seq_side", MIX),
     ("struct_nested", MIX),
 ];
