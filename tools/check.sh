@@ -2014,6 +2014,26 @@ tests_row pvr_draw_targets_knob
 step "test    $KNOBS_POWERVR_CONFIG (tests/pvr_draw_targets_knob.rs, every declared test)" \
   knobs_file_tests pvr_draw_targets_knob "$KNOBS_POWERVR_CONFIG"
 
+# The draw-target knob of each GPU that has one, seen through the GL core
+# (plan #368 RC14, docs/notes/mrt4-v3d-pvr.md section 3): the V3D's
+# v3d_debug_set_draw_targets on its own (tests/v3d_draw_targets_knob.rs),
+# and the four-target proofs of the V3D and the PowerVR back ends, which set
+# the count through their GPU's setter (tests/es3_mrt4_v3d.rs,
+# tests/es3_mrt4_pvr.rs). Each file compiles only with test-knobs, so no
+# other row runs it; every #[test] of it must pass (tests_as_declared).
+KNOBS_V3D_CONFIG="host-test,gpu-v3d,shaderc-online,no-shader-table,test-knobs"
+scope v3d
+tests_row v3d_draw_targets_knob
+step "test    $KNOBS_V3D_CONFIG (tests/v3d_draw_targets_knob.rs, every declared test)" \
+  knobs_file_tests v3d_draw_targets_knob "$KNOBS_V3D_CONFIG"
+tests_row es3_mrt4_v3d
+step "test    $KNOBS_V3D_CONFIG (tests/es3_mrt4_v3d.rs, every declared test)" \
+  knobs_file_tests es3_mrt4_v3d "$KNOBS_V3D_CONFIG"
+scope pvr
+tests_row es3_mrt4_pvr
+step "test    $KNOBS_POWERVR_CONFIG (tests/es3_mrt4_pvr.rs, every declared test)" \
+  knobs_file_tests es3_mrt4_pvr "$KNOBS_POWERVR_CONFIG"
+
 # The STM32MP257F's GPU (`vivante-st`, Cargo.toml): the same back end built
 # with ST's GCNANOULTRA31_VIP2 row as `vivante::profile::ACTIVE`. No row
 # above has the feature, so they test the i.MX8MP's build; these lint it,
@@ -4307,6 +4327,11 @@ KNOB_VIVANTE_SYMBOLS="gc_debug_depth_dump gc_debug_depth_tpu gc_debug_flip_exper
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
 gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_set_tiled_sample gc_debug_tiled_rt gc_debug_tiled_sample gc_debug_ts_probe gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_draw_targets pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
+# The V3D's v3d_debug_msaa and v3d_debug_set_msaa are product code (the
+# EGL 4x config switch, src/v3d/backend.rs), in both archives: the row
+# leaves them out (KNOB_V3D_PRODUCT) and requires the rest of the namespace.
+KNOB_V3D_SYMBOLS="v3d_debug_set_draw_targets"
+KNOB_V3D_PRODUCT='^v3d_debug_(set_)?msaa$'
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
   tools/precompile tools/shaders tools/yakogl-tools/src/shc_print.rs)
@@ -4318,7 +4343,7 @@ key_release_archives() {
   key_table build/precompiled/check-gc7000.rs
   declare -f table_symbols mesa_reference_symbols knob_symbols knob_sets dep_info_within release_artifact artifact_dep_info
   declare -f artefact_worker check_no_mesa_reference
-  echo "quick $QUICK; knobs $KNOB_VIVANTE_SYMBOLS / $KNOB_POWERVR_SYMBOLS"
+  echo "quick $QUICK; knobs $KNOB_VIVANTE_SYMBOLS / $KNOB_POWERVR_SYMBOLS / $KNOB_V3D_SYMBOLS (product $KNOB_V3D_PRODUCT)"
 }
 
 # dep_info_within <file.d>: every input cargo's dep-info lists for an archive
@@ -4593,36 +4618,38 @@ step "no Mesa reference in the artefact" check_no_mesa_reference
 # has knobs: the C archive a product image links (yakogl-capi with the
 # Zephyr image's features, the in-process compiler and no table) must define
 # no symbol of its knob namespace -- the GC7000's gc_debug_*, gc_perf_* and
-# gc_kick_diff_*, the PowerVR's pvr_debug_* -- and no gl_test_* symbol (the
-# gl_test runner's, `gl-test-runner`), and the same archive with
-# `test-knobs`, what gl_test links on the i.MX8MP and the AM62P, must define
-# exactly the knobs, which is the control: a pattern that stopped matching
-# would find neither. Exact sets, so a new `#[no_mangle]` switch in the
-# namespace fails here until it is moved behind the feature and listed. The
-# namespace is the contract: a switch outside it is product code and is not
-# this row's (the PowerVR's in-process compiler keeps its pvr_native_* and
-# pvr_proj_* switches in product code and may gain one without touching this
-# row).
-# KNOB_VIVANTE_SYMBOLS, KNOB_POWERVR_SYMBOLS: defined with the release
-# archives' key, above.
-# knob_symbols <features> <awk pattern>: the archive's defined globals that
-# match
+# gc_kick_diff_*, the PowerVR's pvr_debug_*, the V3D's v3d_debug_* -- and no
+# gl_test_* symbol (the gl_test runner's, `gl-test-runner`), and the same
+# archive with `test-knobs`, what gl_test links on the i.MX8MP, the AM62P
+# and the Pi 4, must define exactly the knobs, which is the control: a
+# pattern that stopped matching would find neither. Exact sets, so a new `#[no_mangle]` switch in
+# the namespace fails here until it is moved behind the feature and listed.
+# The namespace is the contract: a switch outside it is product code and is
+# not this row's (the PowerVR's in-process compiler keeps its pvr_native_*
+# and pvr_proj_* switches in product code and may gain one without touching
+# this row). The one exception inside a namespace is named by its pattern
+# (KNOB_V3D_PRODUCT: the V3D's v3d_debug_msaa and v3d_debug_set_msaa).
+# KNOB_VIVANTE_SYMBOLS, KNOB_POWERVR_SYMBOLS, KNOB_V3D_SYMBOLS and
+# KNOB_V3D_PRODUCT: defined with the release archives' key, above.
+# knob_symbols <features> <awk pattern> [<awk pattern left out>]: the
+# archive's defined globals that match the first pattern and not the second
 knob_symbols() {
   local lib
   lib=$(release_artifact yakogl_capi .a -p yakogl-capi --release --no-default-features --features "$1") || return 1
   dep_info_within "$(artifact_dep_info "$lib")" || return 1
   nm --defined-only -g "$lib" 2>/dev/null |
-    awk -v pat="$2" 'NF == 3 && $3 ~ pat { print $3 }' | sort -u
+    awk -v pat="$2" -v skip="${3:-^\$}" 'NF == 3 && $3 ~ pat && $3 !~ skip { print $3 }' | sort -u
 }
 
-# knob_sets <gpu> <awk pattern> <knobs>: the product archive of gpu-<gpu>
-# defines no symbol matching the pattern, and its test-knobs archive exactly
-# <knobs>
+# knob_sets <gpu> <awk pattern> <knobs> [<product switches>]: the product
+# archive of gpu-<gpu> defines no symbol matching the pattern, and its
+# test-knobs archive exactly <knobs>; symbols matching the optional
+# <product switches> pattern are product code and left out of both
 knob_sets() {
-  local gpu="$1" pat="$2" product knobs want_knobs
+  local gpu="$1" pat="$2" skip="${4:-^\$}" product knobs want_knobs
   local base="osal-zephyr,gpu-$gpu,shaderc-online,no-shader-table"
-  product=$(knob_symbols "$base" "$pat") || return 1
-  knobs=$(knob_symbols "$base,test-knobs" "$pat") || return 1
+  product=$(knob_symbols "$base" "$pat" "$skip") || return 1
+  knobs=$(knob_symbols "$base,test-knobs" "$pat" "$skip") || return 1
   want_knobs=$(printf '%s\n' $3 | sort -u)
   if [ "$knobs" != "$want_knobs" ]; then
     echo "$gpu: the test-knobs archive's $pat symbols are not the expected set:"
@@ -4642,9 +4669,10 @@ knob_sets() {
 check_knobs_absent() {
   knob_sets vivante '^(gc_(debug|perf|kick_diff)_|gl_test_)' "$KNOB_VIVANTE_SYMBOLS" || return 1
   knob_sets powervr '^(pvr_debug_|gl_test_)' "$KNOB_POWERVR_SYMBOLS" || return 1
+  knob_sets v3d '^(v3d_debug_|gl_test_)' "$KNOB_V3D_SYMBOLS" "$KNOB_V3D_PRODUCT" || return 1
 }
 
-scope pvr vivante
+scope pvr vivante v3d
 uses w:release
 rowkey key_release_archives
 step "no test knob in the artefact" check_knobs_absent

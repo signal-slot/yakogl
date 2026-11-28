@@ -18,9 +18,10 @@
 //!   end-of-tile program is used;
 //! - (h) `PVR_RENDER_MAX_RT` is 4 in the C header and in its Rust mirror.
 //!
-//! The count is set by `set_draw_targets`, the file's ONE write of the
-//! stand-in `backend::HOST_DRAW_TARGETS`; the `knob` item replaces its body
-//! with `pvr_debug_set_draw_targets(n)` (and adds this file's check.sh row).
+//! The count is set by `set_draw_targets`, the file's ONE write of it,
+//! through the PowerVR's test knob `pvr_debug_set_draw_targets(n)` (the
+//! host stand-in `backend::HOST_DRAW_TARGETS` is left unset); tools/check.sh
+//! runs this file in its test-knobs rows.
 //! The platform is the one of tests/pvr_backend_rt4.rs (host memory, the C
 //! command generators stood in for, the pixel-event generator recording the
 //! pairs it is asked for). Not measurable on the host: what the PBE stores.
@@ -35,7 +36,6 @@
 
 use core::ffi::{c_char, c_void, CStr};
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, Once};
 
 use yakogl::gl::buffer::glBindBuffer;
@@ -520,12 +520,13 @@ static LOCK: Mutex<()> = Mutex::new(());
 static ONCE: Once = Once::new();
 static mut CTX: *mut GlContext = core::ptr::null_mut();
 
-/// THE one write of the draw-target count in this file. It is the stand-in
-/// `backend::HOST_DRAW_TARGETS` today; the `knob` item replaces its body
-/// with `pvr_debug_set_draw_targets(n)`. Call it before the back end is
-/// brought up (`rig` does): `pvr_render_eot_four_rt` is read from it then.
+/// THE one write of the draw-target count in this file: the PowerVR's
+/// test knob `pvr_debug_set_draw_targets(n)` (src/pvr/debug.rs), as the
+/// AM62P images call it. Call it before the back end is brought up (`rig`
+/// does): `pvr_render_eot_four_rt` is read from it then.
 fn set_draw_targets(n: u8) {
-    yakogl::backend::HOST_DRAW_TARGETS.store(n, Ordering::Relaxed);
+    yakogl::pvr::debug::pvr_debug_set_draw_targets(i32::from(n));
+    assert_eq!(yakogl::backend::draw_targets(), usize::from(n));
 }
 
 /// The one context of the file, with `targets` draw targets set (3 or 4) and the back end brought up for it: a change of
