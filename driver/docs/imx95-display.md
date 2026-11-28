@@ -28,11 +28,24 @@ after `FGENABLE` = 0 (e10f44b8); `NotStopped(fgensts: 1)` stayed. The stop
 budget was about two frames (33 ms) where Linux waits up to 1 s. The stop now
 waits up to 1 s (`display::STOP_WAIT_US`, `dpu::wait_stopped` in 100 us
 steps) and reads `FGTIMESTAMP` (frame index 31:14, line index 13:0) when the
-wait starts and ends. The console prints it: on success `FrameGen0 stopped
-after N us (P polls), frame counter A -> B (FGTIMESTAMP 0x... -> 0x...)`; on
-failure `FrameGen0 still running (FGENSTS 1) after N us, P polls: frame
-counter A -> B (K frames; frozen: the pixel clock is dead | moving: the stop
-is slow)`. Not yet run on the board (host-tested only).
+wait starts and ends. At 3dbc4ac9 the down waited for SeqComplete0 in the
+common-control `IRQ_INTERRUPTSTATUS0` (DPU + 0x102C) and timed out on the
+board after 1 s (`SeqTimeout`, that word 0x000d8018: bits 18 and 19, never
+20; record `20261128-0030-triangle-3dbc4ac9`), and it returned before the
+frame counter was read. Since 152eebf4c the down waits where Linux's
+`dpu95_crtc_disable` does: bit 20 of `DISPIRQ0_INTERRUPTSTATUS0` (DPU +
+0x38102C), enabled and cleared in that block, `FGENABLE` = 0 with no `FGSLR`
+token. Both waits of the down (the sequence complete, then `FGENSTS`) read
+`FGTIMESTAMP` when they start and end, and either failure prints three lines
+(`board::verdin_imx95_lvds::log_stop_wait`, each under the 160-byte console
+line): `X12: <no SeqComplete0 | FrameGen0 still running> after N us (P
+polls): FGENABLE e FGENSTS s, DISPIRQ0 INTERRUPTSTATUS0 0x...`, `X12: frame
+counter A -> B (K frames): <frozen: the pixel clock is dead | moving:
+FrameGen0 still runs frames>` and `X12: FGTIMESTAMP 0x... (frame A line L)
+-> 0x... (frame B line M)`. On success: `LVDS down: SeqComplete0 after N us
+(P polls, frame A -> B), FGENSTS stopped`, then `X12: FrameGen0 stopped after
+N us (P polls), frame counter A -> B (FGTIMESTAMP 0x... -> 0x...)`. Not yet
+run on the board (host-tested only).
 
 **The board** (owner, 2026-11-24; this replaces the statement of
 2026-11-21 the X4 work was built on): a Toradex Verdin iMX95 module ("Toradex
@@ -978,4 +991,4 @@ Which result picks which route:
 | U25 | X12: the backlight pads' settings (GPIO_IO06, XSPI1_DATA4): the board devicetree uses TPM6's (FSEL "slightly fast", DSE x4); Linux's pinctrl words for them were not read | `/proc/device-tree` under Linux (the overlay's pinctrl group), or `ml:imx95-verdin.dtsi` |
 | U26 | Half answered on the board (2026-11-27, 70a3f06f): the up line reads `TPM5 at 24000000 Hz` and the camera sees the panel lit, so the clock is AP-NS's to enable and the enable on GPIO5_IO04 rises. Still open, as read: TPM5's SCMI clock (154): AP-NS's permission (Toradex's configuration gives AP-NS the LPTPM5 resource; the clock line was not found in `config_scmi.h` as read) and its rate (24 MHz assumed, as TPM6's); whether GPIO5's registers answer without a clock of ours (Linux drives the enable; our image does not turn any GPIO clock on) | `imx95_lvds_ids` (clock 154's state, rate, permissions); the first cold run (the backlight lights, the enable rises) |
 | U27 | X12: the display CSR's +0x14 (0x1A150A00, a reserved word in the header), `AXCACHE_CONTROL` 0x00330303 and `QOS_SETTING` 0x33 under Linux: written by Linux or reset values? The path writes none of them | `imx95_lvds_ids` reads them after DISPLAY comes on, before any write |
-| U28 | X12: why FrameGen0 does not stop. After `FGENABLE` = 0, `FGENSTS` still reads 1 (`FGCHSTAT` 0x101) when the two-frame wait (about 33 ms) runs out, with the LDB clocks still on (7790a11e's order, on the board 2026-11-27 at 70a3f06f: `display down: -5`, records `20261127-1520-triangle-70a3f06f` and `20261127-1523-gl_test-panel-70a3f06f`). `dpu::stop` wrote `FGENABLE` alone while `FGSTCTRL.SHDEN` is set, so the write may wait in the shadow. Linux writes no token there (`dc_crtc_atomic_disable` in `drivers/gpu/drm/imx/dc/dc-crtc.c` and NXP's `dpu95_crtc_disable`: `FGENABLE` 0, then up to 1 s for the sequence-complete interrupt); the token is ours. `dpu::stop` writes `FGSLR.SHDTOKGEN` after `FGENABLE` = 0 (e10f44b8): the board still read `fgensts 1` with it. The stop now waits up to 1 s as Linux does and reports `FGTIMESTAMP`'s frame index at the start and the end of the wait and the time waited (host-tested, not yet on the board) | the triangle run again: `display down: 0` and the "FrameGen0 stopped after" line, or the failure line's counters: frozen (the pixel clock is dead: look at what stops it, e.g. the LDB PLL or `DSIP_CLK0_SEL`) or moving (the stop is slow: a longer wait or a different latch) |
+| U28 | X12: why FrameGen0 does not stop. After `FGENABLE` = 0, `FGENSTS` still reads 1 (`FGCHSTAT` 0x101) when the two-frame wait (about 33 ms) runs out, with the LDB clocks still on (7790a11e's order, on the board 2026-11-27 at 70a3f06f: `display down: -5`, records `20261127-1520-triangle-70a3f06f` and `20261127-1523-gl_test-panel-70a3f06f`). `dpu::stop` wrote `FGENABLE` alone while `FGSTCTRL.SHDEN` is set, so the write may wait in the shadow. Linux writes no token there (`dc_crtc_atomic_disable` in `drivers/gpu/drm/imx/dc/dc-crtc.c` and NXP's `dpu95_crtc_disable`: `FGENABLE` 0, then up to 1 s for the sequence-complete interrupt); the token is ours. `dpu::stop` writes `FGSLR.SHDTOKGEN` after `FGENABLE` = 0 (e10f44b8): the board still read `fgensts 1` with it. The stop now waits up to 1 s as Linux does and reports `FGTIMESTAMP`'s frame index at the start and the end of the wait and the time waited. At 3dbc4ac9 the sequence-complete wait in the common-control word timed out first (`SeqTimeout`, record `20261128-0030-triangle-3dbc4ac9`) and the counter was never logged; since 152eebf4c that wait is on `DISPIRQ0_INTERRUPTSTATUS0` bit 20 as in Linux, and both failure paths print the frame counter, its verdict, `FGTIMESTAMP` and the raw `DISPIRQ0` status (`log_stop_wait`; host-tested, not yet on the board) | the triangle run again: `display down: 0` and the "FrameGen0 stopped after" line, or the failure lines' counters: frozen (the pixel clock is dead: look at what stops it, e.g. the LDB PLL or `DSIP_CLK0_SEL`) or moving (FrameGen0 still runs frames: the disable is not latched) |

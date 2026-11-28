@@ -218,24 +218,8 @@ pub fn down_on<T: Transport>(
         Err(e) => {
             d.stop = side(&e);
             ylog!(env, Err, "verdin-imx95 X12: the down stopped: {:?}", e);
-            if let lv::Error::Display(display::Error::NotStopped(fg)) = &e {
-                if let Some(w) = fg.stop {
-                    ylog!(
-                        env,
-                        Err,
-                        "verdin-imx95 X12: FrameGen0 still running (FGENSTS {}) after {} us, {} polls: frame counter {} -> {} ({} frames; {}), FGTIMESTAMP 0x{:08x} -> 0x{:08x}",
-                        fg.fgensts,
-                        w.waited_us,
-                        w.polls,
-                        w.frame_start(),
-                        w.frame_end(),
-                        w.frames(),
-                        if w.frames() == 0 { "frozen: the pixel clock is dead" } else { "moving: the stop is slow" },
-                        w.ts_start,
-                        w.ts_end
-                    );
-                }
-            }
+            // the wait itself (frame counter, FGTIMESTAMP, DISPIRQ0 status)
+            // was logged by display_down (lv::log_stop_wait)
             // FrameGen0's sequence never completed: its own code, apart
             // from a stop that failed after it (-EIO)
             match e {

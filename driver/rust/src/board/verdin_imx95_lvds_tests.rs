@@ -268,14 +268,18 @@ fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the
     let ensts = dlog.iter().position(|x| matches!(x, Access::R("dpu", 0x2b_0094, _))).unwrap();
     let gate = at(Access::W("ldb", 0x0, 0x1E));
     assert!(fg_off < seq && seq < ensts && ensts < gate, "{dlog:?}");
-    // the frame counter is read before the first FGENSTS poll and again
-    // when the wait ends, both after the sequence complete and before the
-    // LDB gate
+    // the frame counter is read four times before the LDB gate: after
+    // FGENABLE 0 and before the first sequence-complete poll, when that wait
+    // ends, before the first FGENSTS poll and when that wait ends
+    let first_poll =
+        dlog.iter().position(|x| matches!(x, Access::R("dpu", DIRQ0_STATUS0, _))).expect("a DISPIRQ0 poll");
     let ts: Vec<usize> =
         dlog.iter().enumerate().filter(|(_, x)| matches!(x, Access::R("dpu", 0x2b_0098, _))).map(|(i, _)| i).collect();
     let before_gate: Vec<usize> = ts.into_iter().filter(|&i| i < gate).collect();
-    assert!(before_gate.len() == 2 && before_gate[0] > seq && before_gate[0] < ensts, "{dlog:?}");
-    assert!(before_gate[1] > ensts, "{dlog:?}");
+    assert_eq!(before_gate.len(), 4, "{dlog:?}");
+    assert!(fg_off < before_gate[0] && before_gate[0] < first_poll, "{dlog:?}");
+    assert!(seq < before_gate[1] && before_gate[1] < before_gate[2] && before_gate[2] < ensts, "{dlog:?}");
+    assert!(before_gate[3] > ensts, "{dlog:?}");
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
 }
@@ -392,7 +396,7 @@ fn down_gates_the_ldb_only_after_frame_gen_reports_its_sequence_complete() {
     let polls: Vec<usize> = dlog
         .iter()
         .enumerate()
-        .filter(|(i, a)| *i > fg_off && matches!(a, Access::R("dpu", DIRQ0_STATUS0, _)))
+        .filter(|(i, a)| *i > fg_off && *i < masked && matches!(a, Access::R("dpu", DIRQ0_STATUS0, _)))
         .map(|(i, _)| i)
         .collect();
     assert!(cleared < enabled && enabled < fg_off, "{dlog:?}");
@@ -426,7 +430,8 @@ fn down_gates_the_ldb_only_after_frame_gen_reports_its_sequence_complete() {
         lines[0],
         "verdin-imx95 LVDS down: FGENABLE 0 (no FGSLR token), waiting up to 1000000 us for SeqComplete0 in DISPIRQ0 (DPU+0x38102c bit 20)"
     );
-    assert!(lines[1].starts_with("verdin-imx95 LVDS down: SeqComplete0 after 400 us, FGENSTS stopped"), "{lines:?}");
+    assert!(lines[1].starts_with("verdin-imx95 LVDS down: SeqComplete0 after 400 us (5 polls, frame "), "{lines:?}");
+    assert!(lines[1].ends_with("), FGENSTS stopped"), "{lines:?}");
     drop(lines);
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38));
     assert!(r.m.display.refused().is_empty());
@@ -444,9 +449,13 @@ fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
     r.m.display.seq_after = None;
     r.log.borrow_mut().clear();
     let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
-    let Error::SeqTimeout { waited_us, irq, comctrl, fg } = e else { panic!("{e:?}") };
-    assert_eq!(waited_us, lv::SEQ_COMPLETE_BUDGET_US);
-    assert_eq!((irq & SEQ_BIT, comctrl & SEQ_BIT), (0, 0));
+    let Error::SeqTimeout { wait, comctrl, fg } = e else { panic!("{e:?}") };
+    assert_eq!(wait.waited_us, lv::SEQ_COMPLETE_BUDGET_US);
+    assert_eq!(wait.polls, lv::SEQ_COMPLETE_BUDGET_US / dpu::POLL_STEP_US + 1);
+    assert_eq!((wait.irq & SEQ_BIT, comctrl & SEQ_BIT), (0, 0));
+    // FrameGen0 was off and its pixel clock ran, yet the counter did not
+    // move: the model's frame ends only while FGENABLE is set
+    assert!(wait.frozen(), "{wait:?}");
     // the event is masked again on the way out
     assert_eq!(r.m.display.peek("dpu", DIRQ0_ENABLE0), 0);
     assert_eq!(fg.fgenable, 0);
@@ -466,12 +475,113 @@ fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
     // the LDB still reads as the up left it (`ldb::up`: 0x14, not gated)
     assert_eq!(r.m.display.peek("ldb", 0x0), 0x14);
     assert!(sm.sm.borrow().on(13) && sm.sm.borrow().enabled(38));
-    assert!(r
-        .env
-        .lines
-        .borrow()
-        .iter()
-        .any(|l| l.contains("no SeqComplete0 in 1000000 us (DISPIRQ0 INTERRUPTSTATUS0 0x")));
+    assert!(r.env.lines.borrow().iter().any(|l| l.contains("no SeqComplete0 in 1000000 us: COMCTRL 0x")));
+}
+
+/// The lines of one failed wait, from the first `X12: <what> after` on.
+fn failure_lines(env: &LogEnv, what: &str) -> Vec<String> {
+    let lines = env.lines.borrow();
+    let head = format!("verdin-imx95 X12: {what} after ");
+    let i = lines.iter().position(|l| l.starts_with(&head)).unwrap_or_else(|| panic!("no {head:?} in {lines:?}"));
+    lines[i..(i + 3).min(lines.len())].to_vec()
+}
+
+/// A timeout prints the wait: FrameGen0's state with the raw DISPIRQ0
+/// status, the frame counter with its verdict, FGTIMESTAMP at both ends.
+/// Here the counter is frozen (FrameGen0 ends no frame after the disable).
+#[test]
+fn a_sequence_timeout_logs_the_frame_counter_the_timestamps_and_the_irq_status() {
+    let mut r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.m.display.seq_after = None;
+    r.env.lines.borrow_mut().clear();
+    let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+    let Error::SeqTimeout { wait, .. } = e else { panic!("{e:?}") };
+    let (f, ts) = (wait.frame_start(), wait.ts_start);
+    let l = failure_lines(&r.env, "no SeqComplete0");
+    assert_eq!(
+        l,
+        vec![
+            format!(
+                "verdin-imx95 X12: no SeqComplete0 after 1000000 us (10001 polls): FGENABLE 0 FGENSTS 0x0, DISPIRQ0 INTERRUPTSTATUS0 {:#010x}",
+                wait.irq
+            ),
+            format!("verdin-imx95 X12: frame counter {f} -> {f} (0 frames): frozen: the pixel clock is dead"),
+            format!("verdin-imx95 X12: FGTIMESTAMP 0x{ts:08x} (frame {f} line 0) -> 0x{ts:08x} (frame {f} line 0)"),
+        ]
+    );
+}
+
+/// A FrameGen0 that keeps running after the disable and never completes
+/// its sequence: the counter moved over the 1 s, and the line says so.
+#[test]
+fn a_sequence_timeout_with_a_running_frame_gen_says_moving() {
+    let mut r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.m.display.seq_after = None;
+    r.m.display.faults.fg_stuck = true;
+    r.env.lines.borrow_mut().clear();
+    let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+    let Error::SeqTimeout { wait, fg, .. } = e else { panic!("{e:?}") };
+    assert!(!wait.frozen() && wait.frames() > 0, "{wait:?}");
+    assert_eq!(fg.fgensts, 1);
+    let l = failure_lines(&r.env, "no SeqComplete0");
+    assert!(l[0].contains("FGENABLE 0 FGENSTS 0x1"), "{l:?}");
+    assert!(l[1].ends_with("moving: FrameGen0 still runs frames"), "{l:?}");
+    assert!(l[2].starts_with(&format!("verdin-imx95 X12: FGTIMESTAMP 0x{:08x} ", wait.ts_start)), "{l:?}");
+}
+
+/// The NotStopped path (the sequence completed, FGENSTS stayed 1) prints
+/// the same three lines for its FGENSTS wait.
+#[test]
+fn a_frame_gen_still_running_logs_the_same_report() {
+    let mut r = rig();
+    r.m.display.faults.fg_stuck = true;
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.env.lines.borrow_mut().clear();
+    let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+    let Error::Display(display::Error::NotStopped(fg)) = e else { panic!("{e:?}") };
+    let w = fg.stop.unwrap();
+    let l = failure_lines(&r.env, "FrameGen0 still running");
+    assert!(
+        l[0].starts_with(
+            "verdin-imx95 X12: FrameGen0 still running after 1000000 us (10001 polls): FGENABLE 0 FGENSTS 0x1"
+        ),
+        "{l:?}"
+    );
+    assert_eq!(
+        l[1],
+        format!(
+            "verdin-imx95 X12: frame counter {} -> {} ({} frames): moving: FrameGen0 still runs frames",
+            w.frame_start(),
+            w.frame_end(),
+            w.frames()
+        )
+    );
+    assert!(l[2].starts_with("verdin-imx95 X12: FGTIMESTAMP 0x"), "{l:?}");
+}
+
+/// No line of either failure is cut at the console's line length.
+#[test]
+fn no_failure_line_is_cut() {
+    for (seq_after, stuck) in [(None, false), (None, true), (Some(1), true)] {
+        let mut r = rig();
+        let mut sm = r.sm;
+        let cfg = Config::verdin(FB);
+        r.m.display.faults.fg_stuck = stuck;
+        let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+        r.m.display.seq_after = seq_after;
+        display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+        for l in r.env.lines.borrow().iter() {
+            assert!(l.len() <= crate::env::LINE_MAX && !l.ends_with("..."), "{} bytes: {l}", l.len());
+        }
+    }
 }
 
 /// As the board after 211ed16a: the sequence complete never shows in the
