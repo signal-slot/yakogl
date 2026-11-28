@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GC7000: can the texture unit sample the D24S8 depth surface?
 
-A read-only study. `ds_cache::resolve_depth` (`src/vivante/ds_cache.rs:562`)
+A read-only study. `ds_cache::resolve_depth` (`src/vivante/ds_cache.rs:747`)
 turns the depth surface into R32F texels on the CPU, behind a `finish()`, once
 a frame in glmark2 `shadow` and `refract` (`docs/notes/gc-depth-resolve.md`,
 `docs/notes/imx8mp-glmark2-cpu.md` "Fix items, in order", item 2). The V3D
@@ -669,6 +669,46 @@ The verdict is read as the Verdin's (see the previous section on why it
 carries over). Board state afterwards: no container was stopped; the
 board's own lease file expired on its own. A later X2 run needs a key
 that survives the board's reset, else every run ends as rc 5 `not_back`.
+
+## The TS-aware depth read: built, not wired (W12b)
+
+`depth_format::read_super_tiled_ts` (`src/vivante/depth_format.rs:197`, commit
+`25674e9c`) reads a SUPER_TILED depth surface through its tile status: a pixel
+whose TS entry is `depth_format::TS_CLEAR_CODE` (0x1) reads as the cleared
+depth, every other pixel as `read_super_tiled` reads it. It is bit-exact
+against the full read of a surface whose cleared tiles hold the clear word
+(`tests/gc_depth_format_ts.rs`). Interface:
+
+| argument | meaning |
+|---|---|
+| `format`, `surface`, `stride`, `w`, `h`, `dst`, `pitch` | as `read_super_tiled` (`depth_format.rs:133`) |
+| `ts: &DepthTs` | `status` (the TS buffer bytes, one 4-bit entry per tile, low nibble first), `tile_bytes`, `clear_value` |
+| `DepthTs::tile_bytes` | `ts::tile_size(mode)` (`src/vivante/ts.rs:68`): 128 for `TS_MODE_128B`, 256 for `TS_MODE_256B`; any other value panics |
+| `DepthTs::clear_value` | the `TS_DEPTH_CLEAR_VALUE` word (`GC_TS_DEPTH_CLEAR_VALUE`, `regs.rs:658`; `ts::depth_clear_word`, `ts.rs:243`): D24S8 `depth << 8 \| stencil`, D16 the doubled half |
+
+An entry past the end of `status`, or any code other than `TS_CLEAR_CODE`,
+reads memory (this core does not compress depth outside MSAA).
+
+**It is not wired.** Nothing outside `depth_format.rs` and the test calls it
+(`git grep read_super_tiled_ts src` finds only its own file), and the surface
+`ds_cache` keeps has no tile status: today's CPU resolve needs none (TS mode 0,
+above).
+
+**Wiring order still to do** (`gc-tiled-wire.md` W12):
+
+1. `resolve_depth` and `seed_depth` read and write a SuperTiled surface
+   through `depth_format` (`ds_cache.rs:747`, `:642`; commit `9f77146d`,
+   item w12a-resolve-layout). This is the step the code already has, and it
+   is unreachable: only a renderbuffer depth blit gets a SuperTiled surface,
+   and a depth texture's resolve (`ds_object_id(.., true)`,
+   `src/gl/texture.rs:738`) never does.
+2. The W12a wiring: tiled depth textures, so the surface that shadow and
+   refract resolve is SuperTiled.
+3. The TS buffer for that depth surface and its emit (TS mode, base, clear
+   value), behind `gc_tiled_rt`.
+4. `resolve_depth` reads TS-first through `read_super_tiled_ts`, with
+   `DepthTs { status, tile_bytes: ts::tile_size(mode), clear_value }` built
+   from the buffer of step 3.
 
 ## (b) What would change in the GC back end
 
