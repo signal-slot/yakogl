@@ -1318,6 +1318,24 @@ X2 numbers are development measurements (`x2-glmark2-scenes.sh:25-27`). With
 - The report gives the comment texts for #1204, #1106 and #15, and the title
   and text of a new issue for each new defect. Agents never run `gh`.
 
+## Rule: TS register writes belong to the PE group, and a change of TS state must reach it
+
+W7 to W9 write the `TS_COLOR_*` and `TS_DEPTH_*` registers from
+`emit_pe_state`, so they sit in `Group::Pe` (`dedup.rs:73`), the group that
+`dedup::group_keyed` skips when its key is equal (`backend.rs:2946`). Two
+consequences, both checked by the W7 host test:
+
+- `pe_key` (`backend.rs:2733`) must key every input of those words: the TS
+  base, the valid bit and the clear value. A TS word the key does not name is
+  skipped on a draw that needs it written.
+- A TS state that changes outside a draw (a fast clear, a resolve that
+  leaves the TS valid or not, a CPU zeroing of the TS buffer) calls
+  `dedup::invalidate()` (`dedup.rs:166`), as every kick that touches colour or
+  depth state already does, so the next draw writes the group whole.
+
+Room is speed only: a group longer than its `ROOM` is written whole and not
+kept (`dedup.rs` tests, `TS_REGISTERS_W7_W9`).
+
 ## What this note does not settle
 
 - The RS rate for an 800x600 tiled→linear copy, and so W4's cost. Session A
