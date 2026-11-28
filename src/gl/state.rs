@@ -186,8 +186,9 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
 /// GL_EXT_color_buffer_float: R32F, RG32F, RGBA32F, R11F_G11F_B10F (and the
 /// 16F formats) colour-renderable. Listed only in an ES 3.0 build with the
 /// `color-buffer-float` feature on a back end that draws and reads back every
-/// one of them (`backend::color_buffer_float_capable`, false on every GPU
-/// today). Its name sits in [`ALL_EXTENSION_NAMES`] just before the ES 2.0-only
+/// one of them (`backend::color_buffer_float_capable`: true only on the V3D
+/// with the `gpu-v3d` and `color-buffer-float` features, false on every other
+/// back end). Its name sits in [`ALL_EXTENSION_NAMES`] just before the ES 2.0-only
 /// tail; [`EXTENSION_NAMES`] leaves it out when unclaimed.
 pub(crate) const COLOR_BUFFER_FLOAT_EXTENSION: bool =
     cfg!(feature = "color-buffer-float") && !crate::REPORT_ES2 && crate::backend::color_buffer_float_capable();
