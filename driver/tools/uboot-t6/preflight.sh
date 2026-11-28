@@ -8,7 +8,12 @@
 # Touches no board and no network; prints no environment value. One line per
 # check, "ok" or "FAIL"; exit 1 if any FAIL, 2 on a usage error.
 #
-#   a  T6_UART and T6_HAND are set (names only).
+#   a  the console and the hand are named (names only, never a value):
+#      T6_UART is set, or T6_CONSOLE=lease (the console goes through the
+#      lease's serial tools and T6_UART is not used); T6_HAND is set, or
+#      T6_HAND=none (no one at the power switch: a board that does not come
+#      back is reported as needing a person and not retried). With neither
+#      console set, or an empty T6_HAND, it FAILs.
 #   b  python3 imports every module prompt-go.py and t6-uart-rfc2217.py
 #      import (the RFC 2217 client is that script's own, so pyserial is
 #      needed only if one of them imports `serial`).
@@ -27,8 +32,10 @@
 #              SHA256SUMS or COMMIT is
 #              named. Both layouts in one directory fail.
 #      Either layout needs one <image-dir>/COMMIT (one sha) that is an
-#      ancestor of origin/main (git merge-base --is-ancestor on the local
-#      ref; nothing is fetched). tools/cts/t6-deqp-images.sh writes both
+#      ancestor of the main ref (git merge-base --is-ancestor on a local
+#      ref; nothing is fetched): origin/main, else refs/connected/origin/
+#      remotes/origin/main (a connected clone), else refs/remotes/origin/main;
+#      the ok or FAIL line names the ref used. tools/cts/t6-deqp-images.sh writes both
 #      SHA256SUMS and COMMIT; a selective build keeps the other labels'
 #      SHA256SUMS lines (sums-merge) and refuses a different COMMIT with
 #      exit 2. Its build logs <LABEL>.log sit at the top beside the
@@ -50,8 +57,29 @@ fail() { echo "FAIL $1"; bad=1; }
 
 # a
 miss=
-for v in T6_UART T6_HAND; do [ -n "${!v:-}" ] || miss="$miss $v"; done
-if [ -z "$miss" ]; then ok "a: T6_UART and T6_HAND are set"; else fail "a: not set:$miss"; fi
+console_ok=1
+hand_ok=1
+if [ "${T6_CONSOLE:-}" = lease ]; then
+	ok "a: console through the lease's serial tools (T6_CONSOLE=lease); T6_UART not used"
+	console_ok=0
+elif [ -z "${T6_UART:-}" ]; then
+	miss="$miss T6_UART"
+fi
+if [ "${T6_HAND:-}" = none ]; then
+	ok "a: T6_HAND=none: no one at the power switch; a board that does not come back is reported as needing a person and not retried"
+	hand_ok=0
+elif [ -z "${T6_HAND:-}" ]; then
+	miss="$miss T6_HAND"
+fi
+if [ -n "$miss" ]; then
+	fail "a: not set:$miss"
+elif [ $console_ok = 1 ] && [ $hand_ok = 1 ]; then
+	ok "a: T6_UART and T6_HAND are set"
+elif [ $console_ok = 1 ]; then
+	ok "a: T6_UART is set"
+elif [ $hand_ok = 1 ]; then
+	ok "a: T6_HAND is set"
+fi
 
 # b
 SRCS=("$HERE/prompt-go.py" "$HERE/../kexec-zephyr/t6-uart-rfc2217.py")
@@ -131,12 +159,19 @@ if [ -z "$commit" ]; then
 	fail "c: no build commit (COMMIT file) in the image directory"
 elif ! [[ $commit =~ ^[0-9a-f]{7,40}$ ]]; then
 	fail "c: COMMIT is not a hex sha"
-elif ! git -C "$REPO" rev-parse -q --verify origin/main >/dev/null 2>&1; then
-	fail "c: no origin/main ref here to compare the build commit with"
-elif git -C "$REPO" merge-base --is-ancestor "$commit" origin/main 2>/dev/null; then
-	ok "c: build commit ${commit:0:8} is reachable from origin/main"
 else
-	fail "c: build commit ${commit:0:8} is not reachable from origin/main"
+	# the main ref: origin/main, else the clone-time copies (nothing is fetched)
+	mref=
+	for r in origin/main refs/connected/origin/remotes/origin/main refs/remotes/origin/main; do
+		if git -C "$REPO" rev-parse -q --verify "$r" >/dev/null 2>&1; then mref=$r; break; fi
+	done
+	if [ -z "$mref" ]; then
+		fail "c: no main ref here (origin/main, refs/connected/origin/remotes/origin/main, refs/remotes/origin/main) to compare the build commit with"
+	elif git -C "$REPO" merge-base --is-ancestor "$commit" "$mref" 2>/dev/null; then
+		ok "c: build commit ${commit:0:8} is reachable from $mref"
+	else
+		fail "c: build commit ${commit:0:8} is not reachable from $mref"
+	fi
 fi
 
 # d
