@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vert shader of a plan #387 item newtexts-refs pair, verbatim from the .qpa of deqp-gles2 (VK-GL-CTS 93bca01, Apache-2.0) case dEQP-GLES2.functional.shaders.random.trigonometric.fragment.51, logged by tools/mali/deqp-host-measure.sh at 070608e37.
