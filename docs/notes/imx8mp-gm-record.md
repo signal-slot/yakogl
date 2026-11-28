@@ -393,3 +393,65 @@ run by `cargo test -p yakogl-drivers` (the gate's drivers rows). New tests:
   selector (`PERF_SEL` 0x1000).
 - The cluster's `throughput:` line from RATE has no `draw ... ms mean`
   part: that is PERF page 0's value, a second boot if it is ever wanted.
+
+## The common set on the Armadillo-X2 while the Verdin is away
+
+The Verdin i.MX8MP has been off the farm since 2026-11-16 (farm rule of
+2026-11-27). Until it comes back, the i.MX8MP common set (GM: glmark2-es2
+800x600, 33 scenes; GT: gl_test, `tools/cts/common-tree.txt`) is taken on
+the Armadillo-X2. It has the same SoC and GPU (i.MX 8M Plus, GC7000UL). Every
+record says it was measured there. The X2 is not a stage-2 board. Its
+figures stand in for the i.MX8MP's and are always labelled as the X2's.
+
+The runner is `tools/cts/x2-common.sh --commit <rev>`. It writes the record
+in the format of `tools/cts/board-stage.sh imx8mp common`:
+
+1. `<rev>` must be an ancestor of origin/main, or the script exits 3 before
+   it builds anything.
+2. A git worktree is checked out at that commit, and the GM and GT images
+   are built from it only, for `armadillo_x2/mimx8ml8/a53` with the watchdog
+   self-arm. An image without `gc_wdog_arm: armed` is refused (exit 3).
+3. The worktree's own `tools/board.sh x2 tree` runs the rows by the
+   kexec-dev route. It stages only under the board's tmpfs and reads the
+   record through `/dev/mem` and the console. The script itself writes
+   nothing persistent to the board.
+4. Every file is redacted (`tools/cts/console-redact.py`). Then the marker is
+   written, the per-scene ms/frame table is made from the GM console, and
+   the tally of `tools/cts/common-tally.py` is kept beside them.
+
+The board's login and console come from the environment (`BOARD_HOST`,
+`BOARD_UART`, with `ZEPHYR_WS` and `GLMARK2_SRC`). Nothing defaults to a
+machine or an address. `--dry-run` prints the commit, the directories and
+the commands, and it touches no board. `tools/cts/x2-common-selftest.sh`
+(the script's `--self-test` against stub `board.sh` and west) needs neither a
+board nor an environment.
+
+The records are gitignored, like every board record:
+
+- `records/imx8mp/common-<sha8>/` is what `tools/cts/common-row.py` and
+  `tools/cts/one-commit-docs.py` read. It holds `tree.txt`, the GM and GT
+  run directories (`meta.txt`, `INDEX.txt`, `console.txt`), `measured-on`,
+  `ms-per-scene.tsv`, `tally.txt` and the run's log.
+- `records/imx8mp/<YYYYMMDD-HHMM>-x2-common-<sha8>/` is a dated copy of it,
+  the directory that a RESULTS.md row cites.
+
+A run never overwrites a record: if either directory exists, the run is
+refused.
+
+The labelling:
+
+- The file `measured-on` sits in both directories. It holds the line
+  `measured-on: armadillo-x2`, then a note that the X2 stands in for the
+  Verdin i.MX8MP.
+- `board.sh` writes `board=x2` and `board_measured=Armadillo-X2 (i.MX 8M
+  Plus, GC7000UL), stands in for the Verdin iMX8MP` into each run's
+  `meta.txt`.
+- `tools/cts/one-commit-docs.py` treats an i.MX8MP record whose
+  `measured-on` names `armadillo-x2` as measured on the X2. It adds
+  "measured on the Armadillo-X2" to the README cell, the RESULTS.md row, the
+  website, checklist and ROADMAP texts, and "Armadillo-X2 で測定（同じ SoC・GPU）"
+  to STATUS.md. It also accepts a dated cite under `records/imx8mp/` or
+  `records/x2/`.
+- `tools/cts/readme-glmark2-check.py` accepts an i.MX8MP row that cites
+  `records/x2/` only when its text says "measured on the Armadillo-X2" (or
+  "measured on the X2"). Without that note, such a cite does not count.
