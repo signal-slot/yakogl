@@ -441,6 +441,12 @@ static int pvr_fw_build_structs(void)
 }
 
 #ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+#ifndef K_MEM_ARM_NORMAL_NC
+/* The drain writes ui32HWPerfRIdx with a plain store (hwperf::store_ridx),
+ * safe only through the Normal non-cacheable map of pvr_fw_boot: through a
+ * cached one, the line's write-back puts a stale WIdx over the firmware's. */
+#error "CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF needs the carveout mapped K_MEM_ARM_NORMAL_NC"
+#endif
 /* The firmware's HWPerf stream (gpu::pvr::hwperf, docs/notes/pvr-hwperf.md):
  * the record lines of the packets written since the previous call. Call it
  * once before a scene (that stretch is the boot and the warm-up) and once at

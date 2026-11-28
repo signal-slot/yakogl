@@ -33,9 +33,9 @@
 //! given core clock.
 
 use super::fwif::{
-    rd32, FW_CONFIG_HEAP_ALLOC_GRANULARITY, FW_HEAP_SIZE, HWPERFDATA_DROP_COUNT, HWPERFDATA_SIZE,
-    HWPERFDATA_SIZE_FIELD, HWPERFDATA_WIDX, HWPERFDATA_WRAP_COUNT, OSINIT_HWPERF_DATA, OSINIT_HWPERF_RUNTIME_CFG,
-    RUNTIME_HWPERFCFG_BUF,
+    rd32, wr32, FW_CONFIG_HEAP_ALLOC_GRANULARITY, FW_HEAP_SIZE, HWPERFDATA_DROP_COUNT, HWPERFDATA_RIDX,
+    HWPERFDATA_SIZE, HWPERFDATA_SIZE_FIELD, HWPERFDATA_WIDX, HWPERFDATA_WRAP_COUNT, OSINIT_HWPERF_DATA,
+    OSINIT_HWPERF_RUNTIME_CFG, RUNTIME_HWPERFCFG_BUF,
 };
 use super::km::YdPvrKm;
 
@@ -762,21 +762,20 @@ fn add(a: &mut Summary, b: &Summary) {
 }
 
 /// Read the packets the firmware wrote since byte `from` of its HWPerf
-/// buffer and summarise them ([`summarize`], tasks into `out`). The buffer
-/// and its control are found the way the firmware finds them, through the OS
-/// init's `sHwPerfData` and `sHwPerfRuntimeCfg.sHWPerfBuf`, so the context
-/// needs no field of its own. `None` when the firmware init did not set
+/// buffer, summarise them ([`summarize`], tasks into `out`), and hand the
+/// space back to the firmware: `ui32HWPerfRIdx` is set to the write index
+/// reached ([`store_ridx`]). The buffer and its control are found the way the
+/// firmware finds them, through the OS init's `sHwPerfData` and
+/// `sHwPerfRuntimeCfg.sHWPerfBuf`, so the context needs no field of its own.
+/// `None`, with nothing read or written, when the firmware init did not set
 /// HWPerf up (`FWINIT_HWPERF` clear: a size of 0).
 ///
-/// Read only: `ui32HWPerfRIdx` is never written. It shares a cache line with
-/// the firmware's `WIdx`, and our view is cacheable: a flush after a write
-/// would put back a stale `WIdx` (docs/notes/pvr-hwperf.md (c), the FWCCB's
-/// lesson at `ccb.rs:329-333`). With `RIdx` left at 0 the firmware fills the
-/// buffer once and then counts what it cannot place in `fw_drops`; the
-/// caller keeps `widx` as the next `from`, so each call covers one stretch
-/// (a scene). A stretch past a wrap mark is summarised as its two ranges,
-/// added: a task cut by the wrap counts as open in one and unmatched in the
-/// other, and the ordinal gap across it is not counted.
+/// The caller keeps `widx` as the next `from` (it equals the `RIdx` written),
+/// so each call covers one stretch (a scene) and the firmware only drops
+/// packets (`fw_drops`) when one stretch alone fills the buffer. A stretch
+/// past a wrap mark is summarised as its two ranges, added: a task cut by the
+/// wrap counts as open in one and unmatched in the other, and the ordinal gap
+/// across it is not counted.
 pub fn drain(k: &YdPvrKm, from: u32, out: &mut [Task]) -> Option<Drained> {
     let osi = k.heap_cpu(k.fw_config_off + FW_CONFIG_HEAP_ALLOC_GRANULARITY);
     // SAFETY: the OS init's slot of the config region (built by fwinit).
@@ -821,7 +820,42 @@ pub fn drain(k: &YdPvrKm, from: u32, out: &mut [Task]) -> Option<Drained> {
         n += m;
         add(&mut summary, &s);
     }
+    // A write index past the buffer is not the firmware's: leave RIdx.
+    if widx <= size {
+        store_ridx(k, hp, widx);
+    }
     Some(Drained { summary, from, widx, wrap, size, fw_drops })
+}
+
+/// Write `ui32HWPerfRIdx` = `ridx` in the HWPerf data at `hp`, without
+/// touching the firmware's `WIdx` and `WrapCount` beside it.
+///
+/// The three indices share one 12-byte struct and so one cache line
+/// (`rogue/rgx_fwif_km.h:1670-1674`). Through a cached view, our write would
+/// dirty the line and its write-back (a `flush`, or an eviction) would put
+/// our stale copy of `WIdx` back over the firmware's (the FWCCB's lesson,
+/// `ccb.rs:329-333`). The view is not cached: `pvr_fw_boot` maps the whole
+/// carveout Normal non-cacheable (`K_MEM_ARM_NORMAL_NC`, the attribute
+/// `dma_alloc_coherent` gives on arm64, `driver/src/pvr_fw_boot.c`), and
+/// the HWPerf knob does not build without that attribute (the `#error`
+/// beside `pvr_fw_hwperf_drain`). So the route is the one every other
+/// firmware-shared word of ours takes (`wr32`, as the FWCCB's
+/// `read_offset`), less the clean: one 32-bit volatile store, which writes
+/// those four bytes and no others to memory, and no `flush` of the line
+/// after it. (Through a cached view no store from the CPU is safe here: an
+/// eviction writes the whole line back. Hence the build guard rather than a
+/// cache operation.)
+///
+/// The barrier before it orders the reads of the packets before the
+/// firmware may overwrite them; the one after it makes the store visible
+/// before the caller goes on (the firmware polls `RIdx` when it next writes a
+/// packet; it needs no doorbell).
+fn store_ridx(k: &YdPvrKm, hp: *mut u8, ridx: u32) {
+    k.fence();
+    // SAFETY: `hp` is the 40-byte HWPerf data fwinit allocated (the caller's
+    // read of it); offset 0 is `ui32HWPerfRIdx`, a word only the host writes.
+    unsafe { wr32(hp, HWPERFDATA_RIDX, ridx) };
+    k.fence();
 }
 
 /// [`drain`] and its record lines in the driver's log: one totals line, then
@@ -1108,6 +1142,265 @@ mod tests {
         let mut c = Buf::new();
         c.raw(SIG_V2C, 0xABCD_0000 | 24, ev::PWR_CHG, 1, 0, &[]);
         assert_eq!(Reader::new(&c.0).next().unwrap().unwrap().hdr.size, 24);
+    }
+
+    // ---- the drain and its read index over a fake firmware heap ----------------
+
+    use super::super::fwif::{FW_CONFIG_HEAP_SIZE, RISCV_SHARED_UNCACHED_DATA0_BASE};
+    use super::super::km::YdPvrKmOps;
+    use core::cell::{Cell, RefCell};
+    use core::ffi::c_void;
+    use std::boxed::Box;
+    use std::vec::Vec;
+
+    /// What the fake's hooks saw: every `flush` range and the fences.
+    #[derive(Default)]
+    struct Hooks {
+        flushes: RefCell<Vec<(usize, usize)>>,
+        fences: Cell<u32>,
+    }
+
+    unsafe extern "C" fn rec_flush(ctx: *mut c_void, a: *const c_void, n: usize) {
+        // SAFETY: ctx is the rig's `Hooks`.
+        unsafe { &*(ctx as *const Hooks) }.flushes.borrow_mut().push((a as usize, n));
+    }
+    unsafe extern "C" fn no_range(_: *mut c_void, _: *const c_void, _: usize) {}
+    unsafe extern "C" fn rec_fence(ctx: *mut c_void) {
+        // SAFETY: as above.
+        let h = unsafe { &*(ctx as *const Hooks) };
+        h.fences.set(h.fences.get() + 1);
+    }
+    unsafe extern "C" fn no_wait(_: *mut c_void, _: u32) {}
+    unsafe extern "C" fn no_log(_: *mut c_void, _: u32, _: *const u8, _: usize) {}
+
+    /// Heap offsets of the fake's objects in the main region.
+    const HP: u32 = 0x100;
+    const RC: u32 = 0x200;
+    const BUF: u32 = 0x1000;
+    const MAIN: u32 = 0x1_0000;
+
+    /// A firmware heap with the OS init, the HWPerf data, the runtime
+    /// configuration and a buffer of `size` bytes where fwinit puts them,
+    /// and a producer that writes packets the way the firmware does
+    /// (docs/notes/pvr-hwperf.md (c)): at `WIdx`, wrapping to 0 with
+    /// `WrapCount` at the end of the data when a packet does not fit, never
+    /// up to `RIdx`, counting what it cannot place in `DropCount`.
+    struct Rig {
+        mem: Vec<u64>,
+        k: Box<YdPvrKm>,
+        hooks: Box<Hooks>,
+        _ops: Box<YdPvrKmOps>,
+        size: u32,
+        wraps: u32,
+    }
+
+    impl Rig {
+        /// `size` 0: HWPerf off (fwinit leaves the OS init's words 0).
+        fn new(size: u32) -> Rig {
+            let total = (MAIN + FW_CONFIG_HEAP_ALLOC_GRANULARITY + 0x100) as usize;
+            let mut mem = std::vec![0u64; total / 8];
+            let hooks: Box<Hooks> = Box::default();
+            let ops = Box::new(YdPvrKmOps {
+                ctx: &*hooks as *const Hooks as *mut c_void,
+                flush: rec_flush,
+                invd: no_range,
+                fence: rec_fence,
+                busy_wait_us: no_wait,
+                log: no_log,
+            });
+            // SAFETY: all-zero is the documented state before the first call.
+            let mut k: Box<YdPvrKm> = Box::new(unsafe { core::mem::zeroed() });
+            k.cpu = mem.as_mut_ptr() as *mut u8;
+            k.size = total as u64;
+            k.ops = &*ops;
+            k.fw_main_size = MAIN;
+            k.fw_config_off = FW_HEAP_SIZE - FW_CONFIG_HEAP_SIZE;
+            let mut r = Rig { mem, k, hooks, _ops: ops, size, wraps: 0 };
+            if size != 0 {
+                assert!(BUF + size <= MAIN);
+                let fa = |off: u32| RISCV_SHARED_UNCACHED_DATA0_BASE | off;
+                let osi = MAIN + FW_CONFIG_HEAP_ALLOC_GRANULARITY;
+                r.put(osi + OSINIT_HWPERF_DATA as u32, fa(HP));
+                r.put(osi + OSINIT_HWPERF_RUNTIME_CFG as u32, fa(RC));
+                r.put(HP + HWPERFDATA_SIZE_FIELD as u32, size);
+                r.put(RC + RUNTIME_HWPERFCFG_BUF as u32, fa(BUF));
+            }
+            r
+        }
+
+        fn bytes(&mut self) -> &mut [u8] {
+            // SAFETY: the Vec's own bytes.
+            unsafe { core::slice::from_raw_parts_mut(self.mem.as_mut_ptr() as *mut u8, self.mem.len() * 8) }
+        }
+
+        fn put(&mut self, carveout_off: u32, v: u32) {
+            let o = carveout_off as usize;
+            self.bytes()[o..o + 4].copy_from_slice(&v.to_le_bytes());
+        }
+
+        fn get(&self, carveout_off: u32) -> u32 {
+            // SAFETY: inside the carveout.
+            unsafe { rd32(self.mem.as_ptr() as *const u8, carveout_off as usize) }
+        }
+
+        fn ridx(&self) -> u32 {
+            self.get(HP + HWPERFDATA_RIDX as u32)
+        }
+
+        fn widx(&self) -> u32 {
+            self.get(HP + HWPERFDATA_WIDX as u32)
+        }
+
+        fn drops(&self) -> u32 {
+            self.get(HP + HWPERFDATA_DROP_COUNT as u32)
+        }
+
+        /// The firmware writes one packet; false when it had to drop it.
+        fn fw_put(&mut self, pkt: &[u8]) -> bool {
+            let (r, mut w, n) = (self.ridx(), self.widx(), pkt.len() as u32);
+            let fits = if w >= r {
+                if w + n < self.size {
+                    true
+                } else if n < r {
+                    // The data ends at w; go on at 0.
+                    self.put(HP + HWPERFDATA_WRAP_COUNT as u32, w);
+                    self.wraps += 1;
+                    w = 0;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                w + n < r
+            };
+            if !fits {
+                let d = self.drops();
+                self.put(HP + HWPERFDATA_DROP_COUNT as u32, d + 1);
+                return false;
+            }
+            let at = (BUF + w) as usize;
+            self.bytes()[at..at + pkt.len()].copy_from_slice(pkt);
+            self.put(HP + HWPERFDATA_WIDX as u32, w + n);
+            true
+        }
+
+        /// `kicks` TA tasks, each a kick and a finish packet, from job ref
+        /// `seq` on.
+        fn fw_kicks(&mut self, b: &mut Buf, seq: u32, kicks: u32) {
+            for j in seq..seq + kicks {
+                for (ty, dt) in [(ev::HW_TAKICK, 0), (ev::HW_TAFINISHED, 50)] {
+                    b.0.clear();
+                    b.hw(ty, 1000 * u64::from(j) + dt, j, 0xA000);
+                    let p = b.0.clone();
+                    self.fw_put(&p);
+                }
+            }
+        }
+    }
+
+    const EMPTY_TASK: Task = Task {
+        lane: Lane::Ta,
+        ext_job_ref: 0,
+        int_job_ref: 0,
+        work_target: 0,
+        start: 0,
+        finish: 0,
+        bg: None,
+        prev_finish: None,
+    };
+
+    /// (1) After a drain the read index is the write index reached, written
+    /// with one store between two fences and no clean of the line that holds
+    /// the firmware's `WIdx`; the firmware's words are left as they were.
+    #[test]
+    fn drain_writes_read_index_back() {
+        let mut r = Rig::new(4096);
+        let mut b = Buf::new();
+        r.fw_kicks(&mut b, 1, 3);
+        let w = r.widx();
+        assert_eq!((w, r.ridx()), (6 * 88, 0));
+
+        let d = drain(&r.k, 0, &mut []).unwrap();
+        assert_eq!((d.widx, d.summary.packets, d.summary.tasks), (w, 6, 3));
+        assert_eq!(r.ridx(), w);
+        assert_eq!((r.widx(), r.drops()), (w, 0), "WIdx and DropCount untouched");
+        assert!(r.hooks.flushes.borrow().is_empty(), "no flush: {:?}", r.hooks.flushes.borrow());
+        assert_eq!(r.hooks.fences.get(), 2);
+
+        // The next stretch, from the index the caller kept.
+        r.fw_kicks(&mut b, 4, 2);
+        let d = drain(&r.k, d.widx, &mut []).unwrap();
+        assert_eq!((d.from, d.summary.packets, d.summary.tasks), (w, 4, 2));
+        assert_eq!(r.ridx(), w + 4 * 88);
+
+        // A write index past the buffer is not believed: RIdx stays.
+        r.put(HP + HWPERFDATA_WIDX as u32, 8192);
+        let before = r.ridx();
+        let _ = drain(&r.k, before, &mut []);
+        assert_eq!(r.ridx(), before);
+    }
+
+    /// (2) A run that writes the buffer over many times: with the read index
+    /// handed back after each drain, the firmware wraps instead of dropping,
+    /// and every task comes out once, in order. The buffer is not a multiple
+    /// of a task (two 88-byte packets), so the wrap mark is below the end.
+    #[test]
+    fn wrapped_buffer_drains_in_order_without_loss() {
+        let size = 176 * 23 + 40;
+        let mut r = Rig::new(size);
+        let mut b = Buf::new();
+        let mut out = std::vec![EMPTY_TASK; 64];
+        let (mut seq, mut from, mut seen, mut packets) = (1u32, 0u32, Vec::new(), 0u32);
+        for burst in 0..60u32 {
+            // 1 to 20 tasks a stretch: never a whole buffer between drains.
+            let kicks = 1 + burst * 7 % 20;
+            r.fw_kicks(&mut b, seq, kicks);
+            seq += kicks;
+            let d = drain(&r.k, from, &mut out).unwrap();
+            let s = d.summary;
+            assert_eq!((s.error, s.dropped, s.unmatched_finish, s.open_at_end), (None, 0, 0, 0), "burst {burst}");
+            assert_eq!(d.fw_drops, 0, "burst {burst}");
+            assert_eq!(r.ridx(), d.widx);
+            seen.extend(out[..s.tasks as usize].iter().map(|t| t.ext_job_ref));
+            packets += s.packets;
+            from = d.widx;
+        }
+        assert!(r.wraps >= 10, "the run wrapped {} times", r.wraps);
+        assert_ne!(r.get(HP + HWPERFDATA_WRAP_COUNT as u32), size, "a wrap mark below the end");
+        assert_eq!(seen, (1..seq).collect::<Vec<_>>());
+        assert_eq!(packets, 2 * (seq - 1));
+        assert_eq!(r.drops(), 0);
+
+        // Without the read index (the drain before this change), the same
+        // producer fills the buffer once and drops the rest.
+        let mut q = Rig::new(size);
+        q.fw_kicks(&mut b, 1, seq - 1);
+        assert!(q.drops() > 0 && q.wraps == 0);
+    }
+
+    /// (3) With HWPerf off the drain reads nothing and writes nothing: the
+    /// heap is byte for byte as before, and no hook ran.
+    #[test]
+    fn hwperf_off_writes_nothing() {
+        let mut r = Rig::new(0);
+        // Words where an enabled heap would have its indices, to see they stay.
+        r.put(HP + HWPERFDATA_RIDX as u32, 0x5A5A_5A5A);
+        r.put(HP + HWPERFDATA_WIDX as u32, 0x40);
+        let before = r.mem.clone();
+        assert!(drain(&r.k, 0, &mut []).is_none());
+        assert!(r.mem == before);
+        assert!(r.hooks.flushes.borrow().is_empty());
+        assert_eq!(r.hooks.fences.get(), 0);
+
+        // The size word 0 with the pointers set (the init refused the
+        // buffer): also nothing.
+        let mut r = Rig::new(4096);
+        r.put(HP + HWPERFDATA_SIZE_FIELD as u32, 0);
+        r.put(HP + HWPERFDATA_WIDX as u32, 0x40);
+        let before = r.mem.clone();
+        assert!(drain(&r.k, 0, &mut []).is_none());
+        assert!(r.mem == before);
+        assert_eq!(r.hooks.fences.get(), 0);
     }
 
     #[test]

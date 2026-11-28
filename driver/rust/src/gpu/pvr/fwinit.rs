@@ -761,10 +761,10 @@ mod tests {
         let d = drain(&h.k, n1, &mut []).unwrap();
         assert_eq!((d.summary.packets, d.summary.tasks), (5, 2));
 
-        // Read only: RIdx stays 0.
+        // The read index is handed back: the write index reached.
         let osi = h.k.heap_carveout_off(h.k.fw_config_off + FW_CONFIG_HEAP_ALLOC_GRANULARITY) as usize;
         let hp = at(&h, word(&h, osi + OSINIT_HWPERF_DATA));
-        assert_eq!(word(&h, hp + HWPERFDATA_RIDX), 0);
+        assert_eq!(word(&h, hp + HWPERFDATA_RIDX), n1 + b.len() as u32);
     }
 
     #[test]
