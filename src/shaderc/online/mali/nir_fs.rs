@@ -1557,6 +1557,13 @@ pub struct Fs<'s> {
     /// integer compare ([`walk_if16`]): [`loop16`]'s route, its lanes
     /// converted first (deqp_loops_fs_uncond_break).
     pub(super) sel16: bool,
+    /// The guard being walked ([`walk_guard`]) is that of the pass past a
+    /// read array's end ([`read_trips`]): its continue side's float lanes
+    /// are the undefined read's, and no pass follows.
+    past_end: bool,
+    /// The mediump shader holds a loop unrolled by the array it reads
+    /// ([`read_trips`]): [`read16`]'s route.
+    pub(super) read16: bool,
     /// Each node's IR instruction (its place in NIR's order, [`keys`]).
     origin: &'s mut [u16],
     /// Each node's pass of the unrolled loop that made it (0 outside a
@@ -1968,6 +1975,13 @@ impl<'s> Fs<'s> {
                     F32_ONE => Ok(b),
                     F32_MINUS_ONE => self.neg(b, at),
                     0 | F32_NEG_ZERO => Ok(Val::Const(0)),
+                    /* the rule's folded constant first, as it stands in
+                     * the `ffma` the sum fuses it into
+                     * (deqp_loops2_fs_idx_tmp_float_dldl's `FMA.v2f16 r2,
+                     * 0x34000000.h11, r0.h00, r1.h00` of `(x * 0.5) * 0.5`);
+                     * measured on [`read16`]'s shaders alone, another
+                     * keeps the order it had */
+                    _ if self.read16 => self.node(Alu::Fmul, [Val::Const(r), b, Val::Undef], at),
                     _ => self.node(Alu::Fmul, [b, Val::Const(r), Val::Undef], at),
                 }
             }
@@ -2463,6 +2477,13 @@ impl<'s> Fs<'s> {
             (Val::Lane(n, _), _) | (_, Val::Lane(n, _)) => self.nir.nodes[n as usize].bits,
             _ => 32,
         };
+        /* a guard's join of a mediump loop unrolled by the array it reads
+         * ([`read_trips`]): a varying lane on a side is the fp16 value
+         * `nir_lower_mediump_io` converts ([`convert_inputs16`]) */
+        let input = |v: Val| self.input_lane(v).is_some();
+        let half = |v: Val| matches!(v, Val::Const(_)) || input(v) || self.is_f16(v);
+        let bits =
+            if self.read16 && !self.prec.highp && (input(a) || input(b)) && half(a) && half(b) { 16 } else { bits };
         let id = self.nir.push_node(NirNode { kind: Kind::Phi, src: [a, b, Val::Undef], bits, width: 1 })?;
         self.origin[id as usize] = at as u16;
         Ok(Val::Lane(id, 0))
@@ -5188,6 +5209,14 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         mixed: prec.mixed,
         inputs16: false,
         sel16: false,
+        past_end: false,
+        /* a mediump loop reading a local array by its counter under a
+         * run-time bound ([`read_trips`]), which [`kept_loop`] unrolls */
+        read16: !prec.highp
+            && m.nodes.iter().any(|n| {
+                matches!(*n, Node::Loop { body } if read_trips(m, m.nodes_of(body)).is_some()
+                && !constant_bound(m, m.nodes_of(body)))
+            }),
         cap_nodes: [0; 3 * nir::MAX_LOOPS],
         ncap: 0,
         origin: scratch.alloc_filled(MAX_NODES, 0u16).map_err(oom)?,
@@ -5506,12 +5535,17 @@ fn walk_if_sides(
         IfExit::Guard(lp) => Some(lp),
         _ => None,
     };
+    let past_end = rest.is_some() && core::mem::take(&mut f.past_end);
     let mut else_flow = walk_nodes(f, m, else_, vals, locals, prec, false, join, rest)?;
     /* the guard's continue side: the rest of the pass, then the passes
      * after it, each nested in the one before (`complex_unroll_loop_body`,
      * nir_opt_loop_unroll.c:237-286) */
     if let (Some(lp), Flow::Next | Flow::Continue) = (rest, else_flow) {
-        walk_passes(f, m, lp, vals, locals, prec)?;
+        if past_end {
+            past_end_lanes(f, m, else_, saved_locals, locals);
+        } else {
+            walk_passes(f, m, lp, vals, locals, prec)?;
+        }
         else_flow = Flow::Break;
     }
     let else_end = f.nir.n;
@@ -5878,8 +5912,71 @@ fn walk_guard(
         }
         _ => (c, false),
     };
+    /* a mediump pass of a loop unrolled by the array it reads: the ladder
+     * of its one terminator, as a merged one's ([`read_trips`]) */
+    let merged = merged || (!prec.highp && read_trips(m, lp.nodes).is_some());
     let exit = IfExit::Guard(Unroll { merged, ..lp });
     walk_if(f, m, c, &[Node::Break], rest, exit, vals, locals, prec, lp.last)
+}
+
+/// The pass past the end of the array a mediump loop reads ([`read_trips`]),
+/// walked as `rest`: its read is out of bounds, an undefined value that
+/// Mesa's `nir_opt_undef` carries through the sum it feeds and
+/// `nir_lower_undef_to_zero` leaves alone, so the float lanes that pass
+/// stores from that read are the fp16 NaN (`0x7E00`, [`super::select::PAST_END_NAN`]; the `u3.w0` side of
+/// deqp_loops2_fs_idx_tmp_float_dldl's innermost `MUX.v2i16`). A lane the
+/// pass stores from no array element keeps the value it computes.
+fn past_end_lanes(f: &mut Fs<'_>, m: &Module<'_>, rest: &[Node], before: usize, locals: &mut [[Val; 4]; MAX_LOCALS]) {
+    let arrays = array_element_locals(m);
+    for (l, lanes) in locals.iter_mut().enumerate().take(f.nl) {
+        let float = m.locals.get(l).is_some_and(|d| d.ty.scalar == ir::ScalarType::F32);
+        if !float || !stores_from_array(m, rest, l, &arrays) {
+            continue;
+        }
+        for (c, v) in lanes.iter_mut().enumerate() {
+            if *v != f.table(before)[l][c] {
+                *v = Val::Const(super::select::PAST_END_NAN);
+            }
+        }
+    }
+}
+
+/// Whether IR local `l` is one element of a local array the front end
+/// split into one local per element (locals of one name and type).
+fn array_element_locals<'a>(m: &'a Module<'_>) -> impl Fn(ir::LocalId) -> bool + 'a {
+    move |l| {
+        m.locals.get(l.0 as usize).is_some_and(|d| {
+            !d.name.is_empty() && m.locals.iter().filter(|e| e.name == d.name && e.ty == d.ty).count() > 1
+        })
+    }
+}
+
+/// Run `nodes` stores local `l` from a value that reads an element of a
+/// split local array (`arrays`, [`array_element_locals`]).
+fn stores_from_array(m: &Module<'_>, nodes: &[Node], l: usize, arrays: &impl Fn(ir::LocalId) -> bool) -> bool {
+    nodes.iter().any(|n| match *n {
+        Node::Instr(id) => matches!(m.instr(id), Some(&ir::Op::StoreLocal { local, src, .. })
+            if local.0 as usize == l && reads_array(m, src.val, arrays, 0)),
+        Node::If { then_, else_, .. } => {
+            stores_from_array(m, m.nodes_of(then_), l, arrays) || stores_from_array(m, m.nodes_of(else_), l, arrays)
+        }
+        _ => false,
+    })
+}
+
+/// Value `v` reads an element of a split local array, itself or through
+/// its operands.
+fn reads_array(m: &Module<'_>, v: ir::ValueId, arrays: &impl Fn(ir::LocalId) -> bool, depth: u32) -> bool {
+    if depth > 64 {
+        return true;
+    }
+    match m.def(v) {
+        Some(&ir::Op::LoadLocal { local, .. }) => arrays(local),
+        Some(&ir::Op::Alu(op, s)) => {
+            s[..op.arity()].iter().any(|x| x.val != v && reads_array(m, x.val, arrays, depth + 1))
+        }
+        _ => false,
+    }
 }
 
 /// Run `nodes` holds a texture look-up, itself or in a nested region: the
@@ -6042,6 +6139,12 @@ fn kept_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MA
     /* a run-time bound on a counter that subscripts a local array: Mesa
      * unrolls it by the array's length ([`guessed_trips`]) */
     if guessed_trips(m, nodes).is_some() {
+        return false;
+    }
+    /* a mediump shader's loop reading a local array by its counter under
+     * a run-time bound: unrolled by the array's length, each pass behind
+     * its test on the bound ([`read_trips`]) */
+    if !f.prec.highp && read_trips(m, nodes).is_some() {
         return false;
     }
     /* a body that ends in a `break` and has no `continue` runs once:
@@ -6636,6 +6739,29 @@ fn walk_nodes(
                     }
                 }
                 let (t, e) = (m.nodes_of(then_), m.nodes_of(else_));
+                /* the head test `if (i < x) {} else break;` of a mediump
+                 * loop unrolled by the array it reads ([`read_trips`]):
+                 * the guard of the pass, `if (i >= x) break;` (the
+                 * inverse compare), the rest of the pass and the passes
+                 * after it its continue side; the pass with the counter
+                 * at the array's length is the last ([`Fs::past_end`]) */
+                if let Some(lp) = lp.filter(|lp| lp.nodes.as_ptr() == nodes.as_ptr() && !prec.highp) {
+                    let head = nodes.iter().position(|n| !matches!(n, Node::Instr(_))) == Some(k);
+                    if let (true, true, Some(trips), Some(&ir::Op::Alu(AluOp::Ilt, [a, _, _]))) =
+                        (head, t.is_empty() && e == [Node::Break], read_trips(m, lp.nodes), m.def(cond.val))
+                    {
+                        let Some(Val::Const(i)) = vals.get(a.val.0 as usize).map(|v| v[a.swizzle[0] as usize & 3])
+                        else {
+                            return Err(MaliError::LoopForm);
+                        };
+                        if i as i32 > trips as i32 {
+                            return Err(MaliError::Defect(Defect::IrIndex));
+                        }
+                        let nc = f.inverse_compare(c)?;
+                        f.past_end = i == trips;
+                        return walk_guard(f, m, nc, cond.val, &nodes[k + 1..], lp, vals, locals, prec);
+                    }
+                }
                 if let (Some(lp), true) = (lp, e.is_empty()) {
                     /* `if (c) break;`: the guard the rest of the loop
                      * nests in */
@@ -14037,6 +14163,11 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
             NirNode { kind: Kind::Alu(_), bits: 16, .. } => {
                 val.get(n as usize).copied().flatten().map(|s| s.swz(swz)).ok_or(defect)
             }
+            /* a paired select's 32-bit integer mask, its low half in both
+             * lanes ([`lane_key`]: `MUX.v2i16 .., r9.h00`) */
+            NirNode { kind: Kind::Alu(Alu::Icmp(_)), bits: 32, width: 1, .. } if read16(f) => {
+                val.get(n as usize).copied().flatten().map(|s| s.swz(swz)).ok_or(defect)
+            }
             _ => Err(defect),
         },
         _ => Err(defect),
@@ -14135,6 +14266,15 @@ pub fn masks16(f: &Fs<'_>) -> bool {
 /// the colour the look-ups' fp16 texels.
 pub fn array_look_ups(f: &Fs<'_>) -> bool {
     !f.prec.highp && f.live_look_ups().any(|(_, t)| t.array)
+}
+
+/// The mediump shader `f` unrolled a loop by the local array it reads
+/// under a run-time bound ([`read_trips`]): its passes' guards are regions
+/// of the graph that [`select_highp`] flattens, its fp16 lanes then paired
+/// ([`vectorize16`]), its varying lanes converted first
+/// ([`convert_inputs16`]).
+pub fn read16(f: &Fs<'_>) -> bool {
+    !f.prec.highp && f.read16
 }
 
 /// The mediump shader `f` unrolled a loop whose test and run-time `break`
@@ -14239,6 +14379,33 @@ fn sink_after(f: &mut Fs<'_>, made: core::ops::Range<usize>, to: u16) -> Result<
 /// `ui_four`; docs/notes/mali-deqp-loops.md section 7). A vector's
 /// subscript is no array: Mesa keeps that loop (fs_vec_dyn).
 pub(super) fn guessed_trips(m: &Module<'_>, nodes: &[Node]) -> Option<u32> {
+    array_trips(m, nodes, false)
+}
+
+/// The trip count `nir_loop_analyze` guesses for a loop whose body `nodes`
+/// reads a local array by its counter under a run-time bound (the array's
+/// length, as [`guessed_trips`]; `find_array_access_via_induction` takes a
+/// read as a write). `nir_opt_loop_unroll` then unrolls that many passes,
+/// each behind its test on the bound, and one more past the array, whose
+/// read is undefined (`partial_unroll`, the leftover loop's first pass:
+/// deqp_loops2_fs_idx_tmp_float_dldl's read loop, five `ICMP_OR.s32.lt`
+/// of `0..=4` with `ui_four` and their `MUX.v2i16` ladder, the fifth's
+/// side the fp16 NaN). [`walk_guard`] walks them ([`Fs::past_end`]).
+pub(super) fn read_trips(m: &Module<'_>, nodes: &[Node]) -> Option<u32> {
+    array_trips(m, nodes, true)
+}
+
+/// The head test `if (i < x) {} else break;` of loop body `nodes` has a
+/// constant bound `x`: the walk folds it in every pass ([`walk_loop`]).
+fn constant_bound(m: &Module<'_>, nodes: &[Node]) -> bool {
+    let Some(&Node::If { cond, .. }) = nodes.iter().find(|n| !matches!(n, Node::Instr(_))) else { return false };
+    matches!(m.def(cond.val), Some(&ir::Op::Alu(AluOp::Ilt, [_, b, _]))
+        if matches!(m.def(b.val), Some(ir::Op::ConstI32(_))))
+}
+
+/// [`guessed_trips`] (`read` false: a body that writes the array alone) or
+/// [`read_trips`] (`read` true: a body that reads it).
+fn array_trips(m: &Module<'_>, nodes: &[Node], read: bool) -> Option<u32> {
     let Some(&Node::If { cond, then_, else_ }) = nodes.iter().find(|n| !matches!(n, Node::Instr(_))) else {
         return None;
     };
@@ -14275,7 +14442,19 @@ pub(super) fn guessed_trips(m: &Module<'_>, nodes: &[Node]) -> Option<u32> {
      * past it is not summed: deqp_loops2_fs_idx_tmp_float_dldl's read loop,
      * `ICMP_OR.s32.lt` of each index with `ui_four` and its `MUX.v2i16`),
      * which this rule does not make: such a loop is not unrolled here */
-    if array_read_by_counter(m, nodes) {
+    if array_read_by_counter(m, nodes) != read {
+        return None;
+    }
+    /* a body that reads one array and writes another by the counter:
+     * Mesa unrolls no pass past their end (deqp_loops2_fs_struct_local's
+     * three guards, `CSEL.u32.eq` of its int lanes), a form not lowered */
+    let ladder_store = || {
+        nodes.iter().any(|n| {
+            matches!(*n, Node::Instr(id) if matches!(m.instr(id),
+                Some(&ir::Op::StoreLocal { index: None, src, .. }) if is_select(src.val)))
+        })
+    };
+    if read && ladder_store() {
         return None;
     }
     let mut len = None::<u32>;
@@ -14885,6 +15064,13 @@ fn lane_key(f: &Fs<'_>, v: Val) -> Option<LaneKey> {
                 Some(LaneKey::Def(1 << 16 | u32::from(base), w))
             }
             NirNode { bits: 16, .. } => Some(LaneKey::Def(u32::from(n), u16::from(c / 2))),
+            /* a select's 32-bit integer mask in a loop unrolled by the
+             * array it reads ([`read16`]): one mask for both lanes, the
+             * `MUX.v2i16`'s `.h00` (deqp_loops2_fs_idx_tmp_vec4_sd's
+             * `MUX.v2i16 r6, r6^, u3.w0, r9.h00`) */
+            NirNode { kind: Kind::Alu(Alu::Icmp(_)), bits: 32, width: 1, .. } if read16(f) => {
+                Some(LaneKey::Def(u32::from(n), 0))
+            }
             _ => None,
         },
         _ => None,
@@ -14919,7 +15105,27 @@ fn lane_half(f: &Fs<'_>, v: Val) -> Option<u8> {
 /// cflow_71_deadloop's `FMA.v2f16 r0, u2.w0, u2.w1, ..` of `u_k.x * 3.0`
 /// and `u_k.y * 2.0`, and its compares of passes 0 and 1, 2 and 3, 4 and
 /// 5, in that order (`FCMP_OR.v2f16.lt.m1 r3, u4.w0, r1.h00, 0x0`).
+///
+/// In a loop unrolled by the array it reads ([`read16`]) a lone product
+/// that only sums read is no candidate: Mesa's optimisation loop fuses it
+/// into its sum (`fuse_ffma16`, nir_opt_algebraic.py) before it
+/// vectorises, and the passes' `ffma`s chain, one reading the other
+/// (deqp_loops2_fs_idx_tmp_float_dldl: three `FMA.v2f16` of `.h00`
+/// lanes, none paired). A product of a vector's lanes is one operation
+/// already, paired as it stands (deqp_loops2_fs_idx_tmp_vec4_sd).
 fn vectorize16(f: &mut Fs<'_>) -> Result<(), MaliError> {
+    let only_summed = |f: &Fs<'_>, id: usize| {
+        let mut sums = 0;
+        for &u in &f.nir.order[..f.nir.len] {
+            let nd = f.nir.nodes[u as usize];
+            let reads = nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n as usize == id));
+            if reads && nd.kind != Kind::Alu(Alu::Fadd) {
+                return false;
+            }
+            sums += usize::from(reads);
+        }
+        sums > 0
+    };
     let pairable = |f: &Fs<'_>, id: usize| match f.nir.nodes[id] {
         NirNode { kind: Kind::Alu(op), bits: 16, width: 1, src } => {
             !matches!(op, Alu::Vec2 | Alu::F2f16 | Alu::Frcp | Alu::Frsq)
@@ -14927,10 +15133,62 @@ fn vectorize16(f: &mut Fs<'_>) -> Result<(), MaliError> {
         }
         _ => false,
     };
+    /* two products of one IR operation (a vector's lanes) in one pass */
+    let one_op = |f: &Fs<'_>, a: usize, b: usize| f.origin[a] == f.origin[b] && f.pass[a] == f.pass[b];
+    let fused = |f: &Fs<'_>, a: usize, b: usize| {
+        read16(f)
+            && f.nir.nodes[a].kind == Kind::Alu(Alu::Fmul)
+            && !one_op(f, a, b)
+            && (only_summed(f, a) || only_summed(f, b))
+    };
+    /* a select of [`read16`]'s ladder whose side is a lane of a varying's
+     * conversion, where the selects on its mask read more than one pair of
+     * those lanes (a `vec4` local's level next to the varying it starts
+     * as): Mesa leaves its lanes apart, `MUX.v2i16 r5, r0.h00, r2.h00,
+     * r4.h00` and the next three, then the outer level too, whose sides
+     * are those lanes (deqp_loops2_fs_idx_tmp_vec4_sd). A `vec2` local's
+     * pairs (deqp_gaps_loops_fs_kept_for_index's `MUX.v2i16 r0, r0^, r1^,
+     * r2^.h00`) */
+    let converted = |f: &Fs<'_>, v: Val| match v {
+        Val::Lane(n, c) => match f.nir.nodes[n as usize] {
+            NirNode { kind: Kind::Alu(Alu::F2f16), src, width, .. } => {
+                let s = if width == 2 { src[c as usize & 1] } else { src[0] };
+                f.input_lane(s).map(|(loc, k)| (loc, k / 2))
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let wide_varying = |f: &Fs<'_>, id: usize| {
+        let NirNode { kind: Kind::Alu(Alu::Bcsel), src: [c, ..], bits: 16, .. } = f.nir.nodes[id] else {
+            return false;
+        };
+        if !read16(f) || !f.nir.nodes[id].src[1..].iter().any(|&v| converted(f, v).is_some()) {
+            return false;
+        }
+        let mut pairs = [None::<(u8, u8)>; 2];
+        for &u in &f.nir.order[..f.nir.len] {
+            let nd = f.nir.nodes[u as usize];
+            if nd.kind != Kind::Alu(Alu::Bcsel) || nd.src[0] != c {
+                continue;
+            }
+            for p in nd.src[1..].iter().filter_map(|&v| converted(f, v)) {
+                if pairs[0].is_none_or(|q| q == p) {
+                    pairs[0] = Some(p);
+                } else {
+                    pairs[1] = Some(p);
+                }
+            }
+        }
+        pairs[1].is_some()
+    };
     let same = |f: &Fs<'_>, a: usize, b: usize| {
         let (x, y) = (f.nir.nodes[a], f.nir.nodes[b]);
         let Kind::Alu(op) = x.kind else { return false };
-        x.kind == y.kind && (0..op.arity()).all(|s| lane_key(f, x.src[s]) == lane_key(f, y.src[s]))
+        x.kind == y.kind
+            && (0..op.arity()).all(|s| lane_key(f, x.src[s]) == lane_key(f, y.src[s]))
+            && !fused(f, a, b)
+            && !wide_varying(f, a)
     };
     let half = |b: u32| f16_rtne(b).map(u32::from).ok_or(MaliError::Fp16Inexact);
     let swz = |lo: u8, hi: u8| match (lo, hi) {
@@ -15467,13 +15725,19 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
     f.inputs16 = true;
     /* the lanes read: bit c of word (input node) */
     let mut read = [0u8; MAX_NODES];
+    /* and a 16-bit phi's ([`Fs::phi`], a guard's join of [`read16`]) */
+    let arity = |f: &Fs<'_>, k: Kind| match k {
+        Kind::Alu(op) => Some(op.arity()),
+        Kind::Phi if f.read16 => Some(2),
+        _ => None,
+    };
     for id in 0..f.nir.n {
         let nd = f.nir.nodes[id];
-        let Kind::Alu(op) = nd.kind else { continue };
+        let Some(arity) = arity(f, nd.kind) else { continue };
         if nd.bits != 16 || !f.read(Val::Lane(id as u16, 0)) {
             continue;
         }
-        for &v in &nd.src[..op.arity()] {
+        for &v in &nd.src[..arity] {
             if let Some((loc, c)) = f.input_lane(v) {
                 if (loc as usize) < MAX_VARYINGS {
                     let Val::Lane(n, _) = v else { return Err(defect) };
@@ -15551,11 +15815,11 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
         }
         for id in 0..f.nir.n {
             let nd = f.nir.nodes[id];
-            let Kind::Alu(op) = nd.kind else { continue };
-            if nd.bits != 16 || op == Alu::F2f16 {
+            let Some(arity) = arity(f, nd.kind) else { continue };
+            if nd.bits != 16 || nd.kind == Kind::Alu(Alu::F2f16) {
                 continue;
             }
-            for s in 0..op.arity() {
+            for s in 0..arity {
                 if let Val::Lane(m, c) = f.nir.nodes[id].src[s] {
                     if m as usize == n && conv[c as usize & 3] != Val::Undef {
                         f.nir.nodes[id].src[s] = conv[c as usize & 3];
@@ -15634,7 +15898,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
      * merged, the selects of constants fold and equal compares are one */
     nir::dce(&mut f.nir, None);
     f.nir.dead_cf();
-    if guarded16(f) {
+    if guarded16(f) && !read16(f) {
         ladder_forms(f)?;
     }
     if kept16(f) && !loop16(f) {
@@ -15647,7 +15911,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
         multi_forms(f)?;
     }
     let mut inots = f.nir.inverted_guards();
-    f.nir.invert_ladder(&mut inots)?;
+    f.nir.invert_ladder(&mut inots, read16(f))?;
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT_GL, true, &inots);
     f.nir.invert_guards(&inots)?;
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT, false, &[false; nir::MAX_IFS]);
@@ -15683,8 +15947,11 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
      * then is not measured, and ours differs (`ceil(u_k.z * 3.0)` and
      * `ceil(3.0 * u_k.x)` leave `u_k.y * 2.0` alone, case 70's loop with
      * `acc * 3.0` leaves each pass's `k * 1.5`; tools/mali/testdata/
-     * deadloop_*): only pairs are, cflow_71_deadloop's */
+     * deadloop_*): only pairs are, cflow_71_deadloop's. A loop unrolled
+     * by the array it reads ([`read16`]) fuses its lone products into the
+     * passes' sums (deqp_loops2_fs_idx_tmp_float_dldl's `FMA.v2f16` chain) */
     if guarded16(f)
+        && !read16(f)
         && f.nir.order[..f.nir.len].iter().any(|&id| {
             matches!(f.nir.nodes[id as usize], NirNode { kind: Kind::Alu(Alu::Fmul), bits: 16, width: 1, .. })
         })
@@ -15695,8 +15962,10 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     nir::dot_addend(&mut f.nir)?;
     nir::late_rules(&mut f.nir);
     /* TEX_MULTI's colour lanes as the pairing left them (its stores'
-     * sources: a lane paired is the pair's half) */
-    if multi16(f) {
+     * sources: a lane paired is the pair's half); and those of a loop
+     * unrolled by the array it reads, whose ladder's selects pair
+     * ([`read16`]) */
+    if multi16(f) || read16(f) {
         for (k, x) in c.iter_mut().enumerate() {
             *x = f.nir.nodes[store0 + k].src[0];
         }

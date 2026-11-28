@@ -83,11 +83,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_for_uni_nested_tricky_dataflow_2", LOOP_MEDIUMP),
     ("fs_for_uni_sequence", LOOP_MEDIUMP),
     ("fs_idx_mat4_dd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_idx_mat4_sd", LOOP_MEDIUMP),
     ("fs_idx_tmp_float_dd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_idx_tmp_float_dldl", LOOP_MEDIUMP),
     ("fs_idx_tmp_vec4_cd", LOOP_MEDIUMP),
-    ("fs_idx_tmp_vec4_sd", LOOP_MEDIUMP),
     ("fs_idx_uni_float", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
     ("fs_idx_uni_vec4", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
     ("fs_idx_var_vec4_sd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
@@ -199,6 +196,7 @@ const COMPILED: &[(&str, bool)] = &[
     ("fs_for_uni_empty_body", false),
     ("fs_for_uni_function_call_inout", true),
     ("fs_for_uni_single_iteration", true),
+    ("fs_idx_mat4_sd", false),
     ("fs_scope_while", false),
     ("fs_wh_con_101_iterations", false),
     ("fs_wh_dyn_101_iterations", false),
@@ -226,7 +224,17 @@ const COMPILED: &[(&str, bool)] = &[
 /// infinite loop, each folded once its pass is known, and the 19 vertex
 /// references of steps LP4 (constant bound) and LP5 (an unconditional break
 /// or only a continue) of `docs/notes/mali-loops2-lowering.md`.
+///
+/// With them, the mediump fragment loops that read a local array by their
+/// counter under a run-time bound (`fs_idx_*`), which Mesa unrolls by the
+/// array's length with a guard per pass and one pass past the end
+/// (nir_fs.rs `read_trips`; docs/notes/mali-deqp-loops.md section 15). No
+/// loop is left, so no cap. `fs_idx_mat4_sd` of that shape is in
+/// [`COMPILED`] (`false`): its swizzled vector products (`coords.yzwx *
+/// 0.5`) pair other lanes than Mesa's.
 const MATCHED: &[&str] = &[
+    "fs_idx_tmp_float_dldl",
+    "fs_idx_tmp_vec4_sd",
     "vs_do_con_nested",
     "vs_do_con_nested_sequence",
     "vs_do_con_nested_tricky_dataflow_2",
