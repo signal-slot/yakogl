@@ -11,6 +11,24 @@ only. No compiler code changed, nothing ran on a board. Code is cited at
 
 ## Answer in short
 
+- **Today (`3df3adfc9`, plan #421): the noise shader is 471 instructions,
+  14 temporaries, against etnaviv's 414 and 12** (840 at `98251549`, 556 at
+  `85afd0cf`, 509 after the `mad` fusion `02b3bc2b`). The ten other shaders
+  are 234 against etnaviv's 279 (`gc-terrain-shaders-rest.md`). Pinned by
+  `tests/gc_terrain_shader_count.rs` (`NOISE`). The model prices the noise
+  pass's 369 instructions fewer at 14.4 ms a frame at 0.6 ns; no board time
+  of it is measured (terrain's frame on the Armadillo-X2 standing in for the
+  Verdin i.MX8MP: 162.0 ms at `85afd0cf`, the after row not measured,
+  `gc-slow-terrain.md`, "Plan #421").
+- What is left of the 57 instructions: constant-lane fills with one
+  const-vector `mov` (21), `step` as `set.lt` (16), a `mov w, -v` that
+  `fuse_mul_add` does not look through (about 8), the gathers and splat
+  copies (about 2, class S). About 3 ms of a frame together; no item owns
+  them.
+- The rest of this note's text, the class table and the ranked table are the
+  state at `98251549` (the measurement of 840 against 414). Their "state"
+  column and the section "What landed" say what became of each rank.
+
 - **Mesa etnaviv compiles the noise shader to 414 instructions; ours emits
   840** (2.03 times). Every other heavy terrain shader is 1.5 to 2 times too:
   `terrain.frag` 148 against 72, `terrain.vert` 56 against 39, the two
@@ -29,11 +47,12 @@ only. No compiler code changed, nothing ran on a board. Code is cited at
   0.8 ns** of terrain's 140 to 205 ms of GPU time. The noise pass alone is 17
   to 22 ms of it. Terrain's 250 ms frame would go to about 175 to 195 ms with
   Mesa-sized shaders (a model, not a measurement).
-- Rank 1's negate half, written in the GC code generator, takes the noise
-  shader from 840 to 767 and changes no value the host interpreter
-  computes. It is not committed: it moves the shared pin
-  `tests/fixtures/precompile_counts.txt`. The `mad` half needs `codegen.rs`
-  or `select.rs` to say which outputs are `invariant` ("What to do", below).
+- Rank 1's negate half was written as a separate pass at `31869a4c`
+  (840 to 767) and never committed; it became unnecessary. The sr patch
+  (`3ac0d82d`) and the float folds (`6e498505`) took the negate-only `mov`s
+  and the `rcp`s out of the noise shader (0 of each left, 556 at `eae3ac95`).
+  The `mad` half landed as `02b3bc2b` with the `invariant` outputs read in
+  `select.rs` itself.
 - The gap is large, so it is worth its own issue: "the online GC compiler
   emits about twice Mesa's instructions for the glmark2 terrain shaders"
   (text in the report that comes with this note).
@@ -297,13 +316,13 @@ longer than a `mad`). The attributions overlap a little, so the rows add to
 about 52 of the 57 ms of the total excess; the rest is classes that no one
 change owns.
 
-| rank | change | where | noise | terrain.frag | tilt (v + h) | terrain.vert | ms a frame at 0.6 / 0.8 ns |
-|---:|---|---|---:|---:|---:|---:|---|
-| 1 | Contract `a*b + c` into `mad` when no `invariant` output reads it, and fold every `Fneg` and `a - b` into the consumer's `SRC_NEG` (no `mov`) | a GC pass after lowering, like `src/shaderc/online/powervr/prepare.rs` `fusion_pairs`; `src/shaderc/online/vivante/builtins.rs:228-231`, `lower.rs:5712-5717` | about 138 | about 20 | 40 | about 8 | **about 25 / 33** |
-| 2 | One-pass (small constant trip count) loops unrolled and constant-index uniform-array reads become plain constant-file reads | `select.rs` `loop_convert`, the shared `src/shaderc/online/powervr/unroll.rs` | 0 | about 45 | 0 | 0 | **about 13 / 17** |
-| 3 | vec4 packing and copy propagation: fill two lanes of a constant vector with one `mov`, read swizzles through the source, no whole-register copies | `src/shaderc/online/vivante/alloc.rs` (coalescing of `mov`s, near `:1380`), `lower.rs` constructors | about 90 | about 10 | 9 | about 6 | **about 8 / 11** |
-| 4 | Divide and `mod` by a constant: fold `1/c` at compile time, put it in the constant file, no `rcp`, no `mov` of the constant per lane | `builtin_call.rs:1013-1023` (`mod`), `lower.rs:5457-5474` | **132** | 0 | 1 | 0 | **about 5.5 / 7** |
-| 5 | `step(a, b)` as `set.lt` | `builtin_call.rs` `step` | 16 | 0 | 0 | 0 | about 0.6 / 0.8 |
+| rank | change | where | noise | terrain.frag | tilt (v + h) | terrain.vert | ms a frame at 0.6 / 0.8 ns | state |
+|---:|---|---|---:|---:|---:|---:|---|---|
+| 1 | Contract `a*b + c` into `mad` when no `invariant` output reads it, and fold every `Fneg` and `a - b` into the consumer's `SRC_NEG` (no `mov`) | a GC pass after lowering, like `src/shaderc/online/powervr/prepare.rs` `fusion_pairs`; `src/shaderc/online/vivante/builtins.rs:228-231`, `lower.rs:5712-5717` | about 138 | about 20 | 40 | about 8 | **about 25 / 33** | `mad`: landed `02b3bc2b` (noise 556 -> 509); negate: superseded (`3ac0d82d`, `6e498505`) |
+| 2 | One-pass (small constant trip count) loops unrolled and constant-index uniform-array reads become plain constant-file reads | `select.rs` `loop_convert`, the shared `src/shaderc/online/powervr/unroll.rs` | 0 | about 45 | 0 | 0 | **about 13 / 17** | landed `f62bcfe1` |
+| 3 | vec4 packing and copy propagation: fill two lanes of a constant vector with one `mov`, read swizzles through the source, no whole-register copies | `src/shaderc/online/vivante/alloc.rs` (coalescing of `mov`s, near `:1380`), `lower.rs` constructors | about 90 | about 10 | 9 | about 6 | **about 8 / 11** | landed: `3ac0d82d` (copy fold, lane merge), `965d678b` (partial-mask copies, producers, outputs); noise 509 -> 471 |
+| 4 | Divide and `mod` by a constant: fold `1/c` at compile time, put it in the constant file, no `rcp`, no `mov` of the constant per lane | `builtin_call.rs:1013-1023` (`mod`), `lower.rs:5457-5474` | **132** | 0 | 1 | 0 | **about 5.5 / 7** | landed `6e498505`, `27f2a036` (noise 840 -> 556 with the sr patch) |
+| 5 | `step(a, b)` as `set.lt` | `builtin_call.rs` `step` | 16 | 0 | 0 | 0 | about 0.6 / 0.8 | not landed: no item owns it (16 instructions, 0.6 ms) |
 
 For the noise shader alone the order is 1 (138), 4 (132), 3 (90), 5 (16), and
 the first two together take it from 840 to about 570; all four to about 420,
@@ -322,76 +341,38 @@ a frame (76 at 0.8 ns), or terrain from 250 ms to about 175 to 195 ms. It does
 not make terrain reach the panel's rate (`gc-slow-terrain.md`: early depth and
 fast clears, the other half of rank 1, are separate).
 
-## What to do: rank 1 in the vivante code generator (noise-compiler-fix)
+## What landed
 
-Plan #328, item noise-compiler-fix, at main `31869a4c`. The item could edit
-only the GC code generator (`src/shaderc/online/vivante/`), not the shared
-compiler files or `tests/fixtures/`. **No code change was committed.** The
-negate half of rank 1 was written inside the code generator and measured on
-the host. It moves the shared pin `tests/fixtures/precompile_counts.txt`,
-so the item stopped. The contraction half cannot be written there at all.
+Counts of the noise shader (instructions, temporaries), each from its
+commit message:
 
-**Negate fold: written, measured, not committed.** A pass that runs at the
-start of `alloc::eliminate_dead` (a new `vivante/negate_fold.rs`) rewrites
-each reader of a `mov` that only negates or takes the magnitude of a
-temporary, so that the reader reads the source through its own `SRC_NEG` and
-`SRC_ABS` bits. The swizzles are composed, and the magnitude is taken before
-the negate, as the hardware does. The pass works on straight-line code only.
-It stops at a branch target, after a branch, after a write of the source,
-and once every lane the `mov` wrote has been overwritten. It rewrites a
-reader only when every lane the reader consumes holds the `mov`'s value,
-and only into float operations that take the modifiers as `Fneg`/`Fabs`
-mean them. The `mov`, once unread, is deleted by `eliminate_dead`'s
-liveness.
+| step | commit | noise |
+|---|---|---:|
+| as measured above | `98251549` | 840 / 14 |
+| copy fold and scalar lane merge, the sr patch | `3ac0d82d` | |
+| float constant folding, one-operand identities (4a, 4b), constant lane of a constructed vector (4c), a product retargeted past a constant-lane store (T) | `6e498505`, `27f2a036`, `a0497f7e` | 556 / 14 (at `eae3ac95`) |
+| `mul` + `add` as one `mad`, none toward an `invariant` output (3) | `02b3bc2b` | 509 / 14 |
+| partial-mask copies read through, producers write their copy's lane, an output takes its dying source's register (2, rest) | `965d678b` | 471 / 14 |
 
-| measured on the host | without | with |
-|---|---:|---:|
-| noise shader (`terrain-1637be2eef2e8a5e`), instructions | 840 | **767** (Mesa 414) |
-| noise shader, temporaries | 14 | 14 |
-| negate-only `mov`s left in it | 66 | 5 (all `mov t, -uN`: a constant-file source) |
-| offline-table programs it shortens | | 55, 494 instructions |
-| of those, run bit-identical by the host interpreter (`tests/common` `run_mem`), 8 random input sets each | | 52 (3 `loop_nested*` programs cannot be run) |
-| `src/vivante/internal.rs` (`--internal --verify`) | | unchanged |
-| `tests/fixtures/precompile_counts.txt` `gc7000 es2=0 app=all` | code_bytes=129376 | code_bytes=122656 (**moves**) |
-| `tests/lane_move_equivalence.rs` population pin | 103 | 102 (moves) |
+Per class, what is left against etnaviv (the 57): the constant-lane fills
+(21 `mov`s), `step` as `cmp.lt` + `not` + `and` where etnaviv has `set.lt`
+(16), the negate that `fuse_mul_add` does not look through (about 8: it
+fuses a product only when the `add` reads it directly, so `x - a*b` stays
+`mul`, `mov -`, `add`), the 72 gathers and 3 splat copies. None is a
+missed constant fold: the constant-divisor and negate folds hold, and
+`tests/gc_noise_folds.rs` keeps them.
 
-At the note's 0.6 / 0.8 ns an instruction a pixel, the 73 instructions are
-about 2.9 / 3.8 ms of the noise pass. The fold also reaches terrain's other
-shaders; that was not counted here.
-
-The other GC7000 host tests pass with the fold. That run was
-`cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online`,
-with the test file reduced to one `#[test]` as `src/test_rules.rs` requires.
-The patch, with its unit tests and `tests/gc_noise_shader_count.rs` (it
-pins 840 without the fold and 767 with it, and runs the value check), is
-kept outside the tree on the machine that measured it. Landing it is one
-item that may also re-pin the shared files:
-
-- `tests/fixtures/precompile_counts.txt`: every `gc7000` line, re-pinned
-  with `PRECOMPILE_PIN_WRITE=1 tools/precompile/prove.sh gpu-vivante` and
-  `gpu-vivante,report-es2` (only the first line was read here: 129376 to
-  122656);
-- `tests/lane_move_equivalence.rs`: the population pin, 103 to 102 (the
-  `report-es2` build's 87 not measured);
-- nothing in `src/vivante/internal.rs` or `tests/reference/`.
-
-**Contraction (`a*b + c` to `mad`): needs a shared file.** The rule is "not on
-the way to an `invariant` output" (`ir.rs` `IoDecl::invariant`). That flag
-lives in the IR's io declarations. The GC code generator's passes only see
-the selected instructions (`SelInstr`), where an output is a `Fixed`
-register with no flag. `codegen.rs` `assemble_from_ir_blocks` (or
-`select.rs`) must hand the pass the output registers whose declaration is
-`invariant`, as `src/shaderc/online/powervr/prepare.rs` `fusion_pairs` receives its
-`invariant: &[IoSlot]`. Then the pass itself (pairing a single-use `mul`
-with its `add`, through `alloc.rs`'s lane rules) can live in `vivante/`.
-Whether the GC7000's `mad` rounds once or twice is not known. If it rounds
-twice, contraction is exact and the rule would not be needed, but nothing
-in this tree measures it.
-
-**The five uniform negates** (`mov t, -u4.xzxx`) would need the fold to
-check the "one constant register an instruction" rule, `select.rs`
-`within_caps`. It is private there, and a second copy in `vivante/` would
-be two records of one fact.
+**The contraction rule.** `Sel::fuse_mul_add` (`select.rs`, between
+`propagate_copies` and `fold_constant_reads`) fuses an F32 `mul` written once
+and read once, by one source of an `add` in the same straight line, into
+`mad` at the add's place. It refuses a product read twice, a branch between,
+a write of a product source between, sources over `within_caps` (two
+constant-file registers), and every pair in a shader with an `invariant`
+output (`IoDecl::is_invariant`, so the pragma too). The host interpreter's
+`mad` is a multiply then an add, as Mesa models the GC `mad`, so values stay
+bit for bit; the GC7000's own `mad` rounding is not measured (the invariant
+guard keeps it from mattering for invariance; the X2 frames are where it can
+show). `codegen.rs`, `lower.rs`, `fold.rs`, `ir.rs` are untouched.
 
 ## What this does not show
 
