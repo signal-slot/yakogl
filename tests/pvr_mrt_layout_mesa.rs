@@ -95,17 +95,22 @@ const fn s(v: u8) -> Option<u8> {
 
 /// The lists where the two differ: (dwords, yakogl, Mesa). `None` is a
 /// target outside the output registers (a tile buffer); `Err` a list
-/// `layout` refuses (`NoProgram`: no end-of-tile program was captured for it).
+/// `layout` refuses (none of these any more: every spill of up to four
+/// targets has its captured end-of-tile program).
 ///
 /// Three causes. (a) `[1, 2, 1]`: the even start of the 2-register target
 /// leaves register 1 free; Mesa gives it to the third target, `layout`
 /// continues at register 4, finds no room and spills it (a three-target
-/// program with target 2 spilled exists, `eot3_tb`). (b) Every list with a
-/// 4-register target after another target (and `[4, ..]` followed by
-/// anything): Mesa spills that target to a tile buffer and still places
-/// later ones that fit in the free registers; `layout` spills it and every
-/// later target, which leaves target 1 spilled in a two- or three-target
-/// list, a layout no program was captured for, so it refuses. (c) Four
+/// program with target 2 spilled exists, `eot3_tb`). (b) Three targets
+/// with a 4-register target in the middle: Mesa spills that target to a
+/// tile buffer and still places the one after it in the free registers;
+/// `layout` spills it and every later target (`eot3_tb12`). Where the
+/// spilled targets are the last ones for Mesa too -- every two-target list
+/// with a spill, and the three-target lists that start with a 4-register
+/// target or end with two that do not fit -- the two agree
+/// (`two_and_three_target_spills_agree_with_mesa`); those lists were
+/// refused, and in this table, until `eot 2 1` and `eot 3 1 2` were
+/// captured. (c) Four
 /// targets: `layout` spills the first that does not fit and every later
 /// one, and every such four-target spill has a program (`eot4_tb`,
 /// `eot4_tb2`, `eot4_tb3`), so it never refuses; Mesa back-fills register
@@ -114,29 +119,12 @@ const fn s(v: u8) -> Option<u8> {
 /// the two agree in every row. (`register_layout` refuses the target
 /// `layout` spills; tests/pvr_mrt_layout4.rs checks it against Mesa.)
 fn differences() -> Vec<Diff> {
-    let e = || Err(());
     vec![
-        (vec![4, 1], e(), vec![s(0), None]),
-        (vec![4, 2], e(), vec![s(0), None]),
-        (vec![1, 4], e(), vec![s(0), None]),
-        (vec![2, 4], e(), vec![s(0), None]),
-        (vec![4, 4], e(), vec![s(0), None]),
-        (vec![4, 1, 1], e(), vec![s(0), None, None]),
         (vec![1, 2, 1], Ok(vec![s(0), s(2), None]), vec![s(0), s(2), s(1)]),
-        (vec![4, 2, 1], e(), vec![s(0), None, None]),
-        (vec![1, 4, 1], e(), vec![s(0), None, s(1)]),
-        (vec![2, 4, 1], e(), vec![s(0), None, s(2)]),
-        (vec![4, 4, 1], e(), vec![s(0), None, None]),
-        (vec![4, 1, 2], e(), vec![s(0), None, None]),
-        (vec![4, 2, 2], e(), vec![s(0), None, None]),
-        (vec![1, 4, 2], e(), vec![s(0), None, s(2)]),
-        (vec![2, 4, 2], e(), vec![s(0), None, s(2)]),
-        (vec![4, 4, 2], e(), vec![s(0), None, None]),
-        (vec![4, 1, 4], e(), vec![s(0), None, None]),
-        (vec![4, 2, 4], e(), vec![s(0), None, None]),
-        (vec![1, 4, 4], e(), vec![s(0), None, None]),
-        (vec![2, 4, 4], e(), vec![s(0), None, None]),
-        (vec![4, 4, 4], e(), vec![s(0), None, None]),
+        (vec![1, 4, 1], Ok(vec![s(0), None, None]), vec![s(0), None, s(1)]),
+        (vec![2, 4, 1], Ok(vec![s(0), None, None]), vec![s(0), None, s(2)]),
+        (vec![1, 4, 2], Ok(vec![s(0), None, None]), vec![s(0), None, s(2)]),
+        (vec![2, 4, 2], Ok(vec![s(0), None, None]), vec![s(0), None, s(2)]),
         /* four targets: cause (c) */
         (vec![1, 2, 1, 1], Ok(vec![s(0), s(2), None, None]), vec![s(0), s(2), s(1), None]),
         (vec![1, 4, 1, 1], Ok(vec![s(0), None, None, None]), vec![s(0), None, s(1), s(2)]),
@@ -191,6 +179,56 @@ fn differing_lists_are_exactly_the_pinned_table() {
         let spill = y.iter().position(|p| p.is_none()).unwrap();
         assert_eq!(y[..spill], m[..spill], "{d:?}");
     }
+}
+
+/// The spills of two and three targets that Mesa lays out as `layout` does:
+/// the spilled targets are the last ones for both, so the captured programs
+/// (`capture_usc eot 2 1`: two emits, the second from tile buffer 0; `eot 3
+/// 1 2`: three, the last two from tile buffers 0 and 1; `eot 3 2`) emit the
+/// layout Mesa's driver would give the same render. Two RGBA32UI (`[4, 4]`,
+/// dEQP's shader executor for `modf` of `vec3`/`vec4` and the `mat4`
+/// precision cases) and three (`[4, 4, 4]`, `fragment_out.array`) are among
+/// them.
+#[test]
+fn two_and_three_target_spills_agree_with_mesa() {
+    let n = None;
+    let two: [&[u8]; 5] = [&[4, 1], &[4, 2], &[1, 4], &[2, 4], &[4, 4]];
+    for d in two {
+        let want: Starts = vec![s(0), n];
+        assert_eq!(yakogl_layout(d), Ok(want.clone()), "yakogl {d:?}");
+        assert_eq!(mesa_layout(d), want, "mesa {d:?}");
+    }
+    let three: [&[u8]; 11] = [
+        &[4, 1, 1],
+        &[4, 2, 1],
+        &[4, 4, 1],
+        &[4, 1, 2],
+        &[4, 2, 2],
+        &[4, 4, 2],
+        &[4, 1, 4],
+        &[4, 2, 4],
+        &[1, 4, 4],
+        &[2, 4, 4],
+        &[4, 4, 4],
+    ];
+    for d in three {
+        let want: Starts = vec![s(0), n, n];
+        assert_eq!(yakogl_layout(d), Ok(want.clone()), "yakogl {d:?}");
+        assert_eq!(mesa_layout(d), want, "mesa {d:?}");
+    }
+    /* every two-target list, and every three-target list but the five of
+     * `differences()`, is the same in both */
+    for d in all_lists().into_iter().filter(|d| d.len() <= 3) {
+        let differs = differences().iter().any(|(x, _, _)| *x == d);
+        assert_eq!(yakogl_layout(&d) == Ok(mesa_layout(&d)), !differs, "{d:?}");
+    }
+    /* the two programs' layouts, from `layout` itself */
+    use yakogl::pvr::mrt_layout::EotProgram;
+    let l = layout(&[4, 4]).unwrap();
+    assert_eq!((l.program, l.program.name(), l.tile_buffers), (EotProgram::Eot2Tb1, "eot2_tb1", 1));
+    let l = layout(&[4, 4, 4]).unwrap();
+    assert_eq!((l.program, l.program.name(), l.tile_buffers), (EotProgram::Eot3Tb12, "eot3_tb12", 2));
+    assert_eq!((l.program.emits(), l.program.spilled_mask()), (3, 0b110));
 }
 
 #[test]

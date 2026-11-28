@@ -189,7 +189,8 @@ fn starts_match_mesa_for_four_targets() {
 
 /// `layout`'s walk as it was before `register_layout` joined it (commit
 /// 24c6c9ba): the k-th target that does not fit, and every later one, to
-/// tile buffer k.
+/// tile buffer k. The program table has since gained the two layouts that
+/// had none (`eot2_tb1`, `eot3_tb12`); the walk is the same.
 fn layout_before(dwords: &[u8]) -> Result<MrtLayout, LayoutError> {
     if dwords.is_empty() || dwords.len() > 4 {
         return Err(LayoutError::TargetCount(dwords.len()));
@@ -212,7 +213,9 @@ fn layout_before(dwords: &[u8]) -> Result<MrtLayout, LayoutError> {
     }
     let program = match (targets, spilled) {
         (1..=4, 0) => EotProgram::Plain { targets },
+        (2, 1) => EotProgram::Eot2Tb1,
         (3, 1) => EotProgram::Eot3Tb,
+        (3, 2) => EotProgram::Eot3Tb12,
         (4, 1..=3) => EotProgram::Eot4Tb { spilled },
         _ => return Err(LayoutError::NoProgram { targets, spilled }),
     };

@@ -47,7 +47,10 @@ pub const PVR_TILE_BUFFER_BYTES: u32 = 8192 * 4;
 /// end-of-tile program per count, each emitting that many surfaces. The `_tb_`
 /// pair is the same for a render whose LAST attachment comes from a tile
 /// buffer (the shader stored it there because a pixel has only four output
-/// registers, and the program loads it back before emitting it).
+/// registers, and the program loads it back before emitting it): `[2]` is
+/// two attachments with the second from tile buffer 0. `[1]`, which no
+/// render of one attachment uses, is THREE attachments whose last TWO come
+/// from tile buffers 0 and 1 (its PDS info is `[3]`'s).
 /// `eot_doutu_src0_tb4_k[k]` (k 1..=3) is the four-target program whose last
 /// k attachments come from tile buffers 0..k-1.
 #[repr(C)]
