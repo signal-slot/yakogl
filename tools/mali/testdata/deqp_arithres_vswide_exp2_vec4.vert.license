@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vert shader of a plan #387 item arithres-refs pair: dEQP-GLES2.functional.shaders.operator.exponential.exp2.mediump_vec4_vertex, generated through the ShaderOperatorCase template (VK-GL-CTS 93bca01, modules/gles2/functional/es2fShaderOperatorTests.cpp), docs/notes/mali-arithres-lowering.md.
