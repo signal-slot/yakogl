@@ -69,10 +69,24 @@ static PENDING: Mutex<Vec<(u64, u32, u32)>> = Mutex::new(Vec::new());
 /// The colour the stand-in's job-end resolve leaves in an RGBA8 target.
 const RESOLVED: [u8; 4] = [0x40, 0x80, 0xc0, 0xff];
 
+/// `(target_id, target_gen)` of every application draw, in order.
+static IDS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+/// Every id `attachment_gone` was called with, in order.
+static GONE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+unsafe extern "C" fn b_gone(id: u32) {
+    GONE.lock().unwrap().push(id);
+}
+
 unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     let d = &*d;
+    if d.index_count != 0 {
+        assert_eq!((d.target_ids[0], d.target_gens[0]), (d.target_id, d.target_gen));
+        IDS.lock().unwrap().push((d.target_id, d.target_gen));
+    }
     SEEN.lock().unwrap().push(Seen { draws: d.index_count != 0, samples: d.samples });
-    if d.samples > 1 {
+    /* a depth-only draw has no colour target to resolve */
+    if d.samples > 1 && d.target_gpu != 0 {
         PENDING.lock().unwrap().push((d.target_gpu, d.target_w, d.target_h));
     }
     0
@@ -179,7 +193,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     max_instance_divisor: 1,
     wait_kick: None,
     samples_texel_copies: false,
-    attachment_gone: None,
+    attachment_gone: Some(b_gone),
     depth_resolve: None,
     query_begin: None,
     query_end: None,
@@ -236,6 +250,8 @@ fn context_on(table: &'static YakoglBackend) -> MutexGuard<'static, ()> {
     }
     SEEN.lock().unwrap().clear();
     PENDING.lock().unwrap().clear();
+    IDS.lock().unwrap().clear();
+    GONE.lock().unwrap().clear();
     DS_READS.lock().unwrap().clear();
     DS_WRITES.lock().unwrap().clear();
     // SAFETY: plain GL call.
@@ -613,4 +629,96 @@ fn shared_renderbuffer_resolves_from_the_other_fbo() {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &fb2);
     }
+}
+
+/// Draw once on the bound FBO: the `(target_id, target_gen)` the back end got.
+fn draw_ids() -> (u32, u32) {
+    IDS.lock().unwrap().clear();
+    draw_unfinished();
+    // SAFETY: plain GL call.
+    unsafe { glFinish() };
+    assert_eq!(err(), GL_NO_ERROR);
+    let ids = core::mem::take(&mut *IDS.lock().unwrap());
+    assert_eq!(ids.len(), 1, "one application draw: {ids:?}");
+    ids[0]
+}
+
+/// (5) A 4x colour renderbuffer deleted while attached to the bound FBO: the
+/// next draw has no colour target, so id and gen are 0 (src/backend.rs,
+/// `GlesDraw::target_id`); `attachment_gone` names the id the draws carried.
+#[test]
+fn delete_while_attached_ids_go_to_zero() {
+    let _g = context_ms4();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let (_, depth) = storage(4, GL_DEPTH_COMPONENT24);
+    // SAFETY: names this test made.
+    unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth) };
+    program();
+    let (id, gen) = draw_ids();
+    assert_ne!(id, 0);
+    assert_ne!(gen, 0);
+    GONE.lock().unwrap().clear();
+    let colour = fbo.rbs[0];
+    // SAFETY: a name this test made.
+    unsafe { glDeleteRenderbuffers(1, &colour) };
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(GONE.lock().unwrap().iter().filter(|g| **g == id).count(), 1, "gone with the drawn id");
+    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+    assert_eq!(draw_ids(), (0, 0), "no colour target");
+    // SAFETY: a name this test made.
+    unsafe { glDeleteRenderbuffers(1, &depth) };
+}
+
+/// (6) Respecified with another sample count, or to 0: the gen moves, the id
+/// stays; `attachment_gone` names the id each time the old contents go.
+#[test]
+fn respecify_moves_gen_keeps_id() {
+    let _g = context_ms4();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    program();
+    let rb = fbo.rbs[0];
+    let (id, g1) = draw_ids();
+    assert_ne!(id, 0);
+    assert_eq!(draw_ids(), (id, g1), "a redraw changes nothing");
+    GONE.lock().unwrap().clear();
+    respecify(rb, 2, GL_RGBA8, 8, 8);
+    let (id2, g2) = draw_ids();
+    assert_eq!(id2, id);
+    assert!(g2 > g1, "{g1} -> {g2}");
+    respecify(rb, 4, GL_RGBA8, 8, 8);
+    let (id3, g3) = draw_ids();
+    assert_eq!(id3, id);
+    assert!(g3 > g2, "{g2} -> {g3}");
+    respecify(rb, 0, GL_RGBA8, 8, 8);
+    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+    let (id4, g4) = draw_ids();
+    assert_eq!(id4, id, "a 1x renderbuffer still has its id");
+    assert!(g4 > g3, "{g3} -> {g4}");
+    let gone = GONE.lock().unwrap().clone();
+    assert!(!gone.is_empty() && gone.iter().all(|g| *g == id), "{gone:?}");
+}
+
+/// (7) A new renderbuffer attached after the old one was deleted: another id.
+#[test]
+fn new_renderbuffer_has_another_id() {
+    let _g = context_ms4();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    program();
+    let (id, _) = draw_ids();
+    let old = fbo.rbs[0];
+    // SAFETY: a name this test made.
+    unsafe { glDeleteRenderbuffers(1, &old) };
+    assert_eq!(err(), GL_NO_ERROR);
+    /* the name may be handed out again; the id (serial) must not be */
+    let (e, rb) = storage(4, GL_RGBA8);
+    assert_eq!(e, GL_NO_ERROR);
+    // SAFETY: a name this test made.
+    unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb) };
+    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+    let (id2, g2) = draw_ids();
+    assert_ne!(id2, 0);
+    assert_ne!(id2, id, "a new renderbuffer, a new id");
+    assert_ne!(g2, 0);
+    // SAFETY: a name this test made.
+    unsafe { glDeleteRenderbuffers(1, &rb) };
 }
