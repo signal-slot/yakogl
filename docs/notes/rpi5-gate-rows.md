@@ -93,7 +93,7 @@ Feature sets and commands are as `docs/notes/v3d71-gl-table.md` section 4 decide
 
 ### 3.1 and 3.2: N5 and N6 as `tools/check.sh` rows
 
-Read at `1e1380b16db3791266cb0f07a459d3804e8bfaf5` (line numbers are of that
+Read at `2dd734313308cc1781ad2889ac790b71bced9618` (line numbers are of that
 file). Text to paste, in the style of the neighbouring rows. Nothing here was
 run (docs only).
 
@@ -105,12 +105,12 @@ turns into the crate features `gl-test-runner` and `test-knobs`
 (`capi/yakogl_capi.cmake`). The image's library is therefore
 `yakogl-capi` with `osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table,test-knobs,gl-test-runner`.
 The tip has **no** deqp or glmark2 image row for `rpi_4b` either (only the
-`rpi4 gl_test` row at `:5398`), so none is proposed for `rpi_5`; N6 is the one
+`rpi4 gl_test` row at `:5501`), so none is proposed for `rpi_5`; N6 is the one
 image row.
 
 **3.1 (N5)**, three additions, all in the cargo part:
 
-1. `TARGET_CONFIGS` (`:3820`), a fifth line, so the existing loop at `:3834`
+1. `TARGET_CONFIGS` (`:3915`), a fifth line, so the existing loop at `:3933`
    (`clippy  $f (aarch64-unknown-none, no host-test)`, scope from
    `config_scopes`, therefore `v3d`) covers the 7.1 library:
 
@@ -118,7 +118,7 @@ image row.
   "osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table"
 ```
 
-2. After the `yakogl-gltest-runner` row (`:3843-3844`), inside the same
+2. After the `yakogl-gltest-runner` row (`:3938-3939`), inside the same
    `if rustup target list ...` block:
 
 ```bash
@@ -131,21 +131,23 @@ image row.
       --target aarch64-unknown-none --lib
 ```
 
-3. The knob lists. `src/v3d` has no `test-knobs` code, so the 7.1 archive's
-   knob set is **empty** and `KNOB_*_SYMBOLS` (`:4234-4238`) and the release key
-   (`:4247-4251`) need no new variable. One line joins `check_knobs_absent`
-   (`:4571-4574`), to keep `gl_test_*` out of the 7.1 product archive and to
-   fail if a knob appears without being listed:
+3. The knob lists. `gpu-v3d71 = ["gpu-v3d"]` (`Cargo.toml:109`), so the 7.1
+   archive carries the same `src/v3d` knobs as the 4.2 one: `KNOB_V3D_SYMBOLS`
+   and `KNOB_V3D_PRODUCT` (`:4337-4338`) apply unchanged and need no new
+   variable. One line joins `check_knobs_absent` (`:4673-4677`), after the
+   `v3d` line (`:4676`), so a knob or a `gl_test_*` symbol in the 7.1 product
+   archive fails the row:
 
 ```bash
-  knob_sets v3d71 '^gl_test_' "" || return 1
+  knob_sets v3d71 '^(v3d_debug_|gl_test_)' "$KNOB_V3D_SYMBOLS" "$KNOB_V3D_PRODUCT" || return 1
 ```
 
    (`knob_sets` builds `osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table`
-   with and without `test-knobs`, `:4550-4553`; an empty expected set compares
-   equal to an empty result; the first run proves it.)
+   with and without `test-knobs`, `:4652-4659`. If the first run shows a 7.1
+   difference from the 4.2 set, the diff the row prints is the expected set to
+   paste.) The row's key (`:4350`) already holds both variables.
 
-**3.2 (N6)**, after the Pi 4 row (`:5398`), in the `ZEPHYR_WS` block, before
+**3.2 (N6)**, after the Pi 4 row (`:5501`), in the `ZEPHYR_WS` block, before
 the Pi 4 examples (`scope drivers samples` rows follow them). The scope line
 is already `scope v3d gltest drivers samples` there, so only the step is new:
 
@@ -153,7 +155,7 @@ is already `scope v3d gltest drivers samples` there, so only the step is new:
     step "zephyr  rpi5 gl_test image, -Werror on our C files" zephyr_werror_image rpi_5 gl_test rpi5
 ```
 
-It keeps `zephyr_werror_image`'s `yakogl_zephyr_present` check (`:4980-4995`):
+It keeps `zephyr_werror_image`'s `yakogl_zephyr_present` check (`:5079-5092`):
 the image has `CONFIG_YAKOGL=y` and `CONFIG_YAKOGL_BOARD=y`, so the hook must be
 linked. No `needs`: the Pi 5 image has no firmware blob.
 
