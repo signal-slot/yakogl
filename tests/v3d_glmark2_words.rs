@@ -556,7 +556,7 @@ const PINS: &[(&str, &str, &str, usize, u32)] = &[
     ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-1637be2eef2e8a5e.frag.glsl", "vs", 90, 4),
     ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-1637be2eef2e8a5e.frag.glsl", "cs", 87, 4),
     ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-4d266cda76461dc0.frag.glsl", "fs", 146, 4),
-    ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-4d266cda76461dc0.frag.glsl", "vs", 156, 2),
+    ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-4d266cda76461dc0.frag.glsl", "vs", 154, 4),
     ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-4d266cda76461dc0.frag.glsl", "cs", 87, 4),
     ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-895a73bccb0398fc.frag.glsl", "fs", 14, 4),
     ("terrain", "terrain-18bca803a331552c.vert.glsl+terrain-895a73bccb0398fc.frag.glsl", "vs", 90, 4),
