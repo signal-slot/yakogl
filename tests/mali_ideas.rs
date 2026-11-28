@@ -15,8 +15,9 @@
 //!   (docs/notes/mali-control-flow.md).
 //!
 //! fs c565 and 1aca (the same function of two varying or uniform vec4s, Mesa's
-//! fp16 and fp32 selects, and 1aca's loop over a struct array) stay refused
-//! at INT_VALUE: pinned below, so the item that lowers them updates this file.
+//! fp16 and fp32 selects, and 1aca's loop over a struct array) stay refused,
+//! past INT_VALUE since plan #402 item lower-fsint: pinned below, so the item
+//! that lowers them updates this file.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_ideas
@@ -67,13 +68,21 @@ fn gm2_cf_earlyret_vs_fragment_shader_stays_refused() {
 /// ideas fs c565 and 1aca: `a.w == 0.0 && b.w == 0.0` of two run-time vec4s
 /// is an `iand` of two masks, which Mesa's flattened function selects with at
 /// fp16 (`LSHIFT_AND.v2i16`, `MUX.v2i16`) beside the fp32 `CSEL.u32.eq` of the
-/// return value (gm2_ideas_2's fs.fragment). Not lowered: when they move,
-/// make these [`mali_ref::assert_matches`].
+/// return value (gm2_ideas_2's fs.fragment). Plan #402 item lower-fsint
+/// lowers the `iand` (each compare is read again by an `if` of its own, so
+/// nir_opt_algebraic.py:1213 leaves it); both then stop at a later
+/// refusal: c565 (gm2_ideas_2) at an operand's form, 1aca (gm2_ideas_3) at
+/// a colour lane. When they move, make these [`mali_ref::assert_matches`].
 #[test]
-fn gm2_ideas_2_and_3_stay_refused_at_their_int_values() {
-    let int = "an integer or boolean value is not lowered yet";
-    let moved: Vec<String> =
-        ["gm2_ideas_2", "gm2_ideas_3"].iter().filter_map(|n| mali_ref::refusal_change(n, int)).collect();
+fn gm2_ideas_2_and_3_stay_refused_past_their_int_values() {
+    let pins = [
+        (
+            "gm2_ideas_2",
+            "a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet",
+        ),
+        ("gm2_ideas_3", "a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"),
+    ];
+    let moved: Vec<String> = pins.iter().filter_map(|(n, text)| mali_ref::refusal_change(n, text)).collect();
     assert!(moved.is_empty(), "{}", moved.join("\n"));
 }
 

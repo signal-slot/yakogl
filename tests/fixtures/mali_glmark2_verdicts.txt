@@ -42,9 +42,9 @@
 18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false vs 7234: ok
 19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true fs 9fe6: ok
 19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true vs 7234: ok
-20 ideas:speed=duration fs 1aca: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration fs 1aca: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 20 ideas:speed=duration fs 23c8: ok
-20 ideas:speed=duration fs c565: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration fs c565: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 20 ideas:speed=duration fs df64: ok
 20 ideas:speed=duration fs e6a9: ok
 20 ideas:speed=duration vs 038e: ok
