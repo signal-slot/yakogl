@@ -1,0 +1,10 @@
+case	board_status	board_family	host_status	stage	host_family	shape	host_refusal	next_family
+dEQP-GLES2.t.a	Fail	intval	Fail	fs	intval	x	an integer or boolean value	
+dEQP-GLES2.t.b	Fail	intval	Fail	vs	intval	x	an integer or boolean value	
+dEQP-GLES2.t.c	Fail	intval	Fail	fs	intval	x	an integer or boolean value	other
+dEQP-GLES2.t.d	Fail	other	Fail	vs	other	other	beta cut	
+dEQP-GLES2.t.e	NotSupported	link	NotSupported	link	link	g	gamma: no stage word	
+dEQP-GLES2.t.f	Fail	intval	Pass					
+dEQP-GLES2.t.g	Fail	intval	crash				exit=11	
+dEQP-GLES2.t.a	Fail	intval	Fail	fs	other	x	duplicate row ignored	
+dEQP-GLES2.not.mustpass	Fail	intval	Fail	fs	intval	x	an integer or boolean value	

@@ -1,0 +1,7 @@
+dEQP-GLES2.t.a
+dEQP-GLES2.t.b
+dEQP-GLES2.t.c
+dEQP-GLES2.t.d
+dEQP-GLES2.t.e
+dEQP-GLES2.t.f
+dEQP-GLES2.t.g
