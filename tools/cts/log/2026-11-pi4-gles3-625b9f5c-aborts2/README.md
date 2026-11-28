@@ -148,3 +148,104 @@ Built from 625b9f5c8fc1435fed9e4bf53f67619b9149e6b5 (origin/main) by `DEQP_MODUL
 ## Method
 
 Each cycle followed `tools/board.sh pi4`'s order by hand (the leased serial console holds the Pi 4's one-client UART bridge): prechecks over ssh, the image written as `/boot/firmware/yakogl-<LABEL>.bin` and `tryboot.txt` with pi4_config's lines, both read back (sha256, text), `sudo reboot "0 tryboot"`, Linux back with a new boot id, then the image removed and the boot files read back; `config.txt` untouched. board1's cycles record that the card had no `tryboot.txt` before them; board-rest-s and board-rest-tt found a stock `tryboot.txt` identical to `config.txt`, backed it up, and put it back byte for byte (`cp -p`, `cmp`, sha256 read back) after each cycle. board-rest-tt's boot ids before each reboot are kept only in its gitignored board records (`-` in cycles.txt). Linux was back 297-311 s after each reboot. Each console file holds the bytes from the firmware's first line to the image's end line, CRs and NULs dropped, compared with the serial reads; `tools/cts/console-redact.py` ran over them. Each verdict line is the one `tools/board.sh pi4 tally` recomputes from that run's `meta.txt` and console, the redacted board records kept under the gitignored `records/pi4/<YYYYMMDD-HHMM>-<LABEL>-625b9f5c/`. The tallies are `tools/cts/pi4-session-tally.sh` output; table.txt is `deqp-uart-tally.py --mustpass ../../gles3-mustpass.txt --table *.console.txt` in this directory (recipe section 6, step 4), cycles.txt the per-image lines of the consoles and the board items' reports.
+
+## Final report (plan #398)
+
+The five texts of plan #398's report, item report-final2. Plan #392 owns `tools/cts/RESULTS.md`, `tools/cts/STATUS.md`, `README.md` and `ROADMAP.md` and pastes texts (3) to (5) into them; this record does not edit those files. Text (1) is the comment for issue #2 (formerly #1261), posted by whoever files it (agents do not run gh).
+
+### (1) Comment for issue #2
+
+> **Pi 4 dEQP-GLES3: the 1,978 never-started cases of b1b5b845 all have a result at 625b9f5c (plan #398)**
+>
+> - What ran: the 44 images of `tools/cts/pi4-gles3-tree.txt` rows 25-143 (S03a1-S03a7b, T05ca-T05cc, T14a1, T14aa, T14aa1, T17a1-T17aaaa and the 18 TF labels), built from origin/main `625b9f5c8fc1435fed9e4bf53f67619b9149e6b5` with `DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh` (VK-GL-CTS 93bca01), one tryboot cycle per image on the Raspberry Pi 4 (V3D 4.2), 2026-11-27 05:00 UTC to 2026-11-28 01:00 UTC, no retry. Each of the eleven b1b5b845 refusing cases ran as its own one-case image.
+> - Record: `tools/cts/log/2026-11-pi4-gles3-625b9f5c-aborts2/` (README.md, table.txt, cycles.txt, per-label console and tally files); redacted board records under the gitignored `records/pi4/<YYYYMMDD-HHMM>-<LABEL>-625b9f5c/`.
+> - Results: 44 of 44 images ended complete=1, no image aborted, 0 GPU recoveries, 0 hung jobs, 0 MMU faults, 0 resets, no `draw refused:` line. The 1,989 mustpass cases in the 44 filters (the 1,978 that never began at b1b5b845, shaders 1,140 / texture 86 / transform_feedback 752, plus the 11 refusing cases) read **1,934 Pass / 55 Fail / 0 NotSupported / 0 other / 0 without a result** (shaders 1,087/54, texture 90/1, transform_feedback 757/0).
+> - The 55 Fails: 54 are the mat4, mat4x2 and mat4x3 cases of `builtin_functions.precision.matrixcompmult`, `outerproduct` and `transpose` ('Shader compilation failed': a mat4 output takes locations 0-3, past the V3D's draw targets; `docs/notes/v3d-refusals.md` section G, no issue number yet); 1 is `texture.units.8_units.only_cube.2` ('Image comparison failed', draft (e) below).
+> - Refusals: none left. The eleven b1b5b845 refusals and where they went:
+>   - (a) target larger than the 2048x2048 tile memory, `shaders.builtin_functions.precision.abs.highp_fragment.vec2` (S03a1): Pass. Moved by 6d2e7d0d (4096x4096 targets) and b7c1484e (refusals of legal GL state answer `-ENOTSUP`). Issue: #2.
+>   - (b) ETC2 texel format the V3D did not sample, `texture.format.compressed.etc2_eac_rgba8_cube_pot`, `etc2_rgb8_cube_npot`, `etc2_rgb8_cube_pot` (T05ca-T05cc) and `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot` (T17a1): all Pass. Moved by 455c3bb5, 333a19f7, 765cbf81 (and b7c1484e). Issue: none; draft (b) below.
+>   - (c) out of GPU memory, `texture.units.8_units.only_cube.2` (T14a1): no refusal and no abort, now Fail ('Image comparison failed'). No `src/v3d` commit moved it (the path still answers `-E2BIG` on `rpi_4b.conf`); the image's memory did: a6219832 (`texture-2048.conf`) and 4d23bc3d (the tree builds the 8_units images with it). Issue: none; drafts (c) and (e) below.
+>   - (d) the job builder refused the draw (fragment inputs over 24), `transform_feedback.array.interleaved.lines.highp_mat3`, `array.separate.lines.highp_mat3`, `basic_types.interleaved.lines.lowp_mat4`, `basic_types.separate.lines.highp_mat4`, `random_full_array_capture.interleaved.lines.1` (TF1a1, TF1b1, TF2a1, TF2b1, TF2c1): all Pass. Moved by 6581f22b (fragment inputs 24..63) and 218c90ec (varying-flags packet count), with b7c1484e. Issue: none; draft (d) below.
+>   - The seven cases plan #320's record (`2026-11-pi4-gles3-b1b5b845-aborts2`) still had refused at b1b5b845 also pass here.
+> - V3D commits since b1b5b845 that moved refusals (all ancestors of 625b9f5c, none of b1b5b845): 6d2e7d0d, b7c1484e, 455c3bb5, 333a19f7, 765cbf81, 6581f22b, 218c90ec; for T14a1, the image configuration a6219832 and 4d23bc3d. No commit of origin/main after 625b9f5c is needed for a refusal: none is left.
+> - Issue drafts to file (full bodies in this README, section "Refusing cases"):
+>   - (b) "V3D: ETC2/EAC texture formats outside the four GL-core classes (ETC2 RGB8 A1, EAC R11/RG11) are not sampled" (residual risk, no Pi 4 case refuses).
+>   - (c) "V3D: eight cube units (texture.units.8_units.only_cube.2) lose the draw for lack of GPU memory and abort the image" (on `rpi_4b.conf`; `texture-2048.conf` avoids it).
+>   - (d) "V3D: split V3D_JOB_REFUSED so a refused draw names its cause" (diagnostics only).
+>   - (e), new: "V3D: texture.units.8_units.only_cube.2 fails image comparison on the Pi 4 (cube faces read NaN/inf)".
+> - Whole tree (42,810 mustpass cases), the b1b5b845 whole-tree run with the 1,978 never-started cases and the 11 refusing cases taken from this record, each case counted once: **37,856 Pass / 2,738 Fail / 2,197 NotSupported / 18 other / 1 without a result**. The one: `shaders.builtin_functions.precision.reflect.highp_fragment.vec3` (image S07, which stopped at b1b5b845 on its first case, the non-mustpass `reflect.highp_fragment.scalar`); it is outside this plan's 1,978 and passed at 87881c78 (`../2026-11-pi4-gles3-87881c78-aborts-a/S07.console.txt`, earlier evidence, not counted). The 18 other: 4 QualityWarning (`rasterization` lines cases, R1) and 14 ResourceError, the first abort triggers of the b1b5b845 run (S03, S04, S05, S06, S08, S32c1-S32c4, T05c, T14, T17, TF1, TF2), not re-run at 625b9f5c.
+> - Remaining for #2 on the Pi 4: image S07 at 625b9f5c or later (1 case); a rerun of the 14 ResourceError cases at a current commit; the Fail causes (the mat4-output precision cases, draft (e)).
+
+### (2) Whole-tree Pi 4 GLES3 figure
+
+Base: the b1b5b845 whole tree, 114 rows (`2026-11-pi4-gles3-b1b5b845-{rows00-15,rows16-30,rows31-45,rows46-60,rows61-75,rows76-90,s32c,aborts}/`): 35,922 Pass / 2,683 Fail / 2,197 NotSupported / 29 other / 1,979 without a result. This record replaces the 1,978 never-started cases (no result) and the 11 refusing cases (ResourceError, in "other") with its 1,989 results, 1,934 Pass / 55 Fail / 0 / 0 / 0:
+
+| | Pass | Fail | NotSupported | other | without a result | sum |
+|---|---:|---:|---:|---:|---:|---:|
+| b1b5b845, 114 rows | 35,922 | 2,683 | 2,197 | 29 | 1,979 | 42,810 |
+| minus the 1,989 replaced | 0 | 0 | 0 | -11 | -1,978 | -1,989 |
+| plus this record (625b9f5c) | +1,934 | +55 | 0 | 0 | 0 | +1,989 |
+| **whole tree** | **37,856** | **2,738** | **2,197** | **18** | **1** | **42,810** |
+
+37,856 + 2,738 + 2,197 + 18 + 1 = 42,810. Records at two commits: b1b5b845 (all labels but these 44) and 625b9f5c (the 44 labels of this record). The 87881c78 sessions are not counted.
+
+Command (from the repository root): every mustpass case takes its last `deqp: <Status>` line over the consoles of the sessions in the order given (`deqp-uart-tally.py`'s own console parser), each case counted once; "other" is any status but Pass, Fail and NotSupported.
+
+```
+L=tools/cts/log/2026-11-pi4-gles3; B="$L-b1b5b845-rows00-15 $L-b1b5b845-rows16-30 $L-b1b5b845-rows31-45 $L-b1b5b845-rows46-60 $L-b1b5b845-rows61-75 $L-b1b5b845-rows76-90 $L-b1b5b845-s32c $L-b1b5b845-aborts"
+F='import sys,glob,importlib.util as u;s=u.spec_from_file_location("t","tools/cts/deqp-uart-tally.py");t=u.module_from_spec(s);s.loader.exec_module(t);M=[l.strip() for l in open("tools/cts/gles3-mustpass.txt") if l.strip()];P=set(M);R={}
+for d in sys.argv[1:]:
+  for f in sorted(glob.glob(d+"/*.console.txt")):R.update((c,v) for c,v in t.scan(open(f,errors="replace").read())["got"].items() if c in P)
+k=lambda v:v if v in("Pass","Fail","NotSupported") else "other";C={x:0 for x in("Pass","Fail","NotSupported","other")}
+for c in M:
+  if c in R:C[k(R[c])]+=1
+print(len(M),C,"none",len(M)-len(R))'
+python3 -c "$F" $B                         # 42810 Pass 35922 Fail 2683 NotSupported 2197 other 29 none 1979 (the base)
+python3 -c "$F" $B $L-b1b5b845-aborts2     # 42810 Pass 36031 Fail 2683 NotSupported 2199 other 46 none 1851 (the interim figure)
+python3 -c "$F" $B $L-625b9f5c-aborts2     # 42810 Pass 37856 Fail 2738 NotSupported 2197 other 18 none 1 (this figure)
+```
+
+The first two lines reproduce the published base and interim figures. Putting plan #320's `-b1b5b845-aborts2` and `-aborts3` before this record gives the same last line: every case of theirs is in this record. `tools/cts/pi4-gles3-report.py --mixed-commit b1b5b845... --mixed-commit 625b9f5c...` over the same sessions prints the same Pass, Fail and NotSupported figures but marks the drafts PARTIAL (parent labels T14, T17, TF1, TF1a, TF1b, TF2, TF2a, TF2b counted as aborted, 42,814 cases, 22 other) until report-fold's change (re-split sub-labels under their parent, each case once) is on main.
+
+### (3) `tools/cts/RESULTS.md`, ES 3.0 section: replaces the entry "**Pi 4, whole tree** on `b1b5b845` ..." (the whole paragraph)
+
+```
+**Pi 4, whole tree** on `b1b5b845` (`b1b5b8456ec69247c64d1bd07e42461266dc5136`) and `625b9f5c`
+(`625b9f5c8fc1435fed9e4bf53f67619b9149e6b5`) (origin/main, tryboot, console through the UART
+bridge in `$BOARD_UART`; `tools/cts/pi4-gles3-tree.txt`; recipe `docs/es3/board-recipe-pi4.md`),
+2026-11-25 and 2026-11-27/28: 42,810 mustpass cases, each counted once: 37,856 Pass / 2,738 Fail /
+2,197 NotSupported / 18 other (4 QualityWarning, 14 ResourceError) / 1 without a result, 0 GPU
+recoveries, 0 hung jobs, 0 resets. At `625b9f5c` the 44 images of rows 25-143 (S03a1-S03a7b,
+T05ca-T05cc, T14a1, T14aa, T14aa1, T17a1-T17aaaa and the 18 TF labels) ran the 1,978 cases that
+never began at `b1b5b845` and its 11 refusing cases, each refusing case in its own image:
+1,934 Pass / 55 Fail, no image aborted, no draw refused. The 55 Fails: 54 `builtin_functions.precision`
+mat4, mat4x2 and mat4x3 cases of `matrixcompmult`, `outerproduct` and `transpose` (a mat4 output past
+the V3D's draw targets, `docs/notes/v3d-refusals.md` section G) and `texture.units.8_units.only_cube.2`
+(image comparison). The refusals are gone: the tile-memory one by `6d2e7d0d`, the ETC2 one by `455c3bb5`,
+`333a19f7`, `765cbf81`, the transform-feedback job builder's by `6581f22b`, `218c90ec` (with `b7c1484e`),
+and the 8_units GPU-memory one by the `texture-2048.conf` images (`a6219832`, `4d23bc3d`). All other
+labels are at `b1b5b845`. The 1 without a result is `shaders.builtin_functions.precision.reflect.highp_fragment.vec3`
+(image S07, stopped at `b1b5b845` on its first, non-mustpass case; it passed at `87881c78`, not counted);
+the 14 ResourceError are the `b1b5b845` run's first abort triggers, not re-run since. Records:
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-{rows00-15,rows16-30,rows31-45,rows46-60,rows61-75,rows76-90,s32c,aborts}/`
+and `tools/cts/log/2026-11-pi4-gles3-625b9f5c-aborts2/` (the figure's arithmetic and command in its
+README, "Final report (plan #398)"). Remaining: image S07 and the 14 ResourceError cases at a current
+commit, and the Fail causes (#2).
+```
+
+### (4) `tools/cts/STATUS.md`: replaces the Pi 4 sentence of the "ES 3.0（段階 4）" bullet ("Pi 4 は全ツリー（131 行、…docs/es3/pi4-gles3-fails.tsv）。")
+
+```
+Pi 4 は全ツリーを b1b5b845（2026-11-25）と 625b9f5c（2026-11-27〜28）で実行し、必須 42,810 件（各 1 回だけ数える）中 合格 37,856 / 失敗 2,738 / 未対応 2,197 / その他 18（品質警告 4、ResourceError 14）/ 結果なし 1、GPU 復旧 0、ハング 0、リセット 0。b1b5b845 で始まらなかった 1,978 件と止まりの原因だった 11 件は、625b9f5c の 44 画像（止まった各ケースを 1 件だけの画像に分けた）で合格 1,934 / 失敗 55、止まった画像 0、拒否された描画 0（tools/cts/log/2026-11-pi4-gles3-625b9f5c-aborts2/）。拒否はすべて解消: タイルメモリの上限は 6d2e7d0d、ETC2 は 455c3bb5・333a19f7・765cbf81、transform feedback のジョブ組み立ては 6581f22b・218c90ec（と b7c1484e）、8_units の GPU メモリ不足は texture-2048.conf の画像（a6219832、4d23bc3d）で直った。失敗 55 件は precision の mat4・mat4x2・mat4x3 の 54 件（mat4 の出力が V3D の描画先の数を超える）と texture.units.8_units.only_cube.2（画像比較）。結果なしの 1 件は S07 の reflect.highp_fragment.vec3（87881c78 では合格、数えていない）、ResourceError 14 件は b1b5b845 の最初の止まりのケースで、まだ再実行していない（#2）。
+```
+
+### (5) `ROADMAP.md`, stage 4: replaces the bullet "- Raspberry Pi 4: the whole tree (131 rows, ..." (all its lines)
+
+```
+- Raspberry Pi 4: the whole tree at `b1b5b845` (2026-11-25), with the 1,978 cases that never
+  began there and its 11 refusing cases re-run at `625b9f5c` (2026-11-27/28, 44 images, no abort,
+  no refused draw): 42,810 cases, 37,856 pass / 2,738 fail / 2,197 NotSupported / 18 other /
+  1 without a result, 0 GPU recoveries (#2). The V3D refusals that aborted dEQP are gone on main.
+  Left: image S07 (1 case) and the 14 ResourceError cases of the `b1b5b845` run at a current
+  commit, and the fail causes (the precision mat4-output cases, `texture.units.8_units.only_cube.2`).
+```
