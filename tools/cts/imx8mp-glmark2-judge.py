@@ -409,6 +409,42 @@ def self_test():
                    % where, rc == 0 and rowc == "| %s | %s | records/imx8mp/%s/ | dump | %s |" % (
                        scene, head[:8], os.path.basename(recc), PLACEHOLDER) and
                    "ancestor of origin/main: yes" in o)
+        # an Armadillo-X2 KVM record: meta.txt board=x2 with commit=, a
+        # 1920x1080 screenshot per scene (scene at 0,0,800,600) and the probes
+        # of glmark2-photo-probes.py --kvm beside the console; the judge reads
+        # the console only, so none of that may change its row
+        import struct
+        import zlib
+        recx = os.path.join(tmp, "records", "imx8mp", "20261120-1560-gm01-build-feedc0de")
+        shutil.copytree(os.path.join(here, "record"), recx)
+        with open(os.path.join(recx, "meta.txt"), "w") as f:
+            f.write("commit=%s\nimage_sha256=%s\nboard=x2\n"
+                    "board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in "
+                    "for the Verdin iMX8MP\nroute=kvm-screenshot\n"
+                    "apps_stopped=app-one app-two\nundo=podman start app-one\n"
+                    % (head, img))
+        os.makedirs(os.path.join(recx, "photos"))
+
+        def png(w, h):
+            def chunk(t, d):
+                return (struct.pack(">I", len(d)) + t + d +
+                        struct.pack(">I", zlib.crc32(t + d) & 0xffffffff))
+            raw = b"".join(b"\0" + b"\x10\x20\x30" * w for _ in range(h))
+            return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+                    chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+        with open(os.path.join(recx, "photos", "01-build-use-vbo-false.png"), "wb") as f:
+            f.write(png(1920, 1080))
+        with open(os.path.join(recx, "probes.txt"), "w") as f:
+            f.write("[build] use-vbo=false rect=0,0,800,600 tl=000000 c=0c0c0c\n")
+        rc, o = run(recx, ref, "--repo", repo, "--main", "origin/main",
+                    "--out", os.path.join(tmp, "outx"))
+        rowx = next((x for x in o.splitlines() if x.startswith("| [")), "")
+        expect("X2 KVM record: exit 0, row from meta.txt commit, ancestor yes",
+               rc == 0 and rowx == "| %s | %s | records/imx8mp/%s/ | dump | %s |" % (
+                   scene, head[:8], os.path.basename(recx), PLACEHOLDER) and
+               "ancestor of origin/main: yes" in o)
+        expect("X2 KVM record: board name and apps_stopped stay out of the output",
+               "Armadillo" not in o and "app-one" not in o)
         # a damaged dump: exit 1, no row, a note to rerun
         rec3 = os.path.join(tmp, "records", "imx8mp", "20261120-1532-gm01-build-" + head[:8])
         shutil.copytree(os.path.join(here, "record"), rec3)

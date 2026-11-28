@@ -22,6 +22,10 @@ synth() {
     python3 - "$SKEL" "$1" "$2" <<'PY'
 import sys
 src, dst, sha = sys.argv[1:4]
+# "x2:<sha>": the rows of an Armadillo-X2 KVM record (photograph+probes route)
+route = "dump"
+if sha.startswith("x2:"):
+    sha, route = sha[3:], "photograph+probes"
 out, scenes = [], []
 for line in open(src).read().split("\n"):
     if line.startswith("- **["):
@@ -32,8 +36,8 @@ for line in open(src).read().split("\n"):
         if sha == "skeleton":
             line = "| %s | - | - | - | not yet looked at |" % c[0]
         else:
-            line = ("| %s | %s | records/imx8mp/20261124-1200-scene-%s/ | dump | right |"
-                    % (c[0], sha, sha))
+            line = ("| %s | %s | records/imx8mp/20261124-1200-scene-%s/ | %s | right |"
+                    % (c[0], sha, sha, route))
     if sha != "skeleton":
         for k in ("Not yet established", "To fill in", "Skeleton: no scene"):
             line = line.replace(k, "Established")
@@ -80,6 +84,13 @@ synth "$W/good.md" "$H"
 out=$(A --note "$W/good.md"); st=$?
 expect "filled note passes c1 c3 c4 c5" "$out" '^c1 ok$' '^c3 ok$' '^c4 ok$' '^c5 ok$'
 if [ $st -ne 0 ]; then echo "FAIL  filled note exits $st"; fail=1; fi
+
+# an X2 record: KVM screenshots judged beside the probes of the same boot
+synth "$W/x2.md" "x2:$H"
+echo "Measured on the Armadillo-X2 (board=x2), 1920x1080 KVM screenshots, scene at 0,0,800,600." >> "$W/x2.md"
+out=$(A --note "$W/x2.md"); st=$?
+expect "X2 KVM note passes c1 c3 c4 c5" "$out" '^c1 ok$' '^c3 ok$' '^c4 ok$' '^c5 ok$'
+if [ $st -ne 0 ]; then echo "FAIL  X2 KVM note exits $st"; fail=1; fi
 
 cp "$W/good.md" "$W/ip.md"
 echo "board at 10.$((1+1)).3.4" >> "$W/ip.md"
