@@ -31,6 +31,7 @@ const FILES: &[&str] = &[
     "prim71.rs",
     "draw71.rs",
     "glue71.rs",
+    "fill71.rs",
 ];
 
 #[derive(Debug, Clone, PartialEq)]

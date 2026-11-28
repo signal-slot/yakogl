@@ -15,14 +15,19 @@
 //!
 //! # What it does
 //!
-//! [`fill`] takes what the GL core holds between two flushes of one
+//! [`fill_each`] takes what the GL core holds between two flushes of one
 //! framebuffer: the framebuffer ([`Framebuffer`]: size, colour attachments,
 //! the depth/stencil attachment), what its buffers hold ([`History`]), and
 //! the operations in GL order ([`Op`]: `glClear` requests and draws). It
-//! returns one [`FilledJob`] per job the builder is to run (a flush is one
-//! job unless a whole clear follows queued draws: clearplan71's `new_job`),
-//! each with the history the next flush starts from. Every decision is a
-//! merged module's:
+//! hands its sink one [`JobView`] per job the builder is to run (a flush is
+//! one job unless a whole clear follows queued draws: clearplan71's
+//! `new_job`), each with the history the next flush starts from. A job's
+//! draws ([`DrawView`]) are written to a scratch the caller lends and
+//! borrow the programs' uniform lists and the draws' GL uniform blocks; no
+//! allocation is made (docs/notes/v3d71-nostd.md, item N5). A job with
+//! more draws than the scratch has slots ends the fill with
+//! [`FillEach::Full`]. Under host-test, [`fill`] collects the same jobs as
+//! owned [`FilledJob`]s. Every decision is a merged module's:
 //!
 //! | decision | module |
 //! |---|---|
@@ -98,13 +103,16 @@
 //!
 //! # Using the result
 //!
-//! For each [`FilledJob`]: `v3d_job71_begin(&job, &filled.target, ...)`,
-//! for each draw `v3d_job71_draw(&job, &draw.ffi(), layout)` (the pointers of
-//! [`FilledDraw::ffi`] point into the `FilledDraw`, which must stay where it
-//! is until the call returns), `v3d_job71_end(&job, &filled.clear, ...)`.
-//! A clear quad's caller writes [`FilledDraw::quad`] where its
-//! [`ClearQuad::attr`] reads before the job runs.
+//! In the sink, for the [`JobView`]: `v3d_job71_begin(&job, &view.target,
+//! ...)`, for each draw `v3d_job71_draw(&job, &draw.ffi(), layout)` (the
+//! pointers of [`DrawView::ffi`] point into the view's slot and the
+//! borrowed lists, which must stay where they are until the call returns),
+//! `v3d_job71_end(&job, &view.clear, ...)`. A clear quad's caller writes
+//! [`DrawView::quad`] where its [`ClearQuad::attr`] reads before the job
+//! runs. The same holds for each host-test [`FilledJob`] and its
+//! [`FilledDraw::ffi`].
 
+use super::admit71::reason;
 use super::{admit71, attr71, clearplan71, draw71, ffi71, prim71, record71, rt71, uniform71, zskeep71};
 
 pub use admit71::Refusal;
@@ -158,12 +166,12 @@ const REF_TMU_PAYLOAD: &str =
     "V3D 7.1: a TMU configuration uniform has payload bits outside the word's fields (P0: 0..3, P1: 0..2)";
 const REF_TMU_SIZE: &str = "V3D 7.1: a texture size uniform reads a size the TMU table leaves 0";
 
-fn refuse(reason: &str) -> Refusal {
-    Refusal { module: "fill71", reason: reason.to_string() }
+fn refuse(text: &str) -> Refusal {
+    Refusal { module: "fill71", reason: reason(format_args!("{}", text)) }
 }
 
 fn named<E: core::fmt::Display>(module: &'static str) -> impl Fn(E) -> Refusal {
-    move |e| Refusal { module, reason: e.to_string() }
+    move |e| Refusal { module, reason: reason(format_args!("{}", e)) }
 }
 
 /* ---- the framebuffer ------------------------------------------------------ */
@@ -417,8 +425,225 @@ pub fn boxed(d: DrawIn<'_>) -> DrawBox<'_> {
 
 /* ---- the result ------------------------------------------------------------ */
 
-/// One draw's descriptors. Not `Clone`: the program structs point at the
-/// uniform lists this value owns.
+/* A program's uniform list is handed to v3d_job71 as it is: `Word` and
+ * `struct v3d_uniform` (`V3dUniform`) are the same two u32 at the same
+ * offsets, so a `&[Word]` is read as the C array without a copy. */
+const _: () = {
+    use core::mem::{align_of, offset_of, size_of};
+    assert!(size_of::<uniform71::Word>() == size_of::<V3dUniform>());
+    assert!(align_of::<uniform71::Word>() == align_of::<V3dUniform>());
+    assert!(offset_of!(uniform71::Word, contents) == offset_of!(V3dUniform, contents));
+    assert!(offset_of!(uniform71::Word, data) == offset_of!(V3dUniform, data));
+};
+
+/// A uniform list as v3d_job71's `const struct v3d_uniform *` (null when
+/// empty); the layout is pinned above.
+fn list_ptr(list: &[uniform71::Word]) -> *const V3dUniform {
+    if list.is_empty() {
+        core::ptr::null()
+    } else {
+        list.as_ptr().cast::<V3dUniform>()
+    }
+}
+
+/// One draw's descriptors as [`fill_each`] lends them: the uniform lists and
+/// the GL uniform blocks are borrowed from the [`Program`] and the
+/// [`DrawIn`] (`'a`), everything else is held inline (the attribute records,
+/// a clear quad's four colour words). The program structs' `uniforms`
+/// pointers point at the borrowed lists, so the view can be copied and
+/// moved; [`DrawView::ffi`] points into the view as well.
+#[derive(Clone, Copy, Debug)]
+pub struct DrawView<'a> {
+    pub state: V3dJob71State,
+    pub fs: V3dFsProg,
+    pub vs: ffi71::V3dVsProg,
+    pub cs: ffi71::V3dVsProg,
+    pub fs_uniforms: &'a [uniform71::Word],
+    pub vs_uniforms: &'a [uniform71::Word],
+    pub cs_uniforms: &'a [uniform71::Word],
+    /// The VS (and CS) GL uniform block.
+    pub vs_words: &'a [u32],
+    /// The FS GL uniform block of a GL draw; empty for a clear quad, whose
+    /// block is [`DrawView::clear_words`] ([`DrawView::fs_block`]).
+    pub fs_words: &'a [u32],
+    /// A clear quad's FS block: the clear colour as four float words.
+    pub clear_words: [u32; 4],
+    /// The attribute records' arrays; the first `num_attrs` are used.
+    pub attrs: [ffi71::V3dVertexAttr; ffi71::V3D_MAX_ATTRS],
+    pub num_attrs: usize,
+    /// `V3D_PRIM_*`.
+    pub prim: u32,
+    pub count: u32,
+    pub first: u32,
+    pub indexed: bool,
+    pub index_type: u32,
+    pub index_buffer: u32,
+    pub index_buffer_bytes: u32,
+    pub index_offset: u32,
+    pub instances: u32,
+    pub vs_writes_psiz: bool,
+    /// A clear quad's four vertices (x, y, z, w in clip space, TRIANGLE_FAN
+    /// order), for the caller to write where [`ClearQuad::attr`] reads.
+    pub quad: Option<[[f32; 4]; 4]>,
+    /// The quad of a clear (not a GL draw).
+    pub is_clear: bool,
+}
+
+const EMPTY_VS: ffi71::V3dVsProg = ffi71::V3dVsProg {
+    code: 0,
+    threads: 0,
+    single_seg: false,
+    vpm_input_size: 0,
+    vpm_output_size: 0,
+    separate_segments: false,
+    vcm_cache_size: 0,
+    uses_vid: false,
+    uses_iid: false,
+    uses_biid: false,
+    vattr_sizes: [0; 16],
+    uniforms: core::ptr::null(),
+    num_uniforms: 0,
+};
+
+const EMPTY_FS: V3dFsProg = V3dFsProg {
+    code: 0,
+    threads: 0,
+    single_seg: false,
+    num_inputs: 0,
+    flat_shade_flags: 0,
+    noperspective_flags: 0,
+    centroid_flags: 0,
+    flat_shade_flags_hi: 0,
+    noperspective_flags_hi: 0,
+    centroid_flags_hi: 0,
+    writes_z: false,
+    disable_ez: false,
+    uses_center_w: false,
+    lock_scoreboard_on_first_thrsw: false,
+    uses_implicit_point_line_varyings: false,
+    uses_pid: false,
+    uniforms: core::ptr::null(),
+    num_uniforms: 0,
+};
+
+impl<'a> DrawView<'a> {
+    /// An unused scratch slot (no draw).
+    pub fn new() -> DrawView<'a> {
+        DrawView {
+            state: V3dJob71State::default(),
+            fs: EMPTY_FS,
+            vs: EMPTY_VS,
+            cs: EMPTY_VS,
+            fs_uniforms: &[],
+            vs_uniforms: &[],
+            cs_uniforms: &[],
+            vs_words: &[],
+            fs_words: &[],
+            clear_words: [0; 4],
+            attrs: [ffi71::V3dVertexAttr { address: 0, stride: 0, components: 0, divisor: 0 }; ffi71::V3D_MAX_ATTRS],
+            num_attrs: 0,
+            prim: 0,
+            count: 0,
+            first: 0,
+            indexed: false,
+            index_type: 0,
+            index_buffer: 0,
+            index_buffer_bytes: 0,
+            index_offset: 0,
+            instances: 0,
+            vs_writes_psiz: false,
+            quad: None,
+            is_clear: false,
+        }
+    }
+
+    /// The attribute records' arrays.
+    pub fn attrs(&self) -> &[ffi71::V3dVertexAttr] {
+        &self.attrs[..self.num_attrs.min(ffi71::V3D_MAX_ATTRS)]
+    }
+
+    /// The FS GL uniform block v3d_job71 reads: the draw's, or a clear
+    /// quad's colour.
+    pub fn fs_block(&self) -> &[u32] {
+        if self.is_clear {
+            &self.clear_words
+        } else {
+            self.fs_words
+        }
+    }
+
+    /// The `struct v3d_job71_draw` for `v3d_job71_draw`, pointing into `self`
+    /// and the borrowed lists and blocks.
+    pub fn ffi(&self) -> V3dJob71Draw {
+        let words = |w: &[u32]| ffi71::V3dUniformStorage {
+            words: if w.is_empty() { core::ptr::null() } else { w.as_ptr() },
+            count: w.len() as u32,
+        };
+        let attrs = self.attrs();
+        V3dJob71Draw {
+            st: &self.state,
+            fs: &self.fs,
+            vs: &self.vs,
+            cs: &self.cs,
+            vs_storage: words(self.vs_words),
+            fs_storage: words(self.fs_block()),
+            attrs: if attrs.is_empty() { core::ptr::null() } else { attrs.as_ptr() },
+            num_attrs: attrs.len() as u32,
+            prim: self.prim,
+            count: self.count,
+            first: self.first,
+            indexed: self.indexed,
+            index_type: self.index_type,
+            index_buffer: self.index_buffer,
+            index_buffer_bytes: self.index_buffer_bytes,
+            index_offset: self.index_offset,
+            tmu: core::ptr::null(),
+            num_tmu: 0,
+            vs_tmu: core::ptr::null(),
+            num_vs_tmu: 0,
+            vs_writes_psiz: self.vs_writes_psiz,
+            instances: self.instances,
+        }
+    }
+}
+
+impl Default for DrawView<'_> {
+    fn default() -> Self {
+        DrawView::new()
+    }
+}
+
+/// One job as [`fill_each`] hands it to its sink: the job's draws are the
+/// first slots of the caller's scratch, valid for the sink call only.
+#[derive(Debug)]
+pub struct JobView<'v, 'a> {
+    pub target: V3dJob71Target,
+    pub draws: &'v [DrawView<'a>],
+    pub clear: V3dJob71Clear,
+    /// What the buffers hold after the job: the next job's [`History`].
+    pub after: History,
+}
+
+/// Why [`fill_each`] stopped.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FillEach {
+    /// A named refusal of the flush (or the sink's own).
+    Refused(Refusal),
+    /// The draw scratch is exhausted: op `op` (an index into `ops`) would
+    /// have been the job's draw past the last slot. The jobs handed to the
+    /// sink before are complete; the job `op` belongs to is not handed.
+    Full { op: usize },
+}
+
+impl From<Refusal> for FillEach {
+    fn from(r: Refusal) -> FillEach {
+        FillEach::Refused(r)
+    }
+}
+
+/// One draw's descriptors, owned (the host-test form [`fill`] returns). Not
+/// `Clone`: the program structs point at the uniform lists this value owns.
+#[cfg(feature = "host-test")]
 #[derive(Debug)]
 pub struct FilledDraw {
     pub state: V3dJob71State,
@@ -450,7 +675,46 @@ pub struct FilledDraw {
     pub is_clear: bool,
 }
 
+#[cfg(feature = "host-test")]
 impl FilledDraw {
+    /// The owned copy of a lent draw, its program structs pointing at its
+    /// own lists.
+    pub fn from_view(v: &DrawView<'_>) -> FilledDraw {
+        let own = |l: &[uniform71::Word]| -> Vec<V3dUniform> {
+            l.iter().map(|w| V3dUniform { contents: w.contents, data: w.data }).collect()
+        };
+        let ptr = |v: &Vec<V3dUniform>| if v.is_empty() { core::ptr::null() } else { v.as_ptr() };
+        let (fs_uniforms, vs_uniforms, cs_uniforms) = (own(v.fs_uniforms), own(v.vs_uniforms), own(v.cs_uniforms));
+        let (mut fs, mut vs, mut cs) = (v.fs, v.vs, v.cs);
+        fs.uniforms = ptr(&fs_uniforms);
+        vs.uniforms = ptr(&vs_uniforms);
+        cs.uniforms = ptr(&cs_uniforms);
+        FilledDraw {
+            state: v.state,
+            fs,
+            vs,
+            cs,
+            fs_uniforms,
+            vs_uniforms,
+            cs_uniforms,
+            vs_words: v.vs_words.to_vec(),
+            fs_words: v.fs_block().to_vec(),
+            attrs: v.attrs().to_vec(),
+            prim: v.prim,
+            count: v.count,
+            first: v.first,
+            indexed: v.indexed,
+            index_type: v.index_type,
+            index_buffer: v.index_buffer,
+            index_buffer_bytes: v.index_buffer_bytes,
+            index_offset: v.index_offset,
+            instances: v.instances,
+            vs_writes_psiz: v.vs_writes_psiz,
+            quad: v.quad,
+            is_clear: v.is_clear,
+        }
+    }
+
     /// The `struct v3d_job71_draw` for `v3d_job71_draw`, pointing into `self`.
     pub fn ffi(&self) -> V3dJob71Draw {
         let words = |w: &Vec<u32>| ffi71::V3dUniformStorage {
@@ -484,7 +748,8 @@ impl FilledDraw {
     }
 }
 
-/// One job's descriptors.
+/// One job's descriptors, owned (the host-test form [`fill`] returns).
+#[cfg(feature = "host-test")]
 #[derive(Debug)]
 pub struct FilledJob {
     pub target: V3dJob71Target,
@@ -494,28 +759,53 @@ pub struct FilledJob {
     pub after: History,
 }
 
+#[cfg(feature = "host-test")]
+impl FilledJob {
+    /// The owned copy of a lent job.
+    pub fn from_view(j: &JobView<'_, '_>) -> FilledJob {
+        FilledJob {
+            target: j.target,
+            draws: j.draws.iter().map(FilledDraw::from_view).collect(),
+            clear: j.clear,
+            after: j.after,
+        }
+    }
+}
+
 /* ---- the fill ---------------------------------------------------------------- */
+
+fn rt_err(text: &str) -> Refusal {
+    Refusal { module: "rt71", reason: reason(format_args!("{}", text)) }
+}
 
 struct Frame {
     target: V3dJob71Target,
-    rows: Vec<(rt71::Rt71, ColorRow)>,
+    /// The colour targets' rows; the first `nrows` are the framebuffer's.
+    rows: [(rt71::Rt71, ColorRow); ffi71::V3D_JOB71_MAX_RTS],
+    nrows: usize,
     zs: zskeep71::Target71,
+}
+
+impl Frame {
+    fn rows(&self) -> &[(rt71::Rt71, ColorRow)] {
+        &self.rows[..self.nrows]
+    }
 }
 
 fn frame(fb: &Framebuffer<'_>) -> Result<Frame, Refusal> {
     if fb.colors.len() > ffi71::V3D_JOB71_MAX_RTS {
         return Err(refuse(REF_COLOR_COUNT));
     }
-    let colors: Vec<admit71::ColorTarget> = fb
-        .colors
-        .iter()
-        .map(|c| admit71::ColorTarget {
-            gl_format: c.gl_format,
-            uses: admit71::BufferUse::default(),
-            clear_color: None,
-            sampled: false,
-        })
-        .collect();
+    let unused = admit71::ColorTarget {
+        gl_format: GL_RGBA8,
+        uses: admit71::BufferUse::default(),
+        clear_color: None,
+        sampled: false,
+    };
+    let mut colors = [unused; ffi71::V3D_JOB71_MAX_RTS];
+    for (t, c) in colors.iter_mut().zip(fb.colors) {
+        t.gl_format = c.gl_format;
+    }
     let ds = fb.ds.map(|d| admit71::DepthStencil {
         gl_format: d.gl_format,
         depth: admit71::BufferUse::default(),
@@ -524,7 +814,7 @@ fn frame(fb: &Framebuffer<'_>) -> Result<Frame, Refusal> {
     admit71::admit_frame(&admit71::Frame {
         width: fb.width,
         height: fb.height,
-        colors: &colors,
+        colors: &colors[..fb.colors.len()],
         depth_stencil: ds,
         msaa: false,
         double_buffer: false,
@@ -538,9 +828,11 @@ fn frame(fb: &Framebuffer<'_>) -> Result<Frame, Refusal> {
         depth_type: ffi71::V3D_INTERNAL_TYPE_DEPTH_32F,
         ..V3dJob71Target::default()
     };
-    let mut rows = Vec::with_capacity(fb.colors.len());
+    /* the slots past the framebuffer's targets hold RGBA8's row, unread */
+    let blank = (rt71::rt_format71(GL_RGBA8).map_err(|e| rt_err(e.as_str()))?, color_format(GL_RGBA8)?);
+    let mut rows = [blank; ffi71::V3D_JOB71_MAX_RTS];
     for (n, c) in fb.colors.iter().enumerate() {
-        let rt = rt71::rt_format71(c.gl_format).map_err(|e| Refusal { module: "rt71", reason: e.as_str().into() })?;
+        let rt = rt71::rt_format71(c.gl_format).map_err(|e| rt_err(e.as_str()))?;
         let row = color_format(c.gl_format)?;
         if c.memory_format > ffi71::V3D_MEMORY_FORMAT_UIF_XOR {
             return Err(refuse(REF_MEMORY_FORMAT));
@@ -556,7 +848,7 @@ fn frame(fb: &Framebuffer<'_>) -> Result<Frame, Refusal> {
                 pad: [0; 2],
             };
         }
-        rows.push((rt, row));
+        rows[n] = (rt, row);
     }
     let mut zs = zskeep71::Target71 { layout: zskeep71::Layout71::TileOnly, depth: false, stencil: false };
     if let Some(d) = fb.ds {
@@ -579,15 +871,15 @@ fn frame(fb: &Framebuffer<'_>) -> Result<Frame, Refusal> {
             stencil: row.stencil,
         };
     }
-    Ok(Frame { target: t, rows, zs })
+    Ok(Frame { target: t, rows, nrows: fb.colors.len(), zs })
 }
 
-/// The open job.
+/// The open job; its draws are the first `draws` slots of the scratch.
 struct Open {
     colors: [Option<[u32; 4]>; ffi71::V3D_JOB71_MAX_RTS],
     z: zskeep71::PlaneUse71,
     s: zskeep71::PlaneUse71,
-    draws: Vec<FilledDraw>,
+    draws: usize,
     touched: bool,
 }
 
@@ -597,14 +889,14 @@ impl Open {
             colors: [None; ffi71::V3D_JOB71_MAX_RTS],
             z: zskeep71::PlaneUse71::NONE,
             s: zskeep71::PlaneUse71::NONE,
-            draws: Vec::new(),
+            draws: 0,
             touched: false,
         }
     }
 }
 
 fn zs_err(e: zskeep71::ZsRefusal71) -> Refusal {
-    Refusal { module: "zskeep71", reason: e.message().to_string() }
+    Refusal { module: "zskeep71", reason: reason(format_args!("{}", e.message())) }
 }
 
 /// The clear colour a target is cleared to: alpha 1 on a format without one.
@@ -670,29 +962,35 @@ fn face_writes(f: &draw71::StencilFace) -> bool {
 /// The blend colour as IEEE halves: rt71's RGBA16F clear packing is exactly
 /// that conversion (round to nearest even, no clamp).
 fn halves(c: [f32; 4]) -> Result<[u16; 4], Refusal> {
-    let row = rt71::rt_format71(0x881A).map_err(|e| Refusal { module: "rt71", reason: e.as_str().into() })?;
-    let w = rt71::clear_words71(&row, rt71::ClearColor::Float(c))
-        .map_err(|e| Refusal { module: "rt71", reason: e.as_str().into() })?
-        .words;
+    let row = rt71::rt_format71(0x881A).map_err(|e| rt_err(e.as_str()))?;
+    let w = rt71::clear_words71(&row, rt71::ClearColor::Float(c)).map_err(|e| rt_err(e.as_str()))?.words;
     Ok([w[0] as u16, (w[0] >> 16) as u16, w[1] as u16, (w[1] >> 16) as u16])
 }
 
-fn uniforms(list: &[uniform71::Word]) -> Vec<V3dUniform> {
-    list.iter().map(|w| V3dUniform { contents: w.contents, data: w.data }).collect()
+/// What a filled draw borrows: the program whose lists it hands on, and the
+/// GL uniform blocks (empty for a clear quad, whose colour is inline).
+struct Lent<'a> {
+    program: &'a Program<'a>,
+    vs_words: &'a [u32],
+    fs_words: &'a [u32],
 }
 
-/// The draw's state, programs and arrays (a GL draw, or a clear quad).
-fn build_draw(
+/// The draw's state, programs and arrays (a GL draw, or a clear quad). `d`
+/// is read during the call (its blocks are the ones the streams are checked
+/// against); what the result keeps is `lent`'s.
+#[allow(clippy::too_many_arguments)]
+fn build_draw<'a>(
     fr: &Frame,
     fb: &Framebuffer<'_>,
     rev: record71::Revision,
     d: &DrawIn<'_>,
+    lent: Lent<'a>,
     tmu: Option<&DrawTmu<'_>>,
     open: &mut Open,
     is_clear: bool,
-) -> Result<FilledDraw, Refusal> {
+) -> Result<DrawView<'a>, Refusal> {
     let mode = prim71::prim_mode(d.prim.mode).map_err(named("prim71"))?;
-    prim71::pack_draw(&d.prim).map_err(named("prim71"))?;
+    prim71::draw_packed(&d.prim).map_err(named("prim71"))?;
     if d.prim.base_vertex != 0 || d.prim.base_instance != 0 || d.prim.indices.is_some_and(|i| i.restart) {
         return Err(refuse(REF_BASE));
     }
@@ -705,13 +1003,15 @@ fn build_draw(
     st.flip_y = fb.flip_y;
     st.nr_targets = fb.colors.len() as u32;
     st.polygon = polygon;
-    for (i, (_, row)) in fr.rows.iter().enumerate() {
+    for (i, (_, row)) in fr.rows().iter().enumerate() {
         st.targets[i].has_alpha = row.has_alpha;
     }
     st.depth_test &= fr.zs.depth;
     st.stencil_test &= fr.zs.stencil;
-    st.frag = draw71::FragProgram { writes_z: d.program.desc.fs.writes_z, discards: d.program.discards };
-    let pk = draw71::translate(&st).map_err(|e| Refusal { module: "draw71", reason: e.message().into() })?;
+    let p = lent.program;
+    st.frag = draw71::FragProgram { writes_z: p.desc.fs.writes_z, discards: p.discards };
+    let pk = draw71::translate(&st)
+        .map_err(|e| Refusal { module: "draw71", reason: reason(format_args!("{}", e.message())) })?;
     if st.independent_blend {
         let n = st.nr_targets as usize;
         if (1..n).any(|i| {
@@ -721,7 +1021,7 @@ fn build_draw(
             return Err(refuse(REF_ONE_BLEND));
         }
     }
-    if st.targets[0].blend_enable && fr.rows.iter().any(|(_, r)| !r.has_alpha) {
+    if st.targets[0].blend_enable && fr.rows().iter().any(|(_, r)| !r.has_alpha) {
         let e = &st.targets[0].blend;
         use draw71::BlendFactor::*;
         if [e.rgb_src, e.rgb_dst, e.alpha_src, e.alpha_dst]
@@ -734,7 +1034,7 @@ fn build_draw(
     let eff = |i: usize| if st.independent_blend { st.targets[i] } else { st.targets[0] };
     let colormask = one_mask(
         fb,
-        fr.rows.iter().enumerate().map(|(i, (_, row))| eff(i).color_mask & if row.has_alpha { 0xf } else { 0x7 }),
+        fr.rows().iter().enumerate().map(|(i, (_, row))| eff(i).color_mask & if row.has_alpha { 0xf } else { 0x7 }),
     )?;
 
     let (scale, translate) = draw71::viewport_xform(&st);
@@ -777,7 +1077,6 @@ fn build_draw(
     }
 
     /* the programs: attr71's records and record71's description */
-    let p = d.program;
     let desc = &p.desc;
     let adm = admit71::admit_draw(
         rev,
@@ -800,42 +1099,56 @@ fn build_draw(
     if desc.vs.uses_base_instance || desc.cs.uses_base_instance {
         return Err(refuse(REF_BASE_INSTANCE));
     }
-    let mut attrs = Vec::with_capacity(d.attrs.len());
-    for r in adm.attrs.records.iter().take(d.attrs.len()) {
+    let mut out = DrawView::new();
+    for r in adm.attrs.records.iter().take(d.attrs.len().min(ffi71::V3D_MAX_ATTRS)) {
         if r.ty != attr71::TYPE_FLOAT || r.signed || r.normalized || r.read_as_int {
             return Err(refuse(REF_FLOAT_ATTRS));
         }
-        attrs.push(ffi71::V3dVertexAttr {
+        out.attrs[out.num_attrs] = ffi71::V3dVertexAttr {
             address: r.address,
             stride: r.stride,
             components: if r.vec_size == 0 { 4 } else { u32::from(r.vec_size) },
             divisor: u32::from(r.divisor),
-        });
+        };
+        out.num_attrs += 1;
     }
 
-    /* the uniform streams: every word must be one 7.1 fills */
+    /* the uniform streams: every word must be one 7.1 fills (checked word by
+     * word, as uniform71::fill does; nothing is kept) */
     let vp = uniform71::Viewport { scale, translate };
     let none: &[ffi71::V3dJob71Tmu] = &[];
     let (fs_tmu, vs_tmu) = tmu.map_or((none, none), |t| (t.fs, t.vs));
     for (list, words, table) in
         [(p.fs_uniforms, d.fs_words, fs_tmu), (p.vs_uniforms, d.vs_words, vs_tmu), (p.cs_uniforms, d.vs_words, vs_tmu)]
     {
-        let mut out = vec![0u32; list.len()];
         match tmu {
             /* fill: the texture words are uniform71's refusal */
-            None => uniform71::fill(list, &vp, words, &mut out),
-            /* fill_textured: each texture word is checked against the
-             * table, the others are uniform71's */
-            Some(_) => uniform71::fill(&tex_resolved(list, table)?, &vp, words, &mut out),
+            None => {
+                for w in list {
+                    uniform71::word(*w, &vp, words).map_err(named("uniform71"))?;
+                }
+            }
+            /* fill_textured: each texture word of the list is checked
+             * against the table first, then every word is uniform71's, a
+             * texture word as the CONSTANT v3d_job71 writes for it */
+            Some(_) => {
+                for w in list {
+                    if let Some(r) = tmu_word(w.contents, w.data, table) {
+                        r?;
+                    }
+                }
+                for w in list {
+                    let w = match tmu_word(w.contents, w.data, table) {
+                        None => *w,
+                        Some(v) => uniform71::Word { contents: uniform71::CONSTANT, data: v? },
+                    };
+                    uniform71::word(w, &vp, words).map_err(named("uniform71"))?;
+                }
+            }
         }
-        .map_err(named("uniform71"))?;
     }
 
-    let fs_uniforms = uniforms(p.fs_uniforms);
-    let vs_uniforms = uniforms(p.vs_uniforms);
-    let cs_uniforms = uniforms(p.cs_uniforms);
-    let ptr = |v: &Vec<V3dUniform>| if v.is_empty() { core::ptr::null() } else { v.as_ptr() };
-    let fs = V3dFsProg {
+    out.fs = V3dFsProg {
         code: desc.fs.prog.code,
         threads: desc.fs.prog.threads,
         single_seg: desc.fs.prog.single_seg,
@@ -852,11 +1165,11 @@ fn build_draw(
         lock_scoreboard_on_first_thrsw: desc.fs.lock_scoreboard_on_first_thrsw,
         uses_implicit_point_line_varyings: desc.fs.uses_implicit_point_line_varyings,
         uses_pid: desc.fs.uses_pid,
-        uniforms: ptr(&fs_uniforms),
-        num_uniforms: fs_uniforms.len() as u32,
+        uniforms: list_ptr(p.fs_uniforms),
+        num_uniforms: p.fs_uniforms.len() as u32,
     };
     let vsp =
-        |v: &record71::VertexDesc, reads: [u8; attr71::MAX_ATTRS], vcm: u32, u: &Vec<V3dUniform>| ffi71::V3dVsProg {
+        |v: &record71::VertexDesc, reads: [u8; attr71::MAX_ATTRS], vcm: u32, u: &[uniform71::Word]| ffi71::V3dVsProg {
             code: v.prog.code,
             threads: v.prog.threads,
             single_seg: v.prog.single_seg,
@@ -868,11 +1181,11 @@ fn build_draw(
             uses_iid: v.uses_iid,
             uses_biid: v.uses_base_instance,
             vattr_sizes: reads,
-            uniforms: ptr(u),
+            uniforms: list_ptr(u),
             num_uniforms: u.len() as u32,
         };
-    let vs = vsp(&desc.vs, p.vs_reads, p.vs_vcm_cache_size, &vs_uniforms);
-    let cs = vsp(&desc.cs, p.cs_reads, p.cs_vcm_cache_size, &cs_uniforms);
+    out.vs = vsp(&desc.vs, p.vs_reads, p.vs_vcm_cache_size, p.vs_uniforms);
+    out.cs = vsp(&desc.cs, p.cs_reads, p.cs_vcm_cache_size, p.cs_uniforms);
 
     /* the planes and targets the draw uses */
     open.z.draw(st.depth_test, st.depth_test && st.depth_write);
@@ -887,57 +1200,48 @@ fn build_draw(
         }
         None => (false, 0, 0, 0, 0),
     };
-    Ok(FilledDraw {
-        state: s,
-        fs,
-        vs,
-        cs,
-        fs_uniforms,
-        vs_uniforms,
-        cs_uniforms,
-        vs_words: d.vs_words.to_vec(),
-        fs_words: d.fs_words.to_vec(),
-        attrs,
-        prim: u32::from(mode),
-        count: d.prim.count as u32,
-        first: if indexed { 0 } else { d.prim.first as u32 },
-        indexed,
-        index_type,
-        index_buffer,
-        index_buffer_bytes,
-        index_offset,
-        instances: d.prim.instances as u32,
-        vs_writes_psiz: desc.point_size,
-        quad: None,
-        is_clear,
-    })
+    out.state = s;
+    out.fs_uniforms = p.fs_uniforms;
+    out.vs_uniforms = p.vs_uniforms;
+    out.cs_uniforms = p.cs_uniforms;
+    out.vs_words = lent.vs_words;
+    out.fs_words = lent.fs_words;
+    out.prim = u32::from(mode);
+    out.count = d.prim.count as u32;
+    out.first = if indexed { 0 } else { d.prim.first as u32 };
+    out.indexed = indexed;
+    out.index_type = index_type;
+    out.index_buffer = index_buffer;
+    out.index_buffer_bytes = index_buffer_bytes;
+    out.index_offset = index_offset;
+    out.instances = d.prim.instances as u32;
+    out.vs_writes_psiz = desc.point_size;
+    out.is_clear = is_clear;
+    Ok(out)
 }
 
 const GL_TRIANGLE_FAN: u32 = 6;
 
 /// The clear quad of clearplan71's `Draw`.
-fn clear_quad(
+fn clear_quad<'a>(
     fr: &Frame,
     fb: &Framebuffer<'_>,
     rev: record71::Revision,
-    q: &ClearQuad<'_>,
+    q: &ClearQuad<'a>,
     req: &ClearReq,
     cd: &clearplan71::ClearDraw,
     open: &mut Open,
-) -> Result<FilledDraw, Refusal> {
+) -> Result<DrawView<'a>, Refusal> {
     let nt = fb.colors.len();
     /* the one mask: what the quad writes of each target with a buffer */
-    let masks: Vec<u8> = (0..nt)
-        .map(|i| {
-            let has_alpha = fr.rows[i].1.has_alpha;
-            if cd.targets & (1 << i) != 0 {
-                cd.color_masks[i] & if has_alpha { 0xf } else { 0x7 }
-            } else {
-                0
-            }
-        })
-        .collect();
-    let mask = one_mask(fb, masks.iter().copied())? as u8;
+    let mut masks = [0u8; ffi71::V3D_JOB71_MAX_RTS];
+    for (i, m) in masks.iter_mut().enumerate().take(nt) {
+        let has_alpha = fr.rows()[i].1.has_alpha;
+        if cd.targets & (1 << i) != 0 {
+            *m = cd.color_masks[i] & if has_alpha { 0xf } else { 0x7 };
+        }
+    }
+    let mask = one_mask(fb, masks[..nt].iter().copied())? as u8;
     let stencil = cd.stencil.then(|| (req.stencil.unwrap_or(0) & 0xff, u32::from(cd.stencil_mask)));
     let mut st = draw71::DrawState::blitter_clear(fb.width, fb.height, fb.flip_y, nt as u32, mask, stencil);
     if cd.depth {
@@ -955,8 +1259,8 @@ fn clear_quad(
     let color = req.color.unwrap_or([0.0; 4]);
     /* one colour for the quad: alpha 1 where a target has none (its mask
      * leaves alpha alone anyway) */
-    let all_alpha = fr.rows.iter().all(|(_, r)| r.has_alpha);
-    let fs_words: Vec<u32> = clear_rgba(color, all_alpha).iter().map(|c| c.to_bits()).collect();
+    let all_alpha = fr.rows().iter().all(|(_, r)| r.has_alpha);
+    let fs_words = clear_rgba(color, all_alpha).map(f32::to_bits);
     let attrs = [q.attr];
     let d = DrawIn {
         state: st,
@@ -970,12 +1274,15 @@ fn clear_quad(
         fs_words: &fs_words,
         oq_addr: 0,
     };
-    let mut fd = build_draw(fr, fb, rev, &d, None, open, true)?;
+    let lent = Lent { program: q.program, vs_words: &[], fs_words: &[] };
+    let mut fd = build_draw(fr, fb, rev, &d, lent, None, open, true)?;
+    fd.clear_words = fs_words;
     fd.quad = Some([[x0, y0, z, 1.0], [x1, y0, z, 1.0], [x1, y1, z, 1.0], [x0, y1, z, 1.0]]);
     Ok(fd)
 }
 
-fn end_job(fr: &Frame, hist: &History, open: Open) -> Result<FilledJob, Refusal> {
+/// The job's clear descriptor and the history after it.
+fn end_job(fr: &Frame, hist: &History, open: &Open) -> Result<(V3dJob71Clear, History), Refusal> {
     let job = zskeep71::Job71 { z: open.z, s: open.s, discard: false };
     let dec = zskeep71::decide(&fr.zs, hist.z, hist.s, &job).map_err(zs_err)?;
     let f = dec.frame();
@@ -1015,44 +1322,83 @@ fn end_job(fr: &Frame, hist: &History, open: Open) -> Result<FilledJob, Refusal>
     c.zs_cleared = (fr.zs.depth || fr.zs.stencil) && !c.zs_load;
     after.z = dec.z.next;
     after.s = dec.s.next;
-    Ok(FilledJob { target: fr.target, draws: open.draws, clear: c, after })
+    Ok((c, after))
 }
 
-/// Fill the jobs of one flush of `fb` (see the module docs). `hist` is what
-/// the buffers hold before it; each job's [`FilledJob::after`] is the next
-/// job's. `quad` draws the clears the tile buffer cannot do. An empty result
-/// is a flush with nothing to do.
-pub fn fill(
+/// The open job handed to the sink; the scratch is free again after.
+fn hand<'a, F>(
+    fr: &Frame,
+    hist: &History,
+    open: &Open,
+    draws: &[DrawView<'a>],
+    sink: &mut F,
+) -> Result<History, Refusal>
+where
+    F: FnMut(&JobView<'_, 'a>) -> Result<(), Refusal>,
+{
+    let (clear, after) = end_job(fr, hist, open)?;
+    sink(&JobView { target: fr.target, draws: &draws[..open.draws], clear, after })?;
+    Ok(after)
+}
+
+/// A draw into the open job's next scratch slot, or `Full`.
+fn place<'a>(draws: &mut [DrawView<'a>], open: &mut Open, d: DrawView<'a>, op: usize) -> Result<(), FillEach> {
+    let slot = draws.get_mut(open.draws).ok_or(FillEach::Full { op })?;
+    *slot = d;
+    open.draws += 1;
+    Ok(())
+}
+
+/// Fill the jobs of one flush of `fb` (see the module docs) and hand each to
+/// `sink` as it closes. `hist` is what the buffers hold before the flush;
+/// each job's [`JobView::after`] is the next job's. `quad` draws the clears
+/// the tile buffer cannot do. `draws` is the scratch a job's draws are
+/// written to (one slot for each GL draw and clear quad of the job); the
+/// slots are reused for the next job once the sink returns. A flush with
+/// nothing to do hands nothing. Stops at the first refusal (the flush's or
+/// the sink's) or with [`FillEach::Full`] when a job has more draws than
+/// `draws` has slots.
+pub fn fill_each<'a, F>(
     fb: &Framebuffer<'_>,
     rev: record71::Revision,
     hist: &History,
-    quad: &ClearQuad<'_>,
-    ops: &[Op<'_>],
-) -> Result<Vec<FilledJob>, Refusal> {
-    Ok(fill_ops(fb, rev, hist, quad, ops, None)?.into_iter().map(|(job, _)| job).collect())
+    quad: &ClearQuad<'a>,
+    ops: &'a [Op<'a>],
+    draws: &mut [DrawView<'a>],
+    mut sink: F,
+) -> Result<(), FillEach>
+where
+    F: FnMut(&JobView<'_, 'a>) -> Result<(), Refusal>,
+{
+    fill_core(fb, rev, hist, quad, ops, None, draws, &mut sink)
 }
 
-/// [`fill`] with the draws' TMU tables (`tex` given: one per [`Op::Draw`],
-/// in order) or without (`None`: [`fill`]'s refusal of every texture word).
-/// Each job comes with one [`DrawTmu`] per draw, empty for a clear quad.
-fn fill_ops<'t>(
+/// [`fill_each`] with the draws' TMU tables (`tex` given: one per
+/// [`Op::Draw`], in order) or without (`None`: the refusal of every texture
+/// word).
+#[allow(clippy::too_many_arguments)]
+fn fill_core<'a, F>(
     fb: &Framebuffer<'_>,
     rev: record71::Revision,
     hist: &History,
-    quad: &ClearQuad<'_>,
-    ops: &[Op<'_>],
-    tex: Option<&[DrawTmu<'t>]>,
-) -> Result<Vec<(FilledJob, Vec<DrawTmu<'t>>)>, Refusal> {
+    quad: &ClearQuad<'a>,
+    ops: &'a [Op<'a>],
+    tex: Option<&[DrawTmu<'_>]>,
+    draws: &mut [DrawView<'a>],
+    sink: &mut F,
+) -> Result<(), FillEach>
+where
+    F: FnMut(&JobView<'_, 'a>) -> Result<(), Refusal>,
+{
     let fr = frame(fb)?;
     let nt = fb.colors.len();
-    let mut jobs = Vec::new();
     let mut hist = *hist;
     let mut open = Open::new();
-    let mut open_tmu: Vec<DrawTmu<'t>> = Vec::new();
     let mut next_tmu = 0usize;
-    for op in ops {
+    for (n, op) in ops.iter().enumerate() {
         match op {
             Op::Draw(d) => {
+                let d: &'a DrawIn<'a> = d;
                 let t = match tex {
                     None => None,
                     Some(list) => {
@@ -1061,16 +1407,16 @@ fn fill_ops<'t>(
                         Some(t)
                     }
                 };
-                let fd = build_draw(&fr, fb, rev, d, t.as_ref(), &mut open, false)?;
-                open.draws.push(fd);
-                open_tmu.push(t.unwrap_or_default());
+                let lent = Lent { program: d.program, vs_words: d.vs_words, fs_words: d.fs_words };
+                let fd = build_draw(&fr, fb, rev, d, lent, t.as_ref(), &mut open, false)?;
+                place(draws, &mut open, fd, n)?;
             }
             Op::Clear(req) => {
                 let mut targets = [clearplan71::TargetIn { cleared: false, mask: 0 }; clearplan71::MAX_TARGETS];
                 for (i, c) in fb.colors.iter().enumerate() {
                     targets[i] = clearplan71::TargetIn {
                         cleared: req.color.is_some() && req.draw_buffers & (1 << i) != 0 && c.address != 0,
-                        mask: plan_mask(req.color_mask, fr.rows[i].1.has_alpha),
+                        mask: plan_mask(req.color_mask, fr.rows()[i].1.has_alpha),
                     };
                 }
                 let (x, y, w, h) = req.scissor.map_or((0, 0, 0, 0), |s| (s[0], s[1], s[2], s[3]));
@@ -1087,16 +1433,15 @@ fn fill_ops<'t>(
                     stencil_mask: req.stencil_mask,
                     scissor: clearplan71::ScissorIn { enabled: req.scissor.is_some(), x, y, w, h },
                     ds_valid: open.z.needs() || open.s.needs(),
-                    draws_queued: !open.draws.is_empty(),
+                    draws_queued: open.draws != 0,
                 })
                 .map_err(named("clearplan71"))?;
                 match plan {
                     clearplan71::ClearPlan::Nothing => {}
                     clearplan71::ClearPlan::TileClear { targets: tt, depth, stencil, new_job } => {
                         if new_job {
-                            let done = end_job(&fr, &hist, core::mem::replace(&mut open, Open::new()))?;
-                            hist = done.after;
-                            jobs.push((done, core::mem::take(&mut open_tmu)));
+                            hist = hand(&fr, &hist, &open, draws, sink)?;
+                            open = Open::new();
                         }
                         let zk = |on: bool, v: u32| {
                             if on {
@@ -1107,7 +1452,7 @@ fn fill_ops<'t>(
                         };
                         let route = zskeep71::route_clear(
                             &fr.zs,
-                            !open.draws.is_empty(),
+                            open.draws != 0,
                             tt != 0,
                             zk(depth, req.depth.unwrap_or(1.0).clamp(0.0, 1.0).to_bits()),
                             zk(stencil, req.stencil.unwrap_or(0) & 0xff),
@@ -1119,12 +1464,12 @@ fn fill_ops<'t>(
                             if tt & (1 << i) == 0 || fb.colors[i].address == 0 {
                                 continue;
                             }
-                            let (rt, row) = &fr.rows[i];
+                            let (rt, row) = &fr.rows()[i];
                             let words = rt71::clear_words71(
                                 rt,
                                 rt71::ClearColor::Float(clear_rgba(req.color.unwrap_or([0.0; 4]), row.has_alpha)),
                             )
-                            .map_err(|e| Refusal { module: "rt71", reason: e.as_str().into() })?;
+                            .map_err(|e| rt_err(e.as_str()))?;
                             open.colors[i] = Some(words.words);
                         }
                         open.touched = true;
@@ -1132,34 +1477,52 @@ fn fill_ops<'t>(
                     clearplan71::ClearPlan::Draw(cd) => {
                         let kind =
                             |on: bool| if on { zskeep71::ClearKind71::Partial } else { zskeep71::ClearKind71::None };
-                        let route = zskeep71::route_clear(
-                            &fr.zs,
-                            !open.draws.is_empty(),
-                            false,
-                            kind(cd.depth),
-                            kind(cd.stencil),
-                        )
-                        .map_err(zs_err)?;
+                        let route =
+                            zskeep71::route_clear(&fr.zs, open.draws != 0, false, kind(cd.depth), kind(cd.stencil))
+                                .map_err(zs_err)?;
                         let fd = clear_quad(&fr, fb, rev, quad, req, &cd, &mut open)?;
                         /* the quad's own draw state already marked a depth
                          * write and a stencil write; the routes add the
                          * partial-clear use */
                         open.z.apply(route.z);
                         open.s.apply(route.s);
-                        open.draws.push(fd);
-                        open_tmu.push(DrawTmu::default());
+                        place(draws, &mut open, fd, n)?;
                     }
                 }
             }
         }
     }
     if tex.is_some_and(|list| list.len() != next_tmu) {
-        return Err(refuse(REF_TMU_COUNT));
+        return Err(refuse(REF_TMU_COUNT).into());
     }
     if open.touched {
-        jobs.push((end_job(&fr, &hist, open)?, open_tmu));
+        hand(&fr, &hist, &open, draws, sink)?;
     }
-    Ok(jobs)
+    Ok(())
+}
+
+/// Fill the jobs of one flush of `fb`, collected: the host-test form of
+/// [`fill_each`], with a scratch of one slot for each op, so it is never
+/// full. An empty result is a flush with nothing to do.
+#[cfg(feature = "host-test")]
+pub fn fill(
+    fb: &Framebuffer<'_>,
+    rev: record71::Revision,
+    hist: &History,
+    quad: &ClearQuad<'_>,
+    ops: &[Op<'_>],
+) -> Result<Vec<FilledJob>, Refusal> {
+    let mut scratch = vec![DrawView::new(); ops.len().max(1)];
+    let mut jobs = Vec::new();
+    let r = fill_each(fb, rev, hist, quad, ops, &mut scratch, |j| {
+        jobs.push(FilledJob::from_view(j));
+        Ok(())
+    });
+    match r {
+        Ok(()) => Ok(jobs),
+        Err(FillEach::Refused(r)) => Err(r),
+        Err(FillEach::Full { op }) => unreachable!("fill71::fill: a scratch of one slot an op is full at op {op}"),
+    }
 }
 
 /* ---- textured draws (P10) ------------------------------------------------------ */
@@ -1175,12 +1538,14 @@ pub struct DrawTmu<'a> {
 
 /// One job of [`fill_textured`]: the job and, per draw of
 /// [`FilledJob::draws`], its sampler bindings (empty for a clear quad).
+#[cfg(feature = "host-test")]
 #[derive(Debug)]
 pub struct TexFilledJob<'a> {
     pub job: FilledJob,
     pub tmu: Vec<DrawTmu<'a>>,
 }
 
+#[cfg(feature = "host-test")]
 impl TexFilledJob<'_> {
     /// Draw `n`'s `struct v3d_job71_draw` ([`FilledDraw::ffi`]) with its
     /// TMU tables; the pointers point into `self` and the caller's tables.
@@ -1197,6 +1562,7 @@ impl TexFilledJob<'_> {
 /// [`fill`] for draws that sample textures: `tmu` holds one [`DrawTmu`]
 /// per [`Op::Draw`] of `ops`, in order (an empty one for a draw without
 /// textures). See the module docs, "Textured draws (P10)".
+#[cfg(feature = "host-test")]
 pub fn fill_textured<'t>(
     fb: &Framebuffer<'_>,
     rev: record71::Revision,
@@ -1212,8 +1578,34 @@ pub fn fill_textured<'t>(
             }
         }
     }
-    let jobs = fill_ops(fb, rev, hist, quad, ops, Some(tmu))?;
-    Ok(jobs.into_iter().map(|(job, tmu)| TexFilledJob { job, tmu }).collect())
+    let mut scratch = vec![DrawView::new(); ops.len().max(1)];
+    let mut jobs = Vec::new();
+    let mut next = 0usize;
+    let r = fill_core(fb, rev, hist, quad, ops, Some(tmu), &mut scratch, &mut |j: &JobView<'_, '_>| {
+        /* a GL draw takes the next table, a clear quad none (fill_core
+         * checked the count) */
+        let tables = j
+            .draws
+            .iter()
+            .map(|d| {
+                if d.is_clear {
+                    DrawTmu::default()
+                } else {
+                    next += 1;
+                    tmu.get(next - 1).copied().unwrap_or_default()
+                }
+            })
+            .collect();
+        jobs.push(TexFilledJob { job: FilledJob::from_view(j), tmu: tables });
+        Ok(())
+    });
+    match r {
+        Ok(()) => Ok(jobs),
+        Err(FillEach::Refused(r)) => Err(r),
+        Err(FillEach::Full { op }) => {
+            unreachable!("fill71::fill_textured: a scratch of one slot an op is full at op {op}")
+        }
+    }
 }
 
 /// The word v3d_job71 writes for a texture uniform (`contents` 40, 41 or
@@ -1252,15 +1644,4 @@ pub fn tmu_word(contents: u32, data: u32, table: &[ffi71::V3dJob71Tmu]) -> Optio
         }),
         _ => return None,
     })
-}
-
-/// `list` with each texture word as the `CONSTANT` v3d_job71 will write for
-/// it from `table` (the list uniform71 then checks the stream with).
-fn tex_resolved(list: &[uniform71::Word], table: &[ffi71::V3dJob71Tmu]) -> Result<Vec<uniform71::Word>, Refusal> {
-    list.iter()
-        .map(|w| match tmu_word(w.contents, w.data, table) {
-            None => Ok(*w),
-            Some(v) => Ok(uniform71::Word { contents: uniform71::CONSTANT, data: v? }),
-        })
-        .collect()
 }
