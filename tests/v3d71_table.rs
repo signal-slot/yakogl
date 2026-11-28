@@ -54,7 +54,8 @@ fn the_7_1_table_is_the_v3d_table_of_the_build() {
 }
 
 /// The constant answers of docs/notes/v3d71-table71.md section 1, and the
-/// hooks the first cut leaves to the GL core.
+/// hooks the first cut leaves to the GL core. P10 (src/v3d/table71tex.rs)
+/// set the three texture hooks and samples copies made at draw time.
 #[test]
 fn the_tables_answers_are_the_design_notes() {
     let t = &yakogl_backend_v3d71;
@@ -67,7 +68,7 @@ fn the_tables_answers_are_the_design_notes() {
     assert!(t.etc1_decoded_at_upload);
     /* the 4.2 table's 0xffff since backend71 draws instanced arrays (inst71) */
     assert_eq!(t.max_instance_divisor, 0xffff);
-    assert!(!t.samples_texel_copies);
+    assert!(t.samples_texel_copies);
     assert_eq!(t.linear_row_align, 0);
     assert!(t.uniforms_host_only);
     assert_eq!(t.max_samples, 0);
@@ -83,11 +84,13 @@ fn the_tables_answers_are_the_design_notes() {
         ("heap_base", t.heap_base.is_some()),
         ("counters", t.counters.is_some()),
         ("wait_kick", t.wait_kick.is_some()),
+        ("texture_released", t.texture_released.is_some()),
+        ("generate_mipmap", t.generate_mipmap.is_some()),
+        ("return_mipmap_chain", t.return_mipmap_chain.is_some()),
     ] {
         assert!(set, "{hook} must be set");
     }
     for (hook, set) in [
-        ("texture_released", t.texture_released.is_some()),
         ("surface_swapped", t.surface_swapped.is_some()),
         ("texture_uploaded", t.texture_uploaded.is_some()),
         ("attachment_gone", t.attachment_gone.is_some()),
@@ -97,8 +100,6 @@ fn the_tables_answers_are_the_design_notes() {
         ("query_begin", t.query_begin.is_some()),
         ("query_end", t.query_end.is_some()),
         ("query_result", t.query_result.is_some()),
-        ("generate_mipmap", t.generate_mipmap.is_some()),
-        ("return_mipmap_chain", t.return_mipmap_chain.is_some()),
     ] {
         assert!(!set, "{hook} is None in the first cut");
     }
@@ -113,13 +114,14 @@ fn init_checks_the_identity_and_takes_the_job_arenas() {
     assert!(table71::inited());
     let lines = logs_with("yakogl/v3d71: V3D 7.1.10; job arenas for 256 draws (the default)");
     assert_eq!(lines.len(), 1, "{:?}", log_lines());
-    /* the binning list, the render list, the indirect buffer, the data arena */
+    /* the binning list, the render list, the indirect buffer, the data
+     * arena, the texture record arena */
     let sizes: Vec<usize> = v3d71_table_rig::live_allocs().iter().map(|a| a.1).collect();
     let bcl = (table71::BCL_FIXED + 256 * table71::BCL_BYTES_PER_DRAW) as usize;
     let ind = (table71::IND_FIXED + 256 * table71::IND_BYTES_PER_DRAW) as usize;
-    assert_eq!(sizes, [bcl, table71::RCL_BYTES, ind, table71::DATA_BYTES]);
+    assert_eq!(sizes, [bcl, table71::RCL_BYTES, ind, table71::DATA_BYTES, table71::RECS_BYTES]);
     assert_eq!(backend::init(), 0, "a second init is the first");
-    assert_eq!(v3d71_table_rig::live_allocs().len(), 4);
+    assert_eq!(v3d71_table_rig::live_allocs().len(), 5);
     backend::shutdown();
     assert!(!table71::inited());
     assert!(v3d71_table_rig::live_allocs().is_empty(), "shutdown frees the arenas");

@@ -57,9 +57,13 @@
 //! window (tools/v3d/pi5/src/gl_shapes.py); here the cases draw into the
 //! real window surface, which is stored top-down (`GlesDraw::flip_y`). That
 //! is the entries named `FLIP`.
+//!
+//! tests/v3d71_gl_table.rs (P9's acceptance c3) includes this file as its
+//! module `cases` and calls the `pub(crate)` items (the cases' GL calls,
+//! `recorded`, the rig).
 #![cfg(all(feature = "gpu-v3d71", feature = "host-test", feature = "shaderc-online"))]
 
-mod v3d71_table_rig;
+pub(crate) mod v3d71_table_rig;
 
 use std::collections::BTreeMap;
 use std::ffi::c_void;
@@ -564,7 +568,7 @@ fn plain_record(r: &Pk) -> Pk {
 
 /* ---- a submitted job, decoded ------------------------------------------------------- */
 
-struct Ours {
+pub(crate) struct Ours {
     bcl: Vec<Pk>,
     rcl: Vec<Pk>,
     tiles: Vec<Pk>,
@@ -719,11 +723,11 @@ const COLOR_UV_FS: &str = concat!(include_str!("../tools/shaders/gl_test_es100/c
 
 /// The 4.2 table's string for a read of stencil an earlier job wrote
 /// (src/v3d/backend.rs `fn record`), which zskeep71 repeats.
-const READS_STENCIL: &str =
+pub(crate) const READS_STENCIL: &str =
     "the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in";
 
 /// `struct cuv_vertex`: pos4, colour4, uv2 (40 bytes).
-type Vtx = [f32; 10];
+pub(crate) type Vtx = [f32; 10];
 
 /// `cuv_set`.
 fn cuv(x: f32, y: f32, z: f32, r: f32, g: f32, b: f32) -> Vtx {
@@ -733,15 +737,15 @@ fn cuv(x: f32, y: f32, z: f32, r: f32, g: f32, b: f32) -> Vtx {
 const FULL: [[f32; 2]; 6] = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
 
 /// `solid_quad`: a full-screen quad of one colour at depth `z`.
-fn solid_quad(r: f32, g: f32, b: f32, z: f32) -> Vec<Vtx> {
+pub(crate) fn solid_quad(r: f32, g: f32, b: f32, z: f32) -> Vec<Vtx> {
     FULL.iter().map(|c| cuv(c[0], c[1], z, r, g, b)).collect()
 }
 
 /// A case stops at its first failed `check_gl_error`, as gl_test's does
 /// (`return -1`): the label of the check and the error.
-type Case = Result<(), String>;
+pub(crate) type Case = Result<(), String>;
 /// A case's function ([`gl`]).
-type CaseFn = unsafe fn() -> Case;
+pub(crate) type CaseFn = unsafe fn() -> Case;
 
 /// `check_gl_error`.
 fn check_gl_error(what: &str) -> Case {
@@ -753,7 +757,7 @@ fn check_gl_error(what: &str) -> Case {
 }
 
 /// The GL calls of the cases; every one needs the current context of [`Gl`].
-mod gl {
+pub(crate) mod gl {
     use super::*;
 
     /// `link_program(gl_test_vs_src, gl_test_fs_src)`.
@@ -1211,13 +1215,13 @@ mod gl {
 
 /// A test's GL: the rig's OSAL and table, the table initialised, and a
 /// context with gl_test's 64x64 window surface, destroyed with it.
-struct Gl {
+pub(crate) struct Gl {
     ctx: *mut GlContext,
     _rig: Rig,
 }
 
 impl Gl {
-    fn new() -> Gl {
+    pub(crate) fn new() -> Gl {
         let rig = rig();
         assert_eq!(backend::init(), 0, "{:?}", log_lines());
         // SAFETY: the OSAL and the table are installed; the rig's lock makes
@@ -1238,13 +1242,13 @@ impl Drop for Gl {
 }
 
 /// The refusal lines the table logged.
-fn refusals() -> Vec<String> {
+pub(crate) fn refusals() -> Vec<String> {
     logs_with(REFUSAL_PREFIX)
 }
 
 /// A recorded case: every GL call of it went through with no GL error and
 /// no refusal, and it submitted the reference's jobs.
-fn recorded(shape: &str, case: CaseFn, ref_jobs_total: usize) -> (Gl, Vec<Kick>, Vec<Ours>) {
+pub(crate) fn recorded(shape: &str, case: CaseFn, ref_jobs_total: usize) -> (Gl, Vec<Kick>, Vec<Ours>) {
     let g = Gl::new();
     // SAFETY: `g`'s context is current.
     let r = unsafe { case() };
@@ -1263,7 +1267,7 @@ fn recorded(shape: &str, case: CaseFn, ref_jobs_total: usize) -> (Gl, Vec<Kick>,
 /// [`READS_STENCIL`] as the 4.2 table does (the string alone after the
 /// prefix) and the GL core says which call was not recorded; the `jobs`
 /// before it were submitted and are the reference's first ones.
-fn refused(shape: &str, case: CaseFn, stops_at: &str, jobs: usize, ref_jobs_total: usize) -> Vec<Ours> {
+pub(crate) fn refused(shape: &str, case: CaseFn, stops_at: &str, jobs: usize, ref_jobs_total: usize) -> Vec<Ours> {
     let _g = Gl::new();
     // SAFETY: the context is current.
     let r = unsafe { case() };

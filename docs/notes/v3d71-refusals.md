@@ -310,11 +310,47 @@ The board's gl_test log must therefore show, by name, for the six cases:
    line, and no `admit71`/`rt71`/`attr71`/`record71`/`format71`/`limits71`
    tagged reason.
 
-For the texture cases 2, 115 and 118 (`board71-tex`): until `texuni71`'s
-words are wired, **2, 115 and 118 are refused by `uniform71::TextureSize`
-or `TmuConfig`** (`v3d_job71.c:349-353` in the C builder); case 118 adds
-`tfuplan71::RasterDestination` if a small level is raster; case 115 shows
-`sampler71::CubeNonSeamless` only if the GL core asks for it.
+For the texture cases 2, 115 and 118 (`board71-tex`): the texture words
+are wired since the table samples textures (section 10): on the host a 2D
+texture, a seamless cube map and a TFU mip chain are drawn with no refusal
+(`tests/v3d71_table_tex.rs`; the 64x64 RGBA8 chain is one TFU job with
+Mesa's `gl_mipgen` registers, so `tfuplan71::RasterDestination` is not met
+there). Case 115 shows `sampler71::CubeNonSeamless` only if the GL core
+asks for it; ES 3.0 never does.
 
 Any other refusal text in the log is a defect of the 7.1 path or of the
 caller, and is a new cause for an issue, not an expected refusal.
+
+## 10. The 7.1 table: table71, backend71, backend71tex, texglue71, table71tex
+
+The refusals the table itself names on the way from a `GlesDraw` to a job
+(`src/v3d/table71.rs` and the modules it hooks; plan #384, item
+`backend71`). A board line reads `yakogl/v3d71: draw refused: ` and then
+`<module>: <reason>`, except the table's own strings, which have no module
+in front. `tests/v3d71_gl_table.rs` drives the GL-reachable ones through the
+GL core and checks each reason against the double-quoted text here.
+
+| Refusal | Where | Condition | GL feature | Case |
+|---|---|---|---|---|
+| backend71 `REF_INDEX_TYPE` "an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only" | `backend71.rs:709` | a GlesDraw with u8 or u32 indices; the GL core widens both to u16 first | | none |
+| backend71 `REF_TARGET` "fill71's target descriptor is not the framebuffer's (size or render target count)" | `backend71.rs:711` | a defect of the caller if it fires | | none |
+| table71 `REF_CLEAR_PROGRAM` "the clear program did not build, so a clear the TLB cannot do is not drawn" | `table71.rs:162` | the clear quad's program did not compile or link | masked or scissored `glClear` | none (it builds, `tests/v3d71_gltest_shaders.rs`) |
+| table71 `REF_NO_RECORDING` | `table71.rs:156` | a product build (the recording path is `host-test` only) | every draw | all six on a product image |
+| table71 "the draw's arrays do not fit the job's data arena" | `table71.rs:1438` | one draw's arrays above `DATA_BYTES` (1 MiB) | large client arrays | none |
+| table71 "the draw does not fit an empty job's control lists" | `table71.rs:1597` | one draw above the binning list or indirect buffer, or its texture records above `RECS_BYTES` | | none |
+| table71 "out of GPU memory for the binner's buffers" | `table71.rs:1513` | | | none |
+| texglue71 `Texture3d` "texture glue 7.1: a 3D texture is not laid out by texture71" | `texglue71.rs:383` (`target_of`) | a `sampler3D` look-up | `GL_TEXTURE_3D` | none |
+| texglue71 `Array2d` "texture glue 7.1: a 2D array texture is not laid out by texture71" | `texglue71.rs:382` | a `sampler2DArray` look-up | `GL_TEXTURE_2D_ARRAY` | none |
+| texglue71 `ReturnSize`, `BorderClass`, `*Code` | `texglue71.rs:331-377` | the program's TMU output size is not the format's; a border colour of the other class; a code outside the GL core's enums | | none |
+| table71tex `REF_NO_CPU` "V3D 7.1: a sampled texture has no CPU view of its texels to copy" | `table71tex.rs:73` | the binding has no `cpu` (the copy is tiled on the CPU) | an EGLImage without a mapping | none |
+| table71tex `REF_MEMORY` "V3D 7.1: out of GPU memory for a texture's tiled copy" | `table71tex.rs:74` | | | none |
+| table71tex `REF_ADDRESS` "V3D 7.1: a texture's tiled copy is not 4 KiB aligned inside the V3D's 32-bit address space" | `table71tex.rs:75` | the OSAL gave such memory | | none |
+| table71tex `REF_CPP` "V3D 7.1: a texture's storage texel size is not the TMU format's" | `table71tex.rs:77` | the GL core's texel class and format71's row disagree in size | | none |
+| table71tex `REF_DEPTH_ID` "V3D 7.1: a depth texture sampled from a rendered depth buffer" | `table71tex.rs:78` | `depth_id` set (the table never answers `samples_rendered_depth`) | | none |
+| table71tex `REF_STORAGE` "V3D 7.1: a texture's storage rows are not at the pitch the copy reads them at" | `table71tex.rs:79` | level 0's `stride_texels` is not `gl_level_layered`'s pitch | | none |
+| backend71tex `REF_ARENA_FULL`, `REF_UNIT_TWICE`, `REF_LISTS`, `REF_UNREAD`, `REF_RECORD_OUTSIDE` | `backend71tex.rs:86-92` | defects of the table if they fire: the dry run sizes the record arena and binds only the units a program reads | | none |
+
+`glGenerateMipmap` refuses nothing by `GL_INVALID_OPERATION`: what the TFU
+cannot make (mip71's, tfuplan71's refusals, `v3d_tfu71_pack` declining, a
+TFU job that fails) is logged once as `yakogl/v3d71: glGenerateMipmap left
+to the CPU: <reason>` and the GL core filters the chain on the CPU.

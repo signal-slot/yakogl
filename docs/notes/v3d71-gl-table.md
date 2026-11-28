@@ -66,8 +66,16 @@ type for both.
 ## 3. What P10 needs from the 7.1 table (texture state)
 
 Not built in P9; recorded so the table's shape leaves room for it. The pure
-modules below are merged since (not yet hooked into a 7.1 table: `src/v3d/mod.rs`
-has no `mod` line for them; each test includes its module with `#[path]`).
+modules below are merged since, and are hooked into the 7.1 table (their
+`mod` lines in `src/v3d/mod.rs`, `host-test` builds; each test still
+includes its module with `#[path]`): `src/v3d/table71tex.rs` samples every
+texture unit a program reads through a tiled copy of the GL core's storage
+(texglue71, texfill71, backend71tex's records), binds the black stand-in for
+an incomplete texture, and makes `glGenerateMipmap`'s chain with the TFU
+(mip71, `v3d_tfu71_pack`, the OSAL's `osal_v3d71_tfu`). The host test is
+`tests/v3d71_table_tex.rs` (the records and the TFU job against Mesa's
+`gl_tex2d` and `gl_mipgen`); the refusals are `docs/notes/v3d71-refusals.md`
+section 10.
 
 | Item | 4.2 | 7.1 | Citation | Module and test |
 |---|---|---|---|---|
@@ -242,9 +250,12 @@ row after the board session, not before.
   the GL path: the plan (`src/v3d/tfuplan71.rs:130`) is host-tested, but
   `glGenerateMipmap` through the 7.1 table is item `mip71`: its job inputs
   (`src/v3d/mip71.rs`, `plan`) are host-tested against `gl_mipgen`
-  (`tests/v3d71_mip.rs`: Mesa's 12 words, `IOC` 0x00086061); the call from
-  the 7.1 table is not wired yet. `mip71` takes no identity: the TFU is not
-  gated on `HUB_IDENT1` bit 17.
+  (`tests/v3d71_mip.rs`: Mesa's 12 words, `IOC` 0x00086061), and the 7.1
+  table calls it (`table71tex::Textures::generate`, the table's
+  `generate_mipmap` hook): a 64x64 RGBA8 `glGenerateMipmap` through the GL
+  core is one TFU job with Mesa's registers (`tests/v3d71_table_tex.rs`).
+  `mip71` takes no identity: the TFU is not gated on `HUB_IDENT1` bit 17.
+  What stays open is the board run of it through the table.
 - Seamless cube filtering (U8) and the transfer-function column of section 3
   need the board.
 
