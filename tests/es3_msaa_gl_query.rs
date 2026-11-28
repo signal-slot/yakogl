@@ -480,3 +480,49 @@ fn renderbuffer_and_attachment_sizes_agree_for_rgb565() {
         }
     }
 }
+
+/* ---- (5) the reported count of a request of 0..4 ------------------------ */
+
+/// ES 3.0 4.4.2.1 (glRenderbufferStorageMultisample): "If `samples` is zero,
+/// then RENDERBUFFER_SAMPLES is zero. Otherwise `samples` represents a request
+/// for a desired minimum number of samples ... the actual number of samples is
+/// at least as large as requested", and 6.1.15 / glGetInternalformativ: it is
+/// one of the values SAMPLES lists for the format.
+#[test]
+fn renderbuffer_samples_is_at_least_the_request_and_listed() {
+    let _g = context_ms4();
+    for format in [GL_RGBA8, GL_DEPTH24_STENCIL8] {
+        let mut n: GLint = -1;
+        // SAFETY: one GLint out.
+        unsafe { glGetInternalformativ(GL_RENDERBUFFER, format, GL_NUM_SAMPLE_COUNTS, 1, &mut n) };
+        assert_eq!(err(), GL_NO_ERROR);
+        assert!(n >= 1, "{format:#x}: {n} sample counts");
+        let mut list = vec![0 as GLint; n as usize];
+        // SAFETY: `list` holds n GLints.
+        unsafe { glGetInternalformativ(GL_RENDERBUFFER, format, GL_SAMPLES, n, list.as_mut_ptr()) };
+        assert_eq!(err(), GL_NO_ERROR);
+        for request in 0..=4 {
+            let rb = storage(request, format);
+            let got = rb_param(rb, GL_RENDERBUFFER_SAMPLES);
+            if request == 0 {
+                assert_eq!(got, 0, "{format:#x} request 0");
+            } else {
+                assert!(got >= request, "{format:#x} request {request}: got {got}");
+                assert!(list.contains(&got), "{format:#x} request {request}: {got} not in {list:?}");
+            }
+            // SAFETY: a name this test made.
+            unsafe { glDeleteRenderbuffers(1, &rb) };
+        }
+        /* a request above the maximum is GL_INVALID_OPERATION (4.4.2.1) */
+        let mut rb = 0;
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 5, format, 8, 8);
+        }
+        assert_eq!(err(), GL_INVALID_OPERATION, "{format:#x} request 5");
+        // SAFETY: a name this test made.
+        unsafe { glDeleteRenderbuffers(1, &rb) };
+    }
+}
