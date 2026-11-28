@@ -96,7 +96,8 @@ pull request (step 1 above).
   layout has, `export $(tools/cts/deps-env.sh)` sets them, and
   `tools/cts/deps-env.sh --build <NAME>...` builds the ones it lacks
   (`MALI_CSFFW`, `DEQP_GLES3_TEST_DIR`, `PCO_SPM_LOAD_CAPTURE`,
-  `HAL_NXP_DIR`, `LZ4`, `MP2_QEMU`); run one build at a time. Then, after
+  `HAL_NXP_DIR`, `LZ4`, `MP2_QEMU`, `DEQP_ES2_PROGRAMS`); run one build at
+  a time. Then, after
   the export and the PowerVR header copy (below),
   `tools/setup-gate-host.sh --check` says whether the host has every tool
   and file the gate needs (`--install` installs the packages).

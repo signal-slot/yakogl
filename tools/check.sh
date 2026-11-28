@@ -33,7 +33,9 @@
 #                                    compiler-less precompiled tier, the
 #                                    table proofs, the committed table's
 #                                    reproduction with Mesa's compiler, the
-#                                    Zephyr images and the glmark2 corpus.
+#                                    Zephyr images, the glmark2 corpus and
+#                                    the harvested dEQP-GLES2 programs at
+#                                    V3D 7.1.
 #   tools/check.sh --no-clippy ...   leave out every clippy row (a pull request's
 #                                    CI run; the nightly runs them). They are
 #                                    counted apart in the summary ("N clippy
@@ -119,7 +121,8 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 # The external inputs (ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC, GLMARK2_SRC,
-# DEQP_GLES3_TEST_DIR, ...) are the entries of the dependency layout,
+# DEQP_GLES3_TEST_DIR, DEQP_ES2_PROGRAMS, ...) are the entries of the
+# dependency layout,
 # tools/cts/deps.toml: the one definition of the gate's environment, which the
 # gate image builds (tools/env/build-gate-image.sh). An entry the caller left
 # unset or empty is taken from the layout here, so the CI, a pool machine and
@@ -2089,6 +2092,50 @@ v3d_lib_tests() {
 scope v3d local
 step "clippy  $V3D_CONFIG" cargo clippy --no-default-features --features "$V3D_CONFIG" --all-targets
 step "test    $V3D_CONFIG (--lib, GL suite on the online compiler)" v3d_lib_tests
+# The V3D 7.1 (Raspberry Pi 5) online back end over every dEQP-GLES2 program
+# a host dEQP run harvests (tests/shaderc71_deqp_programs.rs, plan #386): the
+# C++-generated shaders the data/gles2/shaders library does not hold, each
+# through chain71, every word decoded with codec71 and checked by verify71,
+# against the test's pins (programs, compiled at 4.2 and 7.1, refused, the
+# named 7.1-only refusals). The harvest is dEQP's output and never
+# committed: DEQP_ES2_PROGRAMS names it, the deps.toml entry of that name
+# (tools/cts/deqp-es2-programs.sh at the pins' commit). The entry is
+# board-less, so the layout above loads it and the gate's job builds it on a
+# runner that lacks it (.github/workflows/gate.yml). Without a harvest (no
+# index.tsv) the row is a gap naming DEQP_ES2_PROGRAMS, never a pass. The
+# value is kept for this row and the variable unset, so the whole-directory
+# row below, which builds the same test, skips the corpus instead of
+# compiling its programs a second time or failing in this row's place on a
+# value naming no harvest. Plain `cargo test`, not cargo_test, as the
+# glmark2 corpus row: the row must see the test's own lines (the skip line
+# fails it). Not in --quick, as the glmark2 corpus row.
+GEN71_PROGRAMS=${DEQP_ES2_PROGRAMS-}
+unset DEQP_ES2_PROGRAMS
+shaderc71_deqp_programs_test() {
+  local log=build/check/shaderc71_deqp_programs.log status
+  mkdir -p build/check || return 1
+  DEQP_ES2_PROGRAMS=$GEN71_PROGRAMS cargo test --no-default-features --features "$V3D_CONFIG" \
+    --test shaderc71_deqp_programs -- --nocapture >"$log" 2>&1
+  status=$?
+  grep -E '^(test result|shaderc71 deqp programs: |  7\.1-only refusal )|panicked|FAILED' "$log" | head -40
+  [ "$status" -eq 0 ] || { echo "cargo test --test shaderc71_deqp_programs exited $status (the whole output: $log)"; return 1; }
+  if grep -qF "DEQP_ES2_PROGRAMS is not set" "$log"; then
+    echo "shaderc71_deqp_programs skipped the harvest although DEQP_ES2_PROGRAMS was set: NOT compiled (the whole output: $log)"
+    return 1
+  fi
+}
+if [ "$QUICK" -eq 0 ]; then
+  # precompile: tools/shaders/* (the test's refusal list and Mesa's count table)
+  scope v3d precompile
+  tests_row shaderc71_deqp_programs
+  if [ -f "${GEN71_PROGRAMS:-/nonexistent}/index.tsv" ]; then
+    step "test    $V3D_CONFIG (tests/shaderc71_deqp_programs.rs, the harvested dEQP-GLES2 programs at 7.1)" \
+      shaderc71_deqp_programs_test
+  else
+    gap "shaderc71_deqp_programs: no harvest at DEQP_ES2_PROGRAMS='$GEN71_PROGRAMS' (tools/cts/deps-env.sh --build DEQP_ES2_PROGRAMS): the harvested dEQP-GLES2 programs were NOT compiled at V3D 7.1"
+    tests_row # a gap is not a step: it leaves ROW_TESTS to the next row
+  fi
+fi
 # Every integration test target of tests/ with the V3D feature set, not
 # only the files the rows below name: a target that compiles only under
 # gpu-v3d (or gates its cases on it) ran nowhere else. A change confined to
