@@ -692,7 +692,7 @@ t6_go_run() {
 	local staged=("$tmp/top13.bin" "$tmp/kz")
 	[ "${2:-}" != --crash ] || staged+=("$here/t6-kms-mode.py")
 	T6_FAKE_SHAS=$(sha256sum "${staged[@]}" | cut -d' ' -f1 | tr '\n' ' ') \
-		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=${t6_uart-$wire_tty} T6_SCREEN=${t6_screen:-} \
+		T6_HAND=${t6_hand-selftest} T6_RECORD_DIR=$tmp/rec T6_UART=${t6_uart-$wire_tty} T6_SCREEN=${t6_screen:-} \
 		SCREEN_PROOF_S=${t6_proof_s:-90} KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
 		BOARD_LOCK=$tmp/t6go.lock t6_board_run "$1" "$gic_out" --go ${2:+"$2"}
 }
@@ -822,6 +822,22 @@ nonce2=
 [[ "$rec" =~ $proof_re ]] && nonce2=${BASH_REMATCH[1]}
 check "nanopc-t6.sh: each run's marker has its own nonce (${nonce1:-none}, ${nonce2:-none}; rc $rc)" \
 	"$([ "$rc" = 0 ] && [ -n "$nonce2" ] && [ "$nonce1" != "$nonce2" ]; echo $?)"
+# The unattended mode (T6_UNATTENDED=1, tools/cts/t6-deqp-images.sh --run
+# --unattended): no T6_HAND, every check the same, the record names nobody at
+# the switch. Without either, --go names both ways; another value is a usage
+# error before any board read.
+out=$(T6_UNATTENDED=1 t6_hand= t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: --go with T6_UNATTENDED=1 and no T6_HAND jumps and records nobody at the power switch (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'hand at the power switch: nobody (T6_UNATTENDED=1' "$tmp"/rec/*/record.txt; echo $?)"
+out=$(t6_hand= t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: --go without T6_HAND or T6_UNATTENDED is refused and names both (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'or T6_UNATTENDED=1 for a run with nobody at the switch' <<<"$out"; echo $?)"
+out=$(T6_UNATTENDED=yes t6_hand= t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: T6_UNATTENDED=yes is a usage error, exit 2 (rc $rc)" \
+	"$([ "$rc" = 2 ] && grep -qF "T6_UNATTENDED='yes': 1" <<<"$out"; echo $?)"
 # uart_refused <case>: rc 3 with refuse's second line, no record
 # directory, nothing copied or staged, no jump, no capture left on the tty
 # and no byte written to it by the host.
