@@ -150,6 +150,9 @@ want tests/mali_deqp_colourpair.rs "mali treekey"
 # plan #402's additions to the same row
 want tests/mali_deqp_vsconst.rs "mali treekey"
 want tests/mali_deqp_mixprec3.rs "mali treekey"
+# the rest of the plan-377 files and the glmark2 corpus table
+want tests/mali_deqp_t3gap.rs "mali treekey"
+want tests/mali_glmark2_corpus.rs "mali treekey"
 want tests/mali_ref_selftest.rs "mali treekey"
 want tests/mali_ref/mod.rs "mali treekey"
 want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
@@ -300,6 +303,10 @@ expect "mali: no V3D row" '^skip  clippy  host-test,gpu-v3d,shaderc-online,no-sh
 out=$(plan tests/mali_deqp_intval.rs)
 expect "mali: the deqp byte-compare row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
 expect "mali: a deqp test change, the mali rows and the tree key row only" '^check.sh: .*\(--changed HEAD, scopes: mali treekey \)' "$out"
+out=$(plan tests/mali_deqp_t3gap.rs)
+expect "mali: a later deqp test reaches its own row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_\{highpfs,kfold,t3gap' "$out"
+out=$(plan tests/mali_glmark2_corpus.rs)
+expect "mali: the glmark2 corpus table reaches the same row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_\{highpfs,kfold,t3gap\}\.rs, mali_glmark2_corpus' "$out"
 out=$(plan tests/mali_deqp_vsconst.rs)
 expect "mali: the plan-402 deqp test reaches the same row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
 out=$(plan tools/mali/testdata/deqp_mixprec3_hp_vec3_fn.expect.json)
