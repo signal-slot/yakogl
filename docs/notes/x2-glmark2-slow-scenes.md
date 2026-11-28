@@ -545,3 +545,10 @@ one jump a turn, and board.sh can never read that jump's record.
 
 To run it next time: the same commands, with ssh that survives the run's
 reboot. The loader and the readiness checks no longer stop it.
+
+Reading a jump's record in the next turn: `tools/cts/x2-glmark2-scenes.sh
+--collect records/x2` prints the scene table from the record directories
+(verdict line, record words, decoded page, ms a frame) and checks each
+console.txt for `gc_wdog_arm: armed`, with no board, no jump and no ssh. A
+task machine's key is gone after the jump's reboot, so board.sh could not read
+that record in the jump's own turn; the turn after it can.

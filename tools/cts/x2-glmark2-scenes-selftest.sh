@@ -275,5 +275,35 @@ for img in gt0:0 gt144:144; do
     done
 done
 
+# ---- --collect: an earlier jump's record directories, no jump, no board ---------------------
+CR=$T/collect/records/x2
+mkrec() { # name verdict-record console-text
+    local d=$CR/20261128-1200-$1-abcd1234
+    mkdir -p "$d"
+    printf 'name: %s\nverdict: board.sh x2 %s rc=0 verdict=done boot=kexec-dev DEV boot_verdict=- result=none resets=0 record=%s back_after=60s\n' "$1" "$1" "$2" > "$d/INDEX.txt"
+    printf '%s\n' "$3" > "$d/console.txt"
+}
+mkrec terrain-p0 594b0c00,09c40064,00000000 "00:00:01 gc_wdog_arm: armed"
+mkrec terrain-nosel absent "00:00:01 gc_wdog_arm: armed"
+: > "$STUB_LOG"
+out=$("$SCRIPT" --collect "$CR" 2>&1)
+rc=$?
+rc_is "collect: a tree of records, all armed" 0 "$rc"
+check "collect: header" "scene	commit	selector	verdict line	record words	decoded	ms/frame" "$out"
+check "collect: ms a frame from page 0 v1 (0x9c4 us -> 2.500 ms)" "page 0: v0=100 v1=2500 v2=0 v3=0	2.500" "$out"
+check "collect: selector from the name" "terrain	-	0x1000	" "$out"
+check "collect: no selector row" "terrain	-	none	" "$out"
+check "collect: the watchdog line" "terrain-p0 wdog: gc_wdog_arm: armed" "$out"
+rc_is "collect: no board.sh, west or ssh call" 0 "$(wc -c < "$STUB_LOG")"
+out=$("$SCRIPT" --collect "$CR/20261128-1200-terrain-p0-abcd1234" 2>&1)
+rc_is "collect: one record directory" 0 "$?"
+mkrec shadow-p0 594b0c00,09c40064,00000000 "00:00:01 nothing"
+out=$("$SCRIPT" --collect "$CR" 2>&1)
+rc_is "collect: a record without the marker is refused" 3 "$?"
+check "collect: names the record" "shadow-p0 wdog: MISSING" "$out"
+mkdir "$T/collect/empty"
+"$SCRIPT" --collect "$T/collect/empty" > /dev/null 2>&1
+rc_is "collect: a directory without a record" 2 "$?"
+
 echo
 if [ "$fail" = 0 ]; then echo "x2-glmark2-scenes-selftest: all ok"; else echo "x2-glmark2-scenes-selftest: $fail failed"; exit 1; fi
