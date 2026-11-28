@@ -213,9 +213,9 @@ fi
 # deps.toml in a scratch layout, the MALI_CSFFW entry's build on a stand-in download,
 # the retry of a cut download, the nanopc_t6 set's MALI_DEQP_TOOLCHAIN, the
 # MP2_QEMU entry's --check line and pinned sources, and the HOST_DEQP_CTS
-# entry's board sets, pin and target patch). Its count is pinned like
-# images-selftest's.
-DEPS_SELFTEST_CHECKS=75
+# entry's board sets, pin and target patch, the two dEQP-GLES2 corpora of the
+# V3D 7.1 corpus rows). Its count is pinned like images-selftest's.
+DEPS_SELFTEST_CHECKS=78
 echo
 echo "== 20b. deps-selftest.sh: deps.toml, deps-env.sh --check / --build"
 dout=$("$HERE/deps-selftest.sh" 2>&1)

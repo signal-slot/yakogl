@@ -80,7 +80,12 @@
 # is ok (tools/cts/deps-env.sh --present supplies the layout), but a set value
 # overrides the layout and must hold the marker deps.toml gives for that entry
 # (zephyr/module.yml, .west/config, an executable pco_shc); a stale one is
-# `missing` (it made rows fail or gap in earlier walks).
+# `missing` (it made rows fail or gap in earlier walks). The same for
+# DEQP_GLES2_TEST_DIR and DEQP_ES2_PROGRAMS, the dEQP-GLES2 corpora of
+# check.sh's V3D 7.1 corpus rows (shaderc71_es2_corpus,
+# shaderc71_deqp_programs): unset, the layout supplies them (each row is a
+# gap without its corpus); set, the value must hold the entry's marker
+# (a .test file of the library, the harvest's index.tsv).
 # --check also reports MESA_ETNA_TREE (the ST Vivante gate rows' Mesa 26.2.1
 # etna tree, issues #7, #1281): ok only when tools/vivante/mesa-etna-build.sh
 # --check accepts it, else a `warn` gap line with the build hint, never ok.
@@ -797,6 +802,8 @@ run_checks() {
   check_env_tree HAL_NXP_DIR zephyr/module.yml file
   check_env_tree ZEPHYR_WS .west/config file
   check_env_tree PCO_SHC pco_shc exe
+  check_env_tree DEQP_GLES2_TEST_DIR conditionals.test file
+  check_env_tree DEQP_ES2_PROGRAMS index.tsv file
 }
 
 # ---------------------------------------------------------------------------

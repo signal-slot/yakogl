@@ -209,14 +209,16 @@ pub const TARGET71: Target = Target { vpm_size: 65536 };
 /// es100 and qpu_corpus_71 the signal-aware order never shortened a vertex
 /// or coordinate shader, so those are not built a third time.)
 pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code71<'a>, u32), V3d71Error> {
-    build71_order(sel, single_seg, false, a)
+    build71_order(sel, single_seg, false, true, a)
 }
 
-/// [`build71`], with select71's operations first [`sunk71`] when `sink`.
+/// [`build71`], with select71's operations first [`sunk71`] when `sink`,
+/// and the in-order build alone unless `orders` (no interleaved one).
 fn build71_order<'a>(
     sel: &Selected<'_>,
     single_seg: bool,
     sink: bool,
+    orders: bool,
     a: &Arena<'a>,
 ) -> Result<(Code71<'a>, u32), V3d71Error> {
     let mut sel71 = select71(sel, a)?;
@@ -244,7 +246,7 @@ fn build71_order<'a>(
             }
         }
     };
-    if a.left() < 2 * cost {
+    if !orders || a.left() < 2 * cost {
         return Ok(best);
     }
     let Ok(first) = interleave71(&sel71, a) else { return Ok(best) };
@@ -339,12 +341,13 @@ fn under_pressure71<'a>(
     stages: &[Pressure],
     select: impl Fn(Pressure) -> Result<Selected<'a>, SelectError>,
     single_seg: bool,
+    orders: bool,
     a: &Arena<'a>,
 ) -> Result<(Selected<'a>, (Code71<'a>, u32)), V3d71Error> {
     for sink in [false, true] {
         for &pr in stages {
             let sel = select(pr)?;
-            match build71_order(&sel, single_seg && starts_in_last_section(&sel), sink, a) {
+            match build71_order(&sel, single_seg && starts_in_last_section(&sel), sink, orders, a) {
                 Err(V3d71Error::Alloc(Alloc71Error::DoesNotFit)) => continue,
                 r => return Ok((sel, r?)),
             }
@@ -497,7 +500,7 @@ fn vertex71<'a>(
     key: crate::shaderc::LodKey,
     a: &Arena<'a>,
 ) -> Result<(Selected<'a>, (Code71<'a>, u32)), V3d71Error> {
-    under_pressure71(&PRESSURES, |pr| select_vertex_keyed(p, records, coord, key, pr, a), true, a)
+    under_pressure71(&PRESSURES, |pr| select_vertex_keyed(p, records, coord, key, pr, a), true, true, a)
 }
 
 /* chain-hook replaces this: chain.rs:324-347 `vpm_fields`
@@ -693,15 +696,38 @@ pub fn compile_program71_keyed<'a>(
     }
 
     /* chain-hook replaces this: chain.rs:504-513, the three stages, with
-     * build71. */
-    let (fsel, (fs_code, fs_threads)) = under_pressure71(
-        &[Pressure::None, Pressure::Remat, Pressure::Serial],
-        |pr| select_fragment_keyed(&fsp, inputs, flat, centroid, fs_key, pr, a),
-        false,
-        a,
-    )?;
-    let (vsel, vs_code) = vertex71(&vsp, records, false, vs_key, a)?;
-    let (csel, cs_code) = vertex71(&csp, records, true, vs_key, a)?;
+     * build71. The fragment shader's interleaved builds keep the scratch of
+     * the one that wins (build71_order): in a program whose front end
+     * already holds much of the scratch, that can leave too little for the
+     * vertex or coordinate shader (dEQP-GLES2 uniform_api.random.79: 1.7 of
+     * the 4 MiB after the front end, 1.2 MiB more kept by the fragment
+     * shader's orders, OutOfScratch in the vertex shader). Such a program is
+     * built again from the same mark with the fragment shader in select71's
+     * order alone, so a program that fits today keeps every word. */
+    let stages = |fs_orders: bool| -> Result<_, V3d71Error> {
+        let fs = under_pressure71(
+            &[Pressure::None, Pressure::Remat, Pressure::Serial],
+            |pr| select_fragment_keyed(&fsp, inputs, flat, centroid, fs_key, pr, a),
+            false,
+            fs_orders,
+            a,
+        )?;
+        let vs = vertex71(&vsp, records, false, vs_key, a)?;
+        let cs = vertex71(&csp, records, true, vs_key, a)?;
+        Ok((fs, vs, cs))
+    };
+    let mark = a.used();
+    let built = match stages(true) {
+        Err(V3d71Error::OutOfScratch) => {
+            // SAFETY: the failed build's results were dropped with its
+            // error; everything it allocated is above `mark`, and nothing
+            // kept (the prepared stages, `inputs`, `records`, `attrs`) is.
+            unsafe { a.reset_to(mark) };
+            stages(false)
+        }
+        r => r,
+    };
+    let ((fsel, (fs_code, fs_threads)), (vsel, vs_code), (csel, cs_code)) = built?;
 
     /* chain-hook replaces this: chain.rs:515-553, the prog_data. */
     let slots = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
