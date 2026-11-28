@@ -43,86 +43,56 @@ causes, not the results of a session.
 
 ## 1. By scene
 
-`clean` = every shader compiles. The codes are section 2's.
+Re-measured at `14e7a742` (main, 2026-11-28; host only, glmark2 `22c527cb`,
+`GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" <out> mali`,
+all 33 scenes). `clean` = every shader compiles; that says nothing about the
+picture. The codes are section 2's. A stage gives its first refusal only.
 
 | # | scene | verdict | first refusal per shader |
 |---|---|---|---|
-| 0, 1 | `build:use-vbo=false`, `=true` | **clean** | — |
-| 2, 3, 4 | `texture:texture-filter=nearest`, `linear`, `mipmap` | refused | FS `425b` `TEX_COORD` (the link `ace2+425b` fails) |
-| 5 | `shading:shading=gouraud` | **clean** | — |
-| 6 | `shading:shading=blinn-phong-inf` | refused | FS `994f` `NONFINITE_CONST` |
+| 0-6, 9, 12-19 | `build`, `texture`, `shading` gouraud / blinn-phong-inf, `bump` high-poly, `effect2d` (3x3, 5x5), `pulsar`, `desktop` (blur, shadow), `buffer` | **clean** | — |
 | 7 | `shading:shading=phong` | refused | FS `8a64` `ARITH_CONST` |
-| 8 | `shading:shading=cel` | refused | FS `fea0` `NONFINITE_CONST` |
-| 9 | `bump:bump-render=high-poly` | refused | FS `d442` `NONFINITE_CONST` |
-| 10 | `bump:bump-render=normals` | refused | FS `487d` `NONFINITE_CONST` |
-| 11 | `bump:bump-render=height` | refused | FS `77c5` `NONFINITE_CONST` |
-| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` (3x3) | refused | FS `3c3d` `TEX_MULTI` |
-| 13 | `effect2d:kernel=1,1,1,1,1;…` (5x5) | **clean** | — (`ba8e` compiles) |
-| 14 | `pulsar:quads=5:texture=false:light=false` | **clean** | — |
-| 15 | `desktop:…:effect=blur:…` | **clean** | — (`68af`, `7f17` compile) |
-| 16 | `desktop:windows=4:effect=shadow` | **clean** | — |
-| 17, 18, 19 | `buffer:…` (map, subdata, map with interleave) | **clean** | — |
-| 20 | `ideas:speed=duration` | refused | FS `1aca`, `c565` `INT_VALUE` (the vertex shaders, `51b2` included, are ok) |
-| 21 | `jellyfish` | refused | VS `08a2` `ARITH_CONST`; FS `8ee5` `FS_OPERAND` |
-| 22 | `terrain` | refused | FS `1637`, `4d26`, `c549` `ARITH`; FS `8c86`, `bbba`, `bdfd`, `e043` `TEX_MULTI` |
-| 23 | `shadow` | refused | FS `cf4b` `ARITH` |
+| 8 | `shading:shading=cel` | refused | FS `fea0` `ARITH_CONST` |
+| 10 | `bump:bump-render=normals` | refused | FS `487d` `TEX_SWIZZLE` |
+| 11 | `bump:bump-render=height` | refused | FS `77c5` `TEX_MULTI` |
+| 20 | `ideas:speed=duration` | refused | FS `c565` `FS_OPERAND` |
+| 21 | `jellyfish` | refused | VS `08a2` `ARITH_CONST` |
+| 22 | `terrain` | refused | FS `1637` `ARITH`; FS `c549`, `4d26`, `e043`, `bdfd`, `bbba`, `8c86` `TEX_MULTI` |
+| 23 | `shadow` | refused | FS `cf4b` `FRAGCOLOR_LANE` |
 | 24 | `refract` | refused | FS `3fae` `ARITH_CONST` |
-| 25, 26, 27 | `conditionals:…` (0/0, 0/5, 5/0 steps) | **clean** | — |
-| 28 | `function:fragment-steps=5:fragment-complexity=low` | **clean** | — |
-| 29 | `function:…:fragment-complexity=medium` | refused | FS `849c` `FRAGCOORD_FP16` |
-| 30 | `loop:…:fragment-loop=false` | **clean** | — |
-| 31 | `loop:…:fragment-uniform=false` | **clean** | — |
+| 25-31 | `conditionals`, `function`, `loop` (all but 32) | **clean** | — |
 | 32 | `loop:…:fragment-uniform=true` | refused | FS `3678` `LOOP_FP16` |
 
-**Compile-clean (16)**: 0, 1, 5, 13, 14, 15, 16, 17, 18, 19, 25, 26, 27, 28,
-30, 31. **Refused (17)**: 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 20, 21, 22, 23,
-24, 29, 32. Shaders not named in a row compile (scene 20's `df64` among
-them). Against the previous measurement (14 clean at `104748bb`) scenes 13
-and 15 moved to clean; no shader moved back.
-
-On the board the 16 clean scenes are the only ones that put a command
-stream of their own on the GPU (17-19 little more than their clears). The
-17 refused scenes stop in glmark2's setup at `Failed to add vertex|fragment
-shader`, draw nothing and cannot fault the GPU.
+**Compile-clean (23)**: 0-6, 9, 12-19, 25-31. **Refused (10)**: 7, 8, 10, 11,
+20, 21, 22, 23, 24, 32. Against the measurement at `b08baac7` (16 clean)
+scenes 2, 3, 4, 6, 9, 12 and 29 moved to clean (`NONFINITE_CONST`,
+`TEX_COORD`, the `3c3d` look-up and `FRAGCOORD_FP16` are lowered); scene 10's
+refusal is now `TEX_SWIZZLE`, 11's `TEX_MULTI`, 20's `FS_OPERAND`, 23's
+`FRAGCOLOR_LANE`; no shader moved back. In the glmark2 run the nine refused
+scenes other than terrain end with exit status 3 at `Failed to add fragment
+shader` (`vertex` for 21); terrain gets as far as its abort.
 
 ## 2. The causes still open
 
 The message is `MaliError::message`'s text
-(`src/shaderc/online/mali/mod.rs`). **Alone**: scenes whose only remaining
-family it is, so lowering it alone makes them clean. **Item**: the queued
-lowering item that covers it (named in plan #367's queue, continued by plans
-#402, #387 and #400); where none is named the cell says so.
+(`src/shaderc/online/mali/mod.rs`).  **Alone**: scenes whose only remaining
+family it is (as far as the first refusal shows; a lowering can uncover a
+later one).
 
-| code | message | shaders | scenes | alone | item |
-|---|---|---|---|---:|---|
-| `NONFINITE_CONST` | a constant operation on or to a value that is not a finite normal float is not lowered yet | FS `994f` `fea0` `d442` `487d` `77c5` | 6, 8, 9, 10, 11 | 5 | `lower-nonfinite-const`; no #402/#387/#400 item names it |
-| `TEX_COORD` | a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet | FS `425b` | 2, 3, 4 | 3 | `lower-texcoord-425b` |
-| `TEX_MULTI` | a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet | FS `3c3d` `8c86` `bbba` `bdfd` `e043` | 12, 22 | 1 (12) | `lower-fma` |
-| `ARITH_CONST` | a constant product in a shape Mesa's algebraic rules move or fold is not lowered yet | FS `8a64` `3fae`; VS `08a2` | 7, 21, 24 | 2 (7, 24) | `lower-constprod-rest` |
-| `ARITH` | arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | FS `cf4b` `1637` `4d26` `c549` | 22, 23 | 1 (23) | `lower-fs-arith2`; none named for `cf4b` |
-| `INT_VALUE` | an integer or boolean value is not lowered yet | FS `1aca` `c565` | 20 | 0 | `lower-ideas` |
-| `FS_OPERAND` | a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet | FS `8ee5` | 21 | 0 | none queued |
-| `FRAGCOORD_FP16` | fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet | FS `849c` | 29 | 1 | `lower-mploop` |
-| `LOOP_FP16` | a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet | FS `3678` | 32 | 1 | `lower-mploop` |
+| code | message (start) | shaders | scenes | alone |
+|---|---|---|---|---:|
+| `ARITH_CONST` | a constant product in a shape Mesa's algebraic rules move or fold | FS `8a64` `fea0` `3fae`; VS `08a2` | 7, 8, 21, 24 | 3 (7, 8, 24) |
+| `TEX_MULTI` | a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups | FS `77c5` `c549` `4d26` `e043` `bdfd` `bbba` `8c86` | 11, 22 | 1 (11) |
+| `TEX_SWIZZLE` | a texture result's lanes other than its own pairs in order | FS `487d` | 10 | 1 |
+| `FS_OPERAND` | a fragment shader operand of a form or in a place no reference draws | FS `c565` | 20 | 1 |
+| `FRAGCOLOR_LANE` | a gl_FragColor lane other than the varying's own lane or a constant | FS `cf4b` | 23 | 1 |
+| `LOOP_FP16` | a loop Mesa keeps (a run-time bound) in a mediump fragment shader | FS `3678` | 32 | 1 |
+| `ARITH` | arithmetic other than +, -, * and a dot or matrix product | FS `1637` | 22 | 0 |
 
-Two scenes need more than one family: 21 needs `ARITH_CONST` (`08a2`) and `FS_OPERAND`; 22 needs
-`ARITH` and `TEX_MULTI`.
-
-**Order of scenes unblocked** (greedy; this is the arithmetic of the table,
-not a measurement: a lowering can uncover a later refusal behind the first):
-
-| step | family | scenes made clean | clean after |
-|---:|---|---|---:|
-| — | now (`b08baac7`) | 16 scenes | 16 |
-| 1 | `NONFINITE_CONST` | 6, 8, 9, 10, 11 | 21 |
-| 2 | `TEX_COORD` `425b` | 2, 3, 4 | 24 |
-| 3 | `TEX_MULTI` | 12 | 25 |
-| 4 | `ARITH_CONST` | 7, 24 | 27 |
-| 5 | `ARITH` (`cf4b`) | 23 | 28 |
-| 6 | `FRAGCOORD_FP16`, `LOOP_FP16` | 29, 32 | 30 |
-| 7 | `INT_VALUE` | 20 | 31 |
-| 8 | `FS_OPERAND`, `ARITH_CONST` `08a2` | 21 | 32 |
-| 9 | `ARITH`, `TEX_MULTI` | 22 (`terrain`) | 33 |
+Order of scenes unblocked (greedy, arithmetic of the table, not a
+measurement): `ARITH_CONST` 7, 8, 24 (26 clean); `TEX_MULTI` 11 (27);
+`TEX_SWIZZLE` 10 (28); `FS_OPERAND` 20 (29); `FRAGCOLOR_LANE` 23 (30);
+`LOOP_FP16` 32 (31); then 21 (`08a2`) and 22 (`ARITH` and `TEX_MULTI`) for 33.
 
 ## 3. What the host harness shows past the compiler
 
