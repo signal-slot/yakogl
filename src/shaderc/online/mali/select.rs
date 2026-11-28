@@ -38,9 +38,19 @@ use super::MaliError;
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::Module;
 
+/// The fp32 lane a mediump pass past a read array's end stores (nir_fs.rs
+/// `past_end_lanes`): a NaN of its own payload, which no folding makes
+/// (Rust's and NIR's NaN results are the canonical `0x7FC00000`), so only
+/// that rule's lanes become Mesa's fp16 NaN `0x7E00` ([`f16_exact`]); any
+/// other NaN stays refused.
+pub const PAST_END_NAN: u32 = 0x7FC0_7E00;
+
 /// `f2f16` of a constant (NIR folds it), refused unless fp16 holds the
 /// value exactly: then the rounding mode cannot matter.
 pub fn f16_exact(bits: u32) -> Option<u16> {
+    if bits == PAST_END_NAN {
+        return Some(0x7E00);
+    }
     let sign = ((bits >> 16) & 0x8000) as u16;
     let exp = ((bits >> 23) & 0xff) as i32;
     let man = bits & 0x7f_ffff;

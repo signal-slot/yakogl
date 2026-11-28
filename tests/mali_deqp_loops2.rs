@@ -77,11 +77,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_for_uni_nested_tricky_dataflow_2", LOOP_MEDIUMP),
     ("fs_for_uni_sequence", LOOP_MEDIUMP),
     ("fs_idx_mat4_dd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_idx_mat4_sd", LOOP_MEDIUMP),
     ("fs_idx_tmp_float_dd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_idx_tmp_float_dldl", LOOP_MEDIUMP),
     ("fs_idx_tmp_vec4_cd", LOOP_MEDIUMP),
-    ("fs_idx_tmp_vec4_sd", LOOP_MEDIUMP),
     ("fs_idx_uni_float", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
     ("fs_idx_uni_vec4", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
     ("fs_idx_var_vec4_sd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
@@ -200,6 +197,7 @@ const COMPILED: &[(&str, bool)] = &[
     ("fs_for_uni_empty_body", false),
     ("fs_for_uni_function_call_inout", true),
     ("fs_for_uni_single_iteration", true),
+    ("fs_idx_mat4_sd", false),
     ("fs_scope_while", false),
     ("fs_wh_con_101_iterations", false),
     ("fs_wh_dyn_101_iterations", false),
@@ -220,6 +218,23 @@ const COMPILED: &[(&str, bool)] = &[
     ("vs_wh_con_101_iterations", false),
     ("vs_wh_dyn_basic_highp_float", true),
 ];
+
+/// The references that compile byte-equal to Mesa's words
+/// (`mali_ref::assert_matches`): the mediump loops that read a local array
+/// by their counter under a run-time bound, which Mesa unrolls by the
+/// array's length with a guard per pass and one pass past the end
+/// (nir_fs.rs `read_trips`; docs/notes/mali-deqp-loops.md section 15). No
+/// loop is left, so no cap. `fs_idx_mat4_sd` of that shape is in
+/// [`COMPILED`] (`false`): its swizzled vector products (`coords.yzwx *
+/// 0.5`) pair other lanes than Mesa's.
+const MATCHED: &[&str] = &["fs_idx_tmp_float_dldl", "fs_idx_tmp_vec4_sd"];
+
+#[test]
+fn matched() {
+    for name in MATCHED {
+        mali_ref::assert_matches(&format!("deqp_loops2_{name}"));
+    }
+}
 
 #[test]
 fn refusals_pinned() {
@@ -382,6 +397,7 @@ fn references_listed() {
     on_disk.sort();
     let mut listed: Vec<String> =
         REFUSALS.iter().map(|(n, _)| n.to_string()).chain(COMPILED.iter().map(|(n, _)| n.to_string())).collect();
+    listed.extend(MATCHED.iter().map(|n| n.to_string()));
     listed.extend(OPEN_STEPS.iter().map(|(n, _, _)| n.to_string()));
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_loops2_* reference is not in REFUSALS, or the other way round");
