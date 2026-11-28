@@ -14,7 +14,8 @@
 //! (`chain.rs` `PAIRING`: the accumulators kept for short-lived values, the
 //! program allocated again on the list order, the shorter packing kept), now,
 //! and Mesa 26.2.1's for V3D 4.2 on the same texts: the noise FS 1495, 1090,
-//! 1161; the terrain VS 172, 156, 154 (Mesa at 4 threads, ours at 2); the
+//! 1161; the terrain VS 172, 156, 154 (Mesa at 4 threads, ours at 2; since
+//! item vs-4threads 154 at 4, allocated from rf0 as Mesa does); the
 //! terrain CS 97, 87, 92; the terrain FS 160, 146, 153. The add and mul
 //! operation counts did not move: the same operations, packed tighter. The
 //! note's section 5 floors (the bottleneck unit's operation count: 872 to
@@ -177,6 +178,6 @@ fn terrain_sched_words() {
 // glmark2's programs (words, threads, add words, mul words); the counts
 // before and Mesa's in the header.
 const NOISE_FS: Stage = (1090, 2, 872, 830);
-const TERRAIN_VS: Stage = (156, 2, 109, 98);
+const TERRAIN_VS: Stage = (154, 4, 109, 98);
 const TERRAIN_CS: Stage = (87, 4, 60, 54);
 const TERRAIN_FS: Stage = (146, 4, 89, 119);

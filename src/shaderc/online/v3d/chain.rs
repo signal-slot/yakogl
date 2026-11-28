@@ -21,7 +21,7 @@
 //! and has passed [`super::verify`]. Anything the chain does not build yet is
 //! refused by name ([`V3dError::NotYet`]), never emitted wrong.
 
-use super::alloc::{allocate, allocate_by, AllocError, Rule};
+use super::alloc::{allocate_from, AllocError, Rule, RF_FIRST, RF_FIRST_NO_PAYLOAD};
 use super::encode::{encode_program, ProgramEncodeError};
 use super::isa::Instr;
 use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with, PrepError, SOp};
@@ -301,33 +301,83 @@ fn vertex<'a>(
 /// [`walk`] makes by `Rule::PLAIN` and by [`PAIRING`]: the first of them
 /// when several are as short, so a program [`PAIRING`] does not shorten
 /// keeps the words it had.
+///
+/// A vertex or coordinate shader that fits 2 threads but not 4 from rf3 is
+/// allocated again at 4 threads from rf0 ([`RF_FIRST_NO_PAYLOAD`]: it has
+/// no payload, and Mesa hands it every register-file register). When that
+/// fits, its packings by `Rule::PLAIN`, [`PAIRING`] and [`PAIRING_4`] are
+/// measured too, and the shortest of them is kept when it is no longer than
+/// the 2 threads' code: the 2 threads' code otherwise. So no stage is
+/// longer, and a stage that fits 4 threads from rf3 keeps its registers and
+/// words. glmark2 terrain's vertex shader (30 values live across its
+/// look-up's thread switch, 29 registers from rf3 to rf31): 156 words at 2
+/// threads -> 154 at 4, Mesa 26.2.1's count and threads.
 fn build<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code<'a>, u32), V3dError> {
     let four = super::select::tmu_input_writes(sel.ops) <= 16 / 4;
     let mark = a.used();
-    let threads = match if four { allocate(sel, 4, a) } else { Err(AllocError::DoesNotFit) } {
-        Ok(_) => 4,
-        Err(AllocError::DoesNotFit) => allocate(sel, 2, a).map(|_| 2)?,
+    let fits = |threads: u32, rf_first: u8| {
+        let r = allocate_from(sel, threads, Rule::PLAIN, rf_first, a).map(|_| ());
+        // SAFETY: the allocation is dropped; only whether it fits is kept.
+        unsafe { a.reset_to(mark) };
+        r
+    };
+    let (threads, low) = match if four { fits(4, RF_FIRST) } else { Err(AllocError::DoesNotFit) } {
+        Ok(()) => (4, false),
+        Err(AllocError::DoesNotFit) => {
+            fits(2, RF_FIRST)?;
+            (2, four && !sel.fragment && fits(4, RF_FIRST_NO_PAYLOAD).is_ok())
+        }
         Err(e) => return Err(e.into()),
     };
-    // SAFETY: the allocation above is dropped; only the count is kept.
-    unsafe { a.reset_to(mark) };
-    let way = Way { single_seg, threads, rule: Rule::PLAIN, rounds: 0 };
+    let way = Way { single_seg, threads, rf_first: RF_FIRST, rule: Rule::PLAIN, rounds: 0 };
+    let (mut way, mut step, n) = shortest(sel, way, &[PAIRING], a)?;
+    if low {
+        let w4 = Way { single_seg, threads: 4, rf_first: RF_FIRST_NO_PAYLOAD, rule: Rule::PLAIN, rounds: 0 };
+        /* an error of the 4 threads' walks is not the program's: the 2
+         * threads' code stands */
+        if let Ok((w4, s4, Some(n4))) = shortest(sel, w4, &[PAIRING, PAIRING_4], a) {
+            if n.is_none_or(|n| n4 <= n) {
+                (way, step) = (w4, s4);
+            }
+        }
+    }
+    match walk(sel, way, Some(step), a)? {
+        Walked::Code(code) => Ok((code, way.threads)),
+        Walked::Best(_) => Err(V3dError::OutOfScratch),
+    }
+}
+
+/// The shortest of the packings [`walk`] makes for `way` (by
+/// [`Rule::PLAIN`]) and for the same way by each of `pairings`: the way,
+/// its step and its words, the first of them when several are as short
+/// (the plain packing before any pairing). The scratch is left as it was.
+fn shortest(
+    sel: &Selected<'_>,
+    way: Way,
+    pairings: &[(Rule, u32)],
+    a: &Arena<'_>,
+) -> Result<(Way, u32, Option<usize>), V3dError> {
+    let mark = a.used();
     let Walked::Best(plain) = walk(sel, way, None, a)? else { return Err(V3dError::OutOfScratch) };
     // SAFETY: a walk that measures returns numbers only.
     unsafe { a.reset_to(mark) };
-    let paired = Way { rule: PAIRING.0, rounds: PAIRING.1, ..way };
-    /* an error of this walk (the scratch too small for its rounds, say) is
-     * not the program's: the plain packing stands */
-    let (way, step) = match if super::order::on() { walk(sel, paired, None, a) } else { Ok(Walked::Best(None)) } {
-        Ok(Walked::Best(Some((step, n)))) if plain.is_none_or(|(_, m)| n < m) => (paired, step),
-        _ => (way, plain.map_or(0, |(step, _)| step)),
-    };
-    // SAFETY: as above.
-    unsafe { a.reset_to(mark) };
-    match walk(sel, way, Some(step), a)? {
-        Walked::Code(code) => Ok((code, threads)),
-        Walked::Best(_) => Err(V3dError::OutOfScratch),
+    let mut best = (way, plain.map_or(0, |(step, _)| step), plain.map(|(_, n)| n));
+    for &(rule, rounds) in pairings {
+        if !super::order::on() {
+            break;
+        }
+        let paired = Way { rule, rounds, ..way };
+        /* an error of this walk (the scratch too small for its rounds, say)
+         * is not the program's: the packings before it stand */
+        if let Ok(Walked::Best(Some((step, n)))) = walk(sel, paired, None, a) {
+            if best.2.is_none_or(|m| n < m) {
+                best = (paired, step, Some(n));
+            }
+        }
+        // SAFETY: as above.
+        unsafe { a.reset_to(mark) };
     }
+    Ok(best)
 }
 
 /// The second way to the words ([`build`]), for the pairing of the add and
@@ -353,12 +403,24 @@ fn build<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Cod
 /// choice in [`build`] makes so by construction.
 const PAIRING: (Rule, u32) = (Rule { acc_span: 16, vertex_r5: true }, 3);
 
+/// A second pairing, measured beside [`PAIRING`] only for a vertex or
+/// coordinate shader allocated at 4 threads from rf0 ([`build`]): half the
+/// register file of 2 threads, where a shorter accumulator span packs
+/// tighter. glmark2 terrain's vertex shader at 4 threads from rf0, 3
+/// rounds, r5 for its short uniform loads, by span (2026-11-28): 4: 166,
+/// 8: 159, 12: 154, 16: 158, 20: 158, 24: 160, 32: 158, 48 and plain
+/// accumulators-first: 159 words; without r5 at span 12: 157 or more.
+const PAIRING_4: (Rule, u32) = (Rule { acc_span: 12, vertex_r5: true }, 3);
+
 /// One way to the words: the allocator's rule and how many times the
 /// program is allocated again on its list order.
 #[derive(Clone, Copy)]
 struct Way {
     single_seg: bool,
     threads: u32,
+    /// The first register-file register handed out (alloc.rs
+    /// [`allocate_from`]).
+    rf_first: u8,
     rule: Rule,
     rounds: u32,
 }
@@ -385,14 +447,14 @@ fn walk<'a>(sel: &Selected<'_>, way: Way, only: Option<u32>, a: &Arena<'a>) -> R
     let strict = way.rule == Rule::PLAIN;
     let mut best: Option<(u32, usize)> = None;
     let mut cur = *sel;
-    let mut al = allocate_by(sel, way.threads, way.rule, a)?;
+    let mut al = allocate_from(sel, way.threads, way.rule, way.rf_first, a)?;
     let steps = if super::order::on() { 2 + 2 * way.rounds } else { 1 };
     for step in 0..steps {
         let r: Result<(), V3dError> = (|| {
             if step % 2 == 1 {
                 cur = Selected { ops: super::order::reorder(&cur, &al, a)?, ..*sel };
             } else if step > 0 {
-                al = allocate_by(&cur, way.threads, way.rule, a)?;
+                al = allocate_from(&cur, way.threads, way.rule, way.rf_first, a)?;
             }
             Ok(())
         })();
