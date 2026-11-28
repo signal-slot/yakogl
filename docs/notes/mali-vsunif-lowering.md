@@ -310,3 +310,42 @@ this design lands. The cases then show under the texts of section 2.
 - V4's threshold (when Mesa picks scratch over select trees) is not read
   from Mesa's source here. `tmp_array.vec4_*` with 4 elements uses select
   trees, and the 40-element float array uses scratch.
+
+## 8. Landed and left out (plan #387, item `mali-train-3b`)
+
+HOST-ONLY; nothing here ran on a board.
+
+**Landed, a part of V3** (`local_cond_assign`,
+`shaders.struct.local.{,nested_}conditional_assignment_vertex`, 2 cases that
+compiled to other words than Mesa's):
+
+- a `<` / `<=` of one fp16 uniform lane against a constant stays at 16 bits
+  (`nir.rs` `vs_cmp16_ok`): `FCMP_OR.v2f16.lt.m1 r0, 0x0, u6.w1.h00, 0x0`,
+  then `S16_TO_S32`;
+- the selects of a flattened `if` come last local first (`vs_join`):
+  `nir_lower_vars_to_ssa` puts each variable's phi at the head of the merge
+  block, so the last variable's stands first. No other reference depended
+  on the order of two locals' selects.
+
+The nested variant has no reference of its own.
+
+**Left out, still as section 4 has them:**
+
+- **V3's run-time reads** (`vec2_subscript`, `mat2_subscript`,
+  `vec_subscript`, `tmp_array`; 18 compiled cases): Mesa's
+  `ICMP_OR.s32.lt.m1` chain and `MUX.v2i16` tree over values narrowed with
+  `V2F32_TO_V2F16`. The walk gets the subscript from the IR pass in
+  `mali/glsl.rs` as an `ieq` / select chain at fp32; the fp16 tree is a
+  lowering of its own, not started.
+- **V2** (50 refused cases): needs V3's fp16 selects to be Mesa's words, so
+  it is left refused rather than compiled at fp32.
+- **V1** (`local_equal`, `local_nested_equal`, `struct_cmp`; 6 refused
+  cases). Mesa's final NIR (drawn again on the shim) pairs the two computed
+  lanes of the mediump vec3 members in one `feq` at 16 bits over a `vec2`
+  with the constant lane, keeps the float member's `feq` at 32 bits, joins
+  through `i2i32` / `i2i16`, and shares the compares between the three
+  `if`s. The `vs_reduce` arm of this train (`bvecN`/`ivecN ==` against a
+  constant) does not reach it: both operands here are computed.
+- **V5** (1 compiled case): the vertex `LD_PKA` path, no step of this train
+  wrote it.
+- **V4** (2 compiled cases): thread-local storage in the driver.
