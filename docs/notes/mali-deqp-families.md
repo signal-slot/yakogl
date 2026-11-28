@@ -12,7 +12,7 @@ outcome and our info log, the text of a `MaliError`
 (`src/shaderc/online/mali/mod.rs`). A board status quoted here (Fail,
 NotSupported) is the NanoPC-T6's own, from the slices, never the host's.
 
-- Section 0 below is the refresh at the tip `e06f587b`; the rest of the note
+- Section 0 below is the refresh at the tip `aea9d10d`; the rest of the note
   keeps the earlier measure's counts.
 - Tip of the earlier measure: `abcc9013` (plan #377's integration tip at the time of the run, a
   descendant of origin/main `1f051a7b` with the merged items of plans #373
@@ -44,14 +44,17 @@ refusal, its family, its shape and both shader sources (`measure.tsv`,
 `summary.md` with the tables below. The per-case list (2.6 MB) is not
 committed: rerun the command to get it.
 
-## 0. Refresh at the tip `e06f587b` (HOST-ONLY), against `37305608`
+## 0. Refresh at the tip `aea9d10d` (HOST-ONLY), against `37305608`
 
-Item `families-refresh-3`. **HOST-ONLY**: the whole of sections 1 to 18
+Item `families-refresh-3` (at `e06f587b`) and `families-refresh-4` (at `aea9d10d`).
+**HOST-ONLY**: the whole of sections 1 to 18
 below keeps the counts of the earlier measures (`abcc9013` and older, each
 section names its own commit); this section and
 `tools/mali/testdata/deqp_shapes/index.tsv` are the one measure at the
-tip **`e06f587b`** (origin/main after plan #377's lowerings, `git describe`:
-`e06f587b`, clean). Same script, same 10,597 cases of the four 37305608
+tip **`aea9d10d`** (`aea9d10d3a5a0007ce8bf1df1b5100466ee75567`, plan #377's
+integration tip; item `families-refresh-4`; the one local change was the
+workspace's duplicate `vivante-st` line in `capi/Cargo.toml` deleted so the
+library builds, not committed). Same script, same 10,597 cases of the four 37305608
 slices, CTS `93bca018` with `cts-yakogl-target.patch` (built by
 `tools/cts/deps-env.sh --build HOST_DEQP_CTS`), 3 jobs, 100-case chunks,
 about 25 minutes including the first build of the host `deqp-gles2` and the
@@ -62,25 +65,29 @@ tools/mali/deqp-host-measure.sh --cts <VK-GL-CTS at 93bca018 with the target pat
     --out <dir> --jobs 3 --chunk 100
 ```
 
-Result: 10,597 cases began; 4,968 have a first compile refusal on the host
-(any text, taken or not), 5,629 compile and link on the host (281 end Pass,
+Result: 10,597 cases began; 4,709 have a first compile refusal on the host
+(any text, taken or not), 5,888 compile and link on the host (281 end Pass,
 the rest fail or are NotSupported for a later reason: a link or a render
 check, meaningless here); 106 process exits with code 1, none a crash row.
 Section 14's index `tools/mali/testdata/deqp_shapes/index.tsv` holds
 these counts at this commit (`cases`, `fail`, `notsupported` by the BOARD's
 status, per shape of the host's first refusal; a shape that no case reaches
 stays with 0; every row is re-measured, none is carried over). It has 75
-rows, the same shapes as at `0f0b1ec9`: no new shape appears, so no pair was
-added. Earlier counts of the rows `shapes-missing` added (31, 37, 16 and 59
-cases at `0f0b1ec9`; 28, 74, 16 and 45 at `7c30276c`) are now `vs_for_constant`
-28 (26 Fail / 2 NS), `vs_for_uniform` 74 (0 / 74), `fs_kept_for` 10 (0 / 10)
-and `fs_highp_declared` 51 (45 / 6); see section 11 for their names.
+rows, the same shapes as at `e06f587b`: no new shape appears, so no pair was
+added. Rows that moved: unitype `fs_mat_uniform` 46 to 36, `fs_struct_uniform`
+31 to 13, `fs_other` 55 to 44; constop `const_other` 3 to 9; mixprec
+`fs_varying_other` 123 to 124, `fs_highp_declared` 51 (45 / 6) to 57 (51 / 6);
+loops `vs_while` 81 to 45, `vs_do_while` 83 to 49, `vs_for_uniform` 74 to 45,
+`vs_for_constant` 28 to 27 (25 Fail / 2 NS), `vs_for_dynamic` 6 to 0. All
+other rows are unchanged. `vs_for_constant`, `vs_for_uniform`, `fs_kept_for`
+and `fs_highp_declared` (the rows `shapes-missing` added) are named in
+section 11.
 
 ### 0.1 Each taken refusal: the board at `37305608` against the tip
 
 Board columns: cases whose `refusals.tsv` text at `37305608` contains the
 text, by board status (this is the board's one refusal per case). Tip
-columns: cases whose FIRST host refusal at `e06f587b` contains the text, by
+columns: cases whose FIRST host refusal at `aea9d10d` contains the text, by
 the board's status. A case counts once, under the refusal it meets first,
 so a count can rise when a case that was refused earlier by a text now
 lowered meets this one next ("moved in"). **GREW** marks a count that rose
@@ -93,21 +100,21 @@ failure of a case that compiled before (see 0.2).
 | intval | an integer or boolean value | 3178 | 41 | 132 | 22 | -3065 |
 | varylink | two varying lanes of equal value | 651 | 5 | 41 | 9 | -606 |
 | unitype | a uniform other than a float, vec2, vec3, vec4 or mat4 | 362 | 94 | 0 | 0 | -456 |
-| unitype | a mediump fragment shader uniform other than | 285 | 0 | 153 | 1 | -131 |
+| unitype | a mediump fragment shader uniform other than | 285 | 0 | 114 | 1 | -170 |
 | unitype | a vertex shader uniform that is not highp | 77 | 2 | 16 | 1 | -62 |
 | uniarray | a uniform array | 265 | 4 | 53 | 0 | -216 |
 | uniarray | a uniform read at a run-time index | 2 | 1 | 0 | 9 | **+6 GREW** |
-| constop | a constant operation on or to a value that is not a finite normal float | 603 | 6 | 34 | 0 | -575 |
+| constop | a constant operation on or to a value that is not a finite normal float | 603 | 6 | 40 | 0 | -569 |
 | constop | a constant fp16 does not hold | 3 | 0 | 1 | 0 | -2 |
 | colourpair | a colour pair of a constant then a varying lane | 142 | 0 | 0 | 0 | -142 |
 | colourpair | a colour pair of a varying lane and 0.0 | 29 | 0 | 0 | 0 | -29 |
-| vsloop | a loop in a vertex shader | 105 | 392 | 26 | 274 | -197 |
+| vsloop | a loop in a vertex shader | 105 | 392 | 25 | 169 | -303 |
 | fsloop | a loop Mesa keeps (a run-time bound) in a mediump fragment shader | 0 | 268 | 0 | 53 | -215 |
 | fsloop | a break or continue behind a run-time condition | 0 | 6 | 0 | 10 | **+4 GREW** |
 | fsloop | a loop past Mesa's unroll limits | 1 | 2 | 0 | 21 | **+18 GREW** |
 | varyuniform | a varying lane computed from no attribute | 252 | 0 | 34 | 1 | -217 |
 | varyuniform | a varying lane left unwritten | 3 | 0 | 2 | 50 | **+49 GREW** |
-| mixprec | a fragment shader that mixes highp and mediump or lowp | 192 | 0 | 77 | 6 | -109 |
+| mixprec | a fragment shader that mixes highp and mediump or lowp | 192 | 0 | 83 | 6 | -103 |
 | posunwritten | a gl_Position lane left unwritten | 155 | 0 | 0 | 3 | -152 |
 | negzero | a -0.0 that a comparison reads through a variable | 117 | 0 | 30 | 0 | -87 |
 | invariant | an invariant output | 12 | 0 | 0 | 0 | -12 |
@@ -115,7 +122,7 @@ failure of a case that compiled before (see 0.2).
 | misc | a shader of more than 2048 IR values | 3 | 0 | 2 | 0 | -1 |
 | misc | a comparison other than | 3 | 0 | 0 | 0 | -3 |
 | misc | a built-in input | 1 | 0 | 0 | 0 | -1 |
-| misc | a texture look-up other than texture2D | 27 | 0 | 57 | 0 | **+30 GREW** |
+| misc | a texture look-up other than texture2D | 27 | 0 | 59 | 0 | **+32 GREW** |
 | misc | a texture result's lanes | 2 | 0 | 3 | 0 | **+1 GREW** |
 | misc | a shape Mesa's algebraic rules rewrite without a reference | 6 | 0 | 28 | 0 | **+22 GREW** |
 
@@ -159,20 +166,20 @@ refusal is in that family and shape.
 |---|--:|--:|--:|---|
 | intval | 154 | 132 | 22 | ivec_operator 48, int_uniform 39, random_mixed 26, step_sign 21, bool_uniform 14, bool_literal 2, bool_logic 2, scalar_conversion 2 |
 | varylink | 140 | 77 | 63 | varying_unwritten 52, lane_no_attribute 35, equal_lanes 35, equal_lanes_broadcast 15, position_unwritten 3 |
-| unitype | 171 | 169 | 2 | fs_other 55, fs_mat_uniform 46, fs_struct_uniform 31, fs_int_uniform 22, vs_mediump_struct 17 |
+| unitype | 132 | 130 | 2 | fs_other 44, fs_mat_uniform 36, fs_int_uniform 22, vs_mediump_struct 17, fs_struct_uniform 13 |
 | uniarray | 62 | 53 | 9 | array_in_struct 30, mat_array 21, runtime_index 9, bool_array 2 |
-| constop | 65 | 65 | 0 | neg_zero_variable 30, const_call_transcendental 16, random_mixed 9, zero_operand 6, const_other 3, fp16_constant 1 |
-| mixprec | 206 | 200 | 6 | fs_varying_other 123, fs_highp_declared 51, fs_mixed_other 32 |
+| constop | 71 | 71 | 0 | neg_zero_variable 30, const_call_transcendental 16, const_other 9, random_mixed 9, zero_operand 6, fp16_constant 1 |
+| mixprec | 213 | 207 | 6 | fs_varying_other 124, fs_highp_declared 57, fs_mixed_other 32 |
 | colourpair | 0 | 0 | 0 | none |
-| loops | 384 | 26 | 358 | vs_do_while 83, vs_while 81, vs_for_uniform 74, fs_kept_for_index 29, vs_for_constant 28, vs_for_index 28, fs_past_limits 21, fs_unrolled_break 10, fs_kept_for 10, fs_kept_while 10, vs_for_dynamic 6, fs_kept_do_while 4 |
+| loops | 278 | 25 | 253 | vs_do_while 49, vs_for_uniform 45, vs_while 45, fs_kept_for_index 29, vs_for_index 28, vs_for_constant 27, fs_past_limits 21, fs_unrolled_break 10, fs_kept_for 10, fs_kept_while 10, fs_kept_do_while 4 |
 | misc | 33 | 33 | 0 | algebraic_rewrite 28, texture_lanes 3, ir_values 2 |
 
 (The first refusal of the cases outside these nine families is `#367`'s and the
-`new:` causes of section 18.4: ARITH 1,760, CONST_FOLD 350, FMA 112,
-FRAGCOLOR_LANE 915, TEX_COORD 200, TEX_VERTEX 57, CONTROL_FLOW 101,
-DEFECT_IRINDEX 73, TEX_VS_FORM 61, FRAGCOORD_FP16 39, DISCARD_FORM 20,
-ATTR_FOLD 12, ATTR_LINK 8, COLOUR_TOO_LARGE 7, DEFECT_ENCODE 6, link 14,
-other 18.) The nine families hold 1,215 of the 4,968 refusals.
+`new:` causes of section 18.4: ARITH 1,610, CONST_FOLD 353, FMA 116,
+FRAGCOLOR_LANE 943, TEX_COORD 200, TEX_VERTEX 59, CONTROL_FLOW 102,
+DEFECT_IRINDEX 46, TEX_VS_FORM 61, FRAGCOORD_FP16 39, DISCARD_FORM 20,
+ATTR_FOLD 12, ATTR_LINK 8, COLOUR_TOO_LARGE 19, DEFECT_ENCODE 6, link 14,
+other 18.) The nine families hold 1,083 of the 4,709 refusals.
 
 ### 0.4 Cases that compile at the tip, by the board's first family
 
@@ -182,19 +189,19 @@ at `37305608` from the board's own first-refusal family (`mali-family-tree.py`).
 
 | board family | compile at tip | of |
 |---|--:|--:|
-| intval | 2,375 | 3,223 |
+| intval | 2,412 | 3,223 |
 | varylink | 893 | 1,067 |
-| unitype | 323 | 820 |
+| unitype | 333 | 820 |
 | constop | 331 | 738 |
-| loops | 242 | 774 |
+| loops | 342 | 774 |
 | mixprec | 133 | 251 |
 | colourpair | 170 | 171 |
 | uniarray | 64 | 272 |
 | misc | 15 | 29 |
-| 367:ARITH | 547 | 1,585 |
-| 367:FRAGCOLOR_LANE | 357 | 793 |
-| 367:FMA | 52 | 100 |
-| 367:CONST_FOLD | 94 | 463 |
+| 367:ARITH | 647 | 1,585 |
+| 367:FRAGCOLOR_LANE | 359 | 793 |
+| 367:FMA | 60 | 100 |
+| 367:CONST_FOLD | 96 | 463 |
 | 367:LOCALS | 32 | 160 |
 | 367:CONTROL_FLOW, TEX_COORD, TEX_VERTEX | 1, 0, 0 | 15, 109, 27 |
 
