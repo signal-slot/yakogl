@@ -1,0 +1,22 @@
+# Lease-route fixture for prompt-reads.py --self-test (next, record).
+# SYNTHETIC: a made-up console transcript, not a measurement. The plan's
+# first five commands are answered, then the PMU's PWR_GATE read is answered
+# by an error: the plan stops and reset is the next command.
+# expect next=3 record=3
+U-Boot 2026.07
+
+=> version
+U-Boot 2026.07
+=> help
+version   - print monitor, compiler and linker version
+=> printenv
+bootcmd=bootflow scan -lb
+=> bdinfo
+boot_params = 0x0000000000000000
+=> dm tree
+ Class     Index  Probed  Driver                Name
+ spi           2  [ + ]   rockchip_spi          |-- spi@feb20000
+ pmic          0  [ + ]   rockchip_rk8xx        |   `-- pmic@0
+=> md.l 0xfd8d814c 1
+Unknown command 'md.l' - try 'help'
+=> 

@@ -21,6 +21,32 @@
         full time: what it waits for cannot come any more (issue #11943).
     prompt-reads.py plan
         Prints the commands, nothing else.
+    prompt-reads.py next TRANSCRIPT
+        The lease console route: the lease's console server holds the
+        adapter's one client slot, so someone else types (the lease's serial
+        tools) and this decides what. TRANSCRIPT (a file, or - for stdin) is
+        the console so far as plain text: `=> <cmd>` echo lines and their
+        answers, LF line ends (CR, NUL and ANSI escapes are dropped), '#'
+        lines before the first prompt a header. It must end at a prompt.
+        Each command entered must be the plan's next, the plan and its
+        decisions being run's (first_commands, then later_commands). Prints
+        on stdout only the one command to type next, `reset` when the plan
+        is done; why and the decisions go to stderr. A prompt line where
+        nothing was entered, or one dropped with ctrl-c (<INTERRUPT>), is
+        passed over. Exit 0 a command printed (it passes allowed()). 3 an
+        answer is an error or cannot be read for its command: `reset` is
+        printed. 4 nothing may be typed, no command printed: a command not
+        the plan's next, text past 'Starting kernel', no prompt yet, the last
+        command's answer not complete (no prompt after it: wait and ask
+        again), or reset already entered. 2 usage.
+    prompt-reads.py record TRANSCRIPT RECORD_DIR
+        The same walk; RECORD_DIR gets answers.txt in run's form and uart.log,
+        the transcript under a first line "lease route: typed through the
+        lease console tools, no typed.log". Exit 0 the whole plan, reset and
+        Linux's login after it; 3 an answer is an error (written as read); 5
+        the plan stopped before reset; 6 reset, no login in the transcript;
+        4 refused, nothing written (a command outside the plan, text past
+        'Starting kernel', no prompt); 2 usage.
     prompt-reads.py --self-test
         The same code against a made-up U-Boot on a pty. No board.
 
@@ -542,6 +568,200 @@ def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30, back=Non
             return s.code
 
 
+# --------------------------------------------------------------------------
+# The lease console route: someone else types (through the lease's serial
+# tools), this code decides what, from the console transcript so far.
+
+LEASE_LINE = "lease route: typed through the lease console tools, no typed.log"
+# An answer that is U-Boot refusing the command or faulting under it.
+ANSWER_ERROR = re.compile(r"Unknown command|\"(?:Synchronous Abort|SError|Error|IRQ|FIQ)\" handler"
+                          r"|Resetting CPU|^Usage:", re.M)
+
+
+def answer_problem(cmd, out):
+    """Why the answer to cmd is an error or cannot be read for it, or None."""
+    m = ANSWER_ERROR.search(out)
+    if m:
+        return "the answer to %r is an error (%r)" % (cmd, m.group(0))
+    if cmd.startswith("md.l "):
+        _, a, n = cmd.split()
+        if md_words(out, int(a, 16), int(n, 16)) is None:
+            return "the answer to %r is not %d md.l word(s) from %s" % (cmd, int(n, 16), a)
+    if cmd == "dm tree" and not re.search(r"^\s*Class\s+\S+\s+Probed\b", out, re.M):
+        return "the answer to 'dm tree' has no 'Class ... Probed' header: the pmic decision cannot be read from it"
+    return None
+
+
+def is_prompt(line):
+    return line == "=>" or line.startswith("=> ")
+
+
+def lease_parse(text):
+    """(pre, entries, tail) of a lease transcript.
+
+    pre: the lines before the first prompt; entries: [cmd, answer lines,
+    complete] per prompt line up to and including `reset` (cmd "" for a
+    prompt line with nothing entered; complete when another prompt line
+    follows); tail: the lines after `reset` (the boot that follows).
+    CR, NUL and ANSI escapes are dropped; '#' lines before the first prompt
+    are a fixture's header and are dropped too."""
+    text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text.replace("\r", "").replace("\x00", ""))
+    pre, entries, tail = [], [], None
+    for line in text.split("\n"):
+        if tail is not None:
+            tail.append(line)
+        elif is_prompt(line):
+            if entries:
+                entries[-1][2] = True
+            entries.append([line[2:].strip(), [], False])
+            if entries[-1][0] == "reset":
+                tail = []
+        elif entries:
+            entries[-1][1].append(line)
+        elif not line.startswith("#"):
+            pre.append(line)
+    return pre, entries, tail
+
+
+class LeaseWalk:
+    """The transcript walked against run's plan, step by step.
+
+    code 0: cmd is the plan's next command (reset when it is done). 3: an
+    answer is an error or cannot be read for its command; cmd is reset.
+    4: nothing may be typed (cmd None): a command that is not the plan's
+    next, text past 'Starting kernel', no prompt to type at, an answer not
+    complete, or reset already entered. why says which. log is answers.txt
+    as run writes it for the commands answered; notes are the decisions."""
+
+    def __init__(self, text):
+        self.answers, self.log, self.notes = {}, [], []
+        self.code, self.cmd, self.why = 0, None, ""
+        self.entered = []           # the commands entered, in order
+        self.reset = False          # reset was entered
+        self.login = False          # Linux's login came after reset
+        self.incomplete = None      # a command entered whose answer has no prompt after it
+        self._later = None
+        self._decoded = False
+        self.walk(text)
+
+    def expected(self, err):
+        """The plan's command at the step after self.entered."""
+        if err:
+            return "reset"
+        first = first_commands()
+        n = len(self.entered)
+        if n < len(first):
+            return first[n]
+        if self._later is None:
+            self._later, notes = later_commands(self.answers)
+            for note in notes:
+                self.notes.append(note)
+                self.log.append("# %s\n" % note)
+        k = n - len(first)
+        if k < len(self._later):
+            return self._later[k]
+        if not self._decoded:
+            self._decoded = True
+            for note in uart2_decode(self.answers):
+                self.notes.append(note)
+                self.log.append("# %s\n" % note)
+        return "reset"
+
+    def stop(self, code, why, cmd=None):
+        self.code, self.why, self.cmd = code, why, cmd
+
+    def walk(self, text):
+        pre, entries, tail = lease_parse(text)
+        if any(KERNEL.decode() in line for line in pre + [l for e in entries for l in [e[0]] + e[1]]):
+            return self.stop(4, "the transcript holds 'Starting kernel' before any reset: Linux runs, nothing may be typed")
+        if not entries:
+            return self.stop(4, "no U-Boot prompt ('=> ' at the start of a line) in the transcript: nothing may be typed")
+        err = None
+        for i, (cmd, lines, complete) in enumerate(entries):
+            out = "\n".join(lines).lstrip("\n") + ("\n" if lines else "")
+            out = "" if not out.strip("\n") else out
+            if cmd == "" or (cmd.endswith("<INTERRUPT>") and not out):
+                if out:
+                    return self.stop(4, "an empty line was entered and answered (U-Boot repeats a command on an "
+                                        "empty line): not the plan")
+                continue                    # a prompt where nothing was entered
+            want = self.expected(err)
+            if cmd != want:
+                return self.stop(4, "%r was entered where the plan's next is %r: not the plan, nothing more may "
+                                    "be typed" % (cmd, want))
+            self.entered.append(cmd)
+            if cmd == "reset":
+                self.reset = True
+                self.log.append("## reset\n")
+                self.login = any(LOGIN.decode() in line for line in tail or [])
+                return self.stop(4, "reset was entered: the plan is done, nothing more is typed")
+            if not complete:
+                self.incomplete = cmd
+                return self.stop(4, "no prompt after %r yet: its answer is not complete; wait for '=> ' and "
+                                    "read again, nothing may be typed now" % cmd)
+            self.answers[cmd] = out
+            self.log.append("## %s\n%s" % (cmd, out if out.endswith("\n") or not out else out + "\n"))
+            err = err or answer_problem(cmd, out)
+        want = self.expected(err)
+        if not allowed(want):
+            return self.stop(4, "the plan's next %r is not in the allowed list: nothing may be typed" % want)
+        if err:
+            return self.stop(3, err + ": the plan stops, reset is typed", want)
+        return self.stop(0, "", want)
+
+
+def lease_next(path):
+    """`next`: the one command to type next, on stdout; why on stderr."""
+    w = LeaseWalk(read_transcript(path))
+    for note in w.notes:
+        sys.stderr.write("prompt-reads: %s\n" % note)
+    if w.why:
+        sys.stderr.write("prompt-reads: %s\n" % w.why)
+    if w.cmd is not None:
+        print(w.cmd, flush=True)
+    return w.code
+
+
+def lease_record(path, rec):
+    """`record`: answers.txt in run's form and uart.log, from a transcript.
+
+    Exit 0 the plan through reset with Linux's login after it; 6 reset but
+    no login in the transcript; 5 the plan stopped before reset (the
+    command without a complete answer is not written); 3 an answer was an
+    error (written as read); 4 refused, nothing written."""
+    text = read_transcript(path)
+    w = LeaseWalk(text)
+    if w.code == 4 and not w.reset and w.incomplete is None:
+        sys.stderr.write("prompt-reads: record refused, nothing written: %s\n" % w.why)
+        return 4
+    os.makedirs(rec, exist_ok=True)
+    with open(os.path.join(rec, "answers.txt"), "w") as f:
+        f.write("".join(w.log))
+    with open(os.path.join(rec, "uart.log"), "w") as f:
+        f.write(LEASE_LINE + "\n" + text)
+    problems = [p for p in (answer_problem(c, a) for c, a in w.answers.items()) if p]
+    if problems:
+        sys.stderr.write("prompt-reads: recorded %d commands; %s\n" % (len(w.entered), problems[0]))
+        return 3
+    if not w.reset:
+        sys.stderr.write("prompt-reads: recorded %d commands; the plan stopped before reset: %s\n"
+                         % (len(w.entered), w.why or "the plan's next is %r" % w.cmd))
+        return 5
+    if not w.login:
+        sys.stderr.write("prompt-reads: recorded %d commands; reset entered, no Linux login in the transcript\n"
+                         % (len(w.entered) - 1))
+        return 6
+    sys.stderr.write("prompt-reads: recorded %d commands, reset, the Linux login\n" % (len(w.entered) - 1))
+    return 0
+
+
+def read_transcript(path):
+    if path == "-":
+        return sys.stdin.read()
+    with open(path, encoding="ascii", errors="replace") as f:
+        return f.read()
+
+
 def open_tty(path):
     fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     fcntl.ioctl(fd, termios.TIOCEXCL)
@@ -1054,6 +1274,151 @@ def self_test():
     check("input clock 396000000 Hz" in "\n".join(uart2_decode(gpll)) and uart2_decode(sec4) == [],
           "uart2: the gpll source with the plain divider; no UART2 reads, no decode")
 
+    # 13. The lease route: `next` and `record` from a transcript.
+    import io
+
+    def cli(*args):
+        o, e = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
+        try:
+            rc = main(["prompt-reads.py"] + list(args))
+            return rc, sys.stdout.getvalue(), sys.stderr.getvalue()
+        finally:
+            sys.stdout, sys.stderr = o, e
+
+    def lease_text(b):
+        """uart.log as the lease transcript tool gives it: CR and NUL gone."""
+        return b.decode("ascii", "replace").replace("\r", "").replace("\x00", "")
+
+    def fixture_words(ans):
+        words = {}
+        for c, out in ans.items():
+            if c.startswith("md.l "):
+                _, a, n = c.split()
+                a, n = int(a, 16), int(n, 16)
+                words.update({a + 4 * i: w for i, w in enumerate(md_words(out, a, n) or [])})
+        return words
+
+    u2words = {a: w for a, w in fixture_words(u2).items()
+               if a in (UART2_LCR, UART2_USR) or UART2_SEL <= a < UART2_SEL + 12 or UART2_GATE12 <= a < UART2_GATE12 + 8}
+    tmp = tempfile.mkdtemp(prefix="prompt-reads-lease-")
+    tpath = os.path.join(tmp, "transcript.txt")
+
+    def next_of(text):
+        with open(tpath, "w") as f:
+            f.write(text)
+        return cli("next", tpath)
+
+    # 13a. Replay each fixture's words through FakeBoard with run, then the
+    # same console step by step through `next`: at each prompt `next` names
+    # exactly the command run typed there, and each passes allowed().
+    for name, qos_read, wdt_read in (("section4-2026-11-12.txt", False, False),
+                                     ("synthetic-keep-pd-on.txt", True, True)):
+        with open(os.path.join(here, name)) as f:
+            words = {**fixture_words(parse_transcript(f.read())), **u2words}
+        rc, f, files = case(words=words)
+        text = lease_text(files["uart.log"])
+        steps = []
+        for m in re.finditer(r"(?m)^=> ", text):
+            src, out, err = next_of(text[:m.end()])
+            steps.append((src, out.rstrip("\n")))
+        check(rc == 0 and f.entered[-1] == "reset" and len(steps) == len(f.entered),
+              name + " lease: run typed the plan, one prompt per command (rc %d, %d prompts, %d commands)"
+              % (rc, len(steps), len(f.entered)))
+        check([s[1] for s in steps] == f.entered and all(s[0] == 0 for s in steps),
+              name + " lease: next, step by step, names exactly what run typed (%r)"
+              % [s for s, c in zip(steps, f.entered) if s[1] != c][:2])
+        check(all(allowed(s[1]) for s in steps), name + " lease: every command next printed is allowed")
+        check(any(c.startswith("md.l 0xfdf35") for c in f.entered) == qos_read
+              and (md(WDT0, 2) in f.entered) == wdt_read,
+              name + " lease: the QoS and WDT0 decisions are the fixture's")
+        rc, out, err = next_of(text)
+        check(rc == 4 and out == "" and "reset was entered" in err, name + " lease: after reset, next prints nothing (4)")
+        # record: answers.txt is run's, byte for byte; uart.log the transcript.
+        rdir = os.path.join(tmp, "rec-" + name)
+        rc, out, err = cli("record", tpath, rdir)
+        with open(os.path.join(rdir, "answers.txt"), "rb") as a, open(os.path.join(rdir, "uart.log")) as u:
+            got_ans, got_log = a.read(), u.read()
+        check(rc == 0 and got_ans == files["answers.txt"],
+              name + " lease: record's answers.txt equals run's for the same session (rc %d)" % rc)
+        check(got_log == LEASE_LINE + "\n" + text and not os.path.exists(os.path.join(rdir, "typed.log")),
+              name + " lease: uart.log is the transcript under the lease line, no typed.log")
+        # The same session with the boot after reset cut before Linux: 6.
+        cut = text[:text.index("Starting kernel")]
+        with open(tpath, "w") as fh:
+            fh.write(cut)
+        rc, _, _ = cli("record", tpath, rdir + "-cut")
+        check(rc == 6, name + " lease: record without Linux's login after reset exits 6 (rc %d)" % rc)
+
+    # 13b. The lease fixtures: synthetic, no tty path, serial or MAC.
+    lease = {}
+    for name in sorted(os.listdir(here)):
+        if name.startswith("lease-") and name.endswith(".txt"):
+            with open(os.path.join(here, name)) as fh:
+                lease[name] = fh.read()
+    check(set(lease) == {"lease-foreign-command.txt", "lease-error-answer.txt", "lease-past-kernel.txt",
+                         "lease-interrupt.txt"}, "lease fixtures: the four are there (%r)" % sorted(lease))
+    for name, text in lease.items():
+        check("SYNTHETIC" in text and "# expect next=" in text, name + ": marked synthetic, with its expectation")
+        check(not re.search(r"(?i)/dev/|tty|serial|ethaddr|[0-9a-f]{2}(:[0-9a-f]{2}){5}|\.(local|lan)\b", text),
+              name + ": no tty path, serial or MAC in the fixture")
+
+    # 13c. A foreign command: next prints nothing, record writes nothing.
+    rc, out, err = next_of(lease["lease-foreign-command.txt"])
+    check(rc == 4 and out == "" and "'mw.l 0xfd7c0578 0' was entered where the plan's next is 'help'" in err,
+          "lease foreign: next exits 4, no command (%r)" % err)
+    rc, out, err = cli("record", tpath, os.path.join(tmp, "rec-foreign"))
+    check(rc == 4 and not os.path.exists(os.path.join(tmp, "rec-foreign")) and "refused" in err,
+          "lease foreign: record refuses with 4, nothing written")
+    rc, out, err = next_of("=> help\n=> ")
+    check(rc == 4 and out == "", "lease: a plan command out of order is refused too")
+
+    # 13d. An error answer: next says why and prints reset (3); record writes
+    # what was read and exits 3; once reset is entered next prints nothing.
+    text = lease["lease-error-answer.txt"]
+    rc, out, err = next_of(text)
+    check(rc == 3 and out == "reset\n" and "Unknown command" in err, "lease error: next exits 3 and prints reset")
+    rc, out, err = cli("record", tpath, os.path.join(tmp, "rec-error"))
+    with open(os.path.join(tmp, "rec-error", "answers.txt")) as fh:
+        a = fh.read()
+    check(rc == 3 and a.count("## ") == 6 and "## md.l 0xfd8d814c 1\nUnknown command" in a,
+          "lease error: record writes the six answers and exits 3 (rc %d)" % rc)
+    rc, out, err = next_of(text + "reset\nresetting ...\n")
+    check(rc == 4 and out == "", "lease error: after the reset it asked for, next prints nothing")
+    rc, out, err = next_of(text + "help\n=> ")
+    check(rc == 4 and out == "", "lease error: a plan command after the error instead of reset is refused")
+    bad = text.replace("Unknown command 'md.l' - try 'help'", "fd8d814c: (not in fixture)")
+    rc, out, err = next_of(bad)
+    check(rc == 3 and out == "reset\n" and "not 1 md.l word(s)" in err, "lease error: an md answer with no word is 3")
+    nodm = text.replace(" Class     Index  Probed", " Something else").split("=> md.l")[0] + "=> "
+    rc, out, err = next_of(nodm)
+    check(rc == 3 and out == "reset\n" and "dm tree" in err, "lease error: a dm tree with no header is 3")
+
+    # 13e. Past 'Starting kernel', no prompt, an unfinished answer, an empty
+    # line answered: nothing may be typed. A dropped line is passed over.
+    rc, out, err = next_of(lease["lease-past-kernel.txt"])
+    check(rc == 4 and out == "" and "Starting kernel" in err, "lease kernel: next exits 4, no command")
+    rc, out, err = cli("record", tpath, os.path.join(tmp, "rec-kernel"))
+    check(rc == 4 and not os.path.exists(os.path.join(tmp, "rec-kernel")), "lease kernel: record refuses, nothing written")
+    rc, out, err = next_of("U-Boot 2026.07\nHit any key to stop autoboot:  1 ")
+    check(rc == 4 and out == "" and "no U-Boot prompt" in err, "lease: no prompt yet, nothing is typed")
+    rc, out, err = next_of("=> version\nU-Boot 2026.07\n")
+    check(rc == 4 and out == "" and "not complete" in err, "lease: an answer with no prompt after it, nothing is typed")
+    rc, out, err = next_of("=> version\nU-Boot 2026.07\n=> \nU-Boot 2026.07\n=> ")
+    check(rc == 4 and out == "" and "empty line" in err, "lease: an empty line that was answered is refused")
+    rc, out, err = next_of(lease["lease-interrupt.txt"])
+    check(rc == 0 and out == "help\n", "lease interrupt: a dropped line and an empty prompt are passed over (%r)" % out)
+    rc, out, err = cli("record", tpath, os.path.join(tmp, "rec-int"))
+    with open(os.path.join(tmp, "rec-int", "answers.txt")) as fh:
+        a = fh.read()
+    check(rc == 5 and a == "## version\nU-Boot 2026.07\n", "lease interrupt: record of a plan stopped early exits 5")
+    rc, out, err = next_of("# a header line\n=> ")
+    check(rc == 0 and out == "version\n", "lease: at the first prompt, the plan's first command")
+    check(cli("next")[0] == 2 and cli("record", tpath)[0] == 2 and cli("next", os.path.join(tmp, "none"))[0] == 2,
+          "lease: usage and an unreadable transcript exit 2")
+    import shutil
+    shutil.rmtree(tmp)
+
     return check.summary("prompt-reads")
 
 
@@ -1067,6 +1432,14 @@ def main(argv):
         print("# then, if dm tree shows the pmic probed: pmic list; pmic dev <its name>; pmic dump")
         print("reset")
         return 0
+    try:
+        if len(argv) == 3 and argv[1] == "next":
+            return lease_next(argv[2])
+        if len(argv) == 4 and argv[1] == "record":
+            return lease_record(argv[2], argv[3])
+    except OSError as e:
+        sys.stderr.write("prompt-reads: %s\n" % e)
+        return 2
     if len(argv) in (4, 5) and argv[1] == "run":
         fd = open_tty(argv[2])
         try:

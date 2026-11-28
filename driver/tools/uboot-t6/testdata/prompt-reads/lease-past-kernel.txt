@@ -1,0 +1,18 @@
+# Lease-route fixture for prompt-reads.py --self-test (next, record).
+# SYNTHETIC: a made-up console transcript, not a measurement. The second
+# command faults, U-Boot resets and the autoboot starts Linux: nothing may
+# be typed any more.
+# expect next=4 record=4
+U-Boot 2026.07
+
+=> version
+U-Boot 2026.07
+=> help
+"Synchronous Abort" handler, esr 0x96000010
+Resetting CPU ...
+
+U-Boot SPL 2026.07
+Hit any key to stop autoboot:  0 
+Starting kernel ...
+
+[    0.000000] Booting Linux on physical CPU 0x0000000000

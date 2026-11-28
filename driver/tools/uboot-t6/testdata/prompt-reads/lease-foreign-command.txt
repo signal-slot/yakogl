@@ -1,0 +1,10 @@
+# Lease-route fixture for prompt-reads.py --self-test (next, record).
+# SYNTHETIC: a made-up console transcript, not a measurement. The second
+# command entered is a memory write, not the plan's next.
+# expect next=4 record=4
+U-Boot 2026.07
+
+=> version
+U-Boot 2026.07
+=> mw.l 0xfd7c0578 0
+=> 
