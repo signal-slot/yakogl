@@ -4129,6 +4129,7 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   step "tools   imx8mp-gles3-env-selftest.sh (the i.MX8MP env, stage-1 and artefact scripts refusing by variable name)" no_board_env bash tools/cts/imx8mp-gles3-env-selftest.sh
   step "tools   imx8mp-gles3-finish-selftest.sh (the campaign finish script, partial run, against the committed notpass and compare lists)" no_board_env bash tools/cts/imx8mp-gles3-finish-selftest.sh
   step "tools   imx8mp-gles3-issues-selftest.sh (the cause-grouped issue lister on synthetic compare output)" no_board_env bash tools/cts/imx8mp-gles3-issues-selftest.sh
+  step "tools   imx8mp-gles3-causes-selftest.sh (slice WDOG1 and Hang marker lines to cause ids by entry or last case)" no_board_env bash tools/cts/imx8mp-gles3-causes-selftest.sh
   step "tools   imx8mp-gles3-redact-selftest.sh (the board-record redactor and the committed i.MX8MP logs clean)" no_board_env bash tools/cts/imx8mp-gles3-redact-selftest.sh
   step "tools   imx8mp-gles3-slice-selftest.sh (the slice README builder against its own fixture)" no_board_env bash tools/cts/imx8mp-gles3-slice-selftest.sh
   step "tools   imx8mp-gles3-times-selftest.sh (the per-entry run-time estimator on a synthetic slice)" no_board_env bash tools/cts/imx8mp-gles3-times-selftest.sh
