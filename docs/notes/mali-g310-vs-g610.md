@@ -290,10 +290,10 @@ holds over the whole reference corpus the train compares.
 
 Date 2026-11-28 (plan #387 item `g310-equiv-2`), tip `76a1a0d27`. Repeats the
 recheck above for every `*.expect.json` added, changed or renamed in
-`tools/mali/testdata` since `7e27b1eb`: 350 references (342 `deqp_*`, in the
+`tools/mali/testdata` since `7e27b1eb`: 350 references (336 `deqp_*`, in the
 families intval5, idxloc, unifmp, vsunif, nonfin, vsuarr, opform, mixprec2,
-t3gap, loops2, kfold, highpfs and others, and 8 not named `deqp_*`:
-`gm2_mploop_1..3`, `prec_dead_unknown_vs`, `vs_tex2d_cube`, `cube_lod_fs`,
+t3gap, loops2, kfold, highpfs and others, and 14 not named `deqp_*`:
+`gm2_mploop_1..3`, `gm2_vload_1..6`, `prec_dead_unknown_vs`, `vs_tex2d_cube`, `cube_lod_fs`,
 `cube_lod_vs`, `vs_cube_edge`). Same method: Mesa 26.2.1 unmodified
 drm-shim, each reference drawn with the first option set that reproduces the
 committed G610 file (`trace` aside), then drawn on the G310v2
