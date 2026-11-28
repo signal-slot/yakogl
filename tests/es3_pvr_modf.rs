@@ -11,7 +11,11 @@
 //! for the key's layout, output `n` into the pixel's dwords from `n * d`, `d`
 //! the layout's dword count, the registers `src/pvr/backend.rs` emits
 //! attachment `n` from. Two RGBA32UI outputs take eight dwords, past the
-//! pixel's four output registers, and are refused by name.
+//! pixel's four output registers: the program is then built per target
+//! (`chain::build_fragment_with`), output 0 in the four registers and output
+//! 1 stored to tile buffer 0, which the two-target end-of-tile program
+//! `eot2_tb1` loads back (issue #313; refused by name until that program
+//! was captured).
 //!
 //! The `*_vertex` cases run modf in the vertex shader, pass both results as
 //! flat varyings and draw them through a passthrough fragment shader into the
@@ -21,7 +25,8 @@
 //! (`int_targets_drawn`), which is the executor's draw for both
 //! stages, and attachments of two integer layouts with the program of
 //! their mixed key (`target_key::shc_blend_key_mixed`). Two RGBA32UI
-//! attachments stay refused by name, in the compiler and in the back end.
+//! attachments (`vec3` and `vec4`) are drawn with the program that spills
+//! the second.
 //!
 //! The sources follow dEQP's `glsShaderExecUtil.cpp` fragment executor and
 //! `es3fShaderCommonFunctionTests.cpp` (VK-GL-CTS, Apache-2.0, Copyright (c)
@@ -33,7 +38,7 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr", not(feature = "report-es2")))]
 use yakogl::backend::{GlesDraw, GlesDrawTarget, GLES_SURF_R32UI, GLES_SURF_RG32UI, GLES_SURF_RGBA32UI};
 use yakogl::pvr::backend::int_targets_drawn;
-use yakogl::pvr::target_keys::{REFUSE_FOUR_REGISTERS, REFUSE_NOT_A_MIX, REFUSE_ONE_LAYOUT_PAST_FOUR};
+use yakogl::pvr::target_keys::REFUSE_NOT_A_MIX;
 use yakogl::shaderc::online::powervr::chain::{compile_fragment_for, compile_vertex};
 use yakogl::shaderc::online::powervr::decode::decode_group;
 use yakogl::shaderc::online::powervr::isa::ops_for;
@@ -50,6 +55,7 @@ static COMPILING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[derive(Debug)]
 struct Rec {
     num_outputs: u8,
+    num_tile_buffers: u8,
     blend_key: u32,
     image: Vec<u8>,
 }
@@ -67,6 +73,7 @@ fn compile_for(src: &str, key: u32) -> Result<Rec, String> {
         let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
         Ok(Rec {
             num_outputs: rec.num_outputs,
+            num_tile_buffers: rec.num_tile_buffers,
             blend_key: rec.blend_key,
             image: code.iter().flat_map(|w| w.to_le_bytes()).collect(),
         })
@@ -200,13 +207,37 @@ fn second_output_follows_the_first() {
     }
 }
 
-/// Two RGBA32UI outputs take eight dwords: refused by name, never written
-/// past the pixel's four output registers.
+/// The dwords a program stores to tile buffers (`st.tiled`, one a dword).
+fn tile_stores(image: &[u8]) -> usize {
+    ops(image).iter().filter(|(name, _)| *name == "st.tiled").count()
+}
+
+/// Two RGBA32UI outputs take eight dwords, and the pixel has four output
+/// registers: `vec3` and `vec4` at every precision write output 0 to the
+/// four registers and store output 1's four dwords to tile buffer 0, never
+/// past the registers. The record says so (four registers, one tile buffer,
+/// the layout's key), which is what the back end draws two RGBA32UI
+/// attachments with. They were refused by name ("integer colour outputs
+/// past the pixel's four output registers") until `eot2_tb1` was captured.
 #[test]
-fn modf_vec3_and_vec4_are_refused_by_name() {
-    for ty in ["vec3", "vec4"] {
-        let e = compile_for(&modf_fragment(ty, "highp"), u32_key(4)).expect_err("refused");
-        assert!(e.contains("integer colour outputs past the pixel's four output registers"), "{ty}: {e}");
+fn modf_vec3_and_vec4_spill_the_second_output() {
+    for prec in ["lowp", "mediump", "highp"] {
+        for ty in ["vec3", "vec4"] {
+            let key = u32_key(4);
+            let rec = compile_for(&modf_fragment(ty, prec), key).unwrap_or_else(|e| panic!("{ty} {prec}: {e}"));
+            assert_eq!((rec.num_outputs, rec.num_tile_buffers), (4, 1), "{ty} {prec}: r0-r3 and tile buffer 0");
+            assert_eq!(rec.blend_key, key, "{ty} {prec}: the variant's key in the record");
+            assert_eq!(tile_stores(&rec.image), 4, "{ty} {prec}: output 1's four dwords");
+            let (last, dst) = *ops(&rec.image).last().expect("a program");
+            assert_eq!((last, dst), ("nop", None), "{ty} {prec}: the stores' nop ends the program");
+            let fs = record(&rec);
+            assert_eq!(int_targets_drawn(&executor_draw(GLES_SURF_RGBA32UI, 2, &fs), Some(&fs)), Ok(()), "{ty} {prec}");
+        }
+    }
+    /* float and vec2 fit the registers: their programs store nothing */
+    for (ty, channels) in [("float", 1u8), ("vec2", 2)] {
+        let rec = compile_for(&modf_fragment(ty, "highp"), u32_key(channels)).expect("compiles");
+        assert_eq!((rec.num_tile_buffers, tile_stores(&rec.image)), (0, 0), "{ty}");
     }
 }
 
@@ -314,10 +345,15 @@ fn executor_draw(format: u8, n: u8, fs: &ShcShader) -> GlesDraw {
     d
 }
 
-/// The program record the back end reads at a draw: the variant's key and
-/// the dwords it writes.
+/// The program record the back end reads at a draw: the variant's key, the
+/// dwords it writes and the tile buffers it stores to.
 fn record(rec: &Rec) -> ShcShader {
-    ShcShader { blend_key: rec.blend_key, num_outputs: rec.num_outputs, ..ShcShader::ZERO }
+    ShcShader {
+        blend_key: rec.blend_key,
+        num_outputs: rec.num_outputs,
+        num_tile_buffers: rec.num_tile_buffers,
+        ..ShcShader::ZERO
+    }
 }
 
 /// The `*_vertex` cases: modf in the vertex shader compiles at every type
@@ -344,19 +380,32 @@ fn modf_vertex_executor_is_drawn_for_float_and_vec2() {
 }
 
 /// `vec3` and `vec4`: two RGBA32UI attachments take eight output registers,
-/// the pixel has four. The passthrough is refused by name, and a draw into
-/// them is refused whatever program it carries.
+/// the pixel has four. The passthrough writes attachment 0 to the registers
+/// and stores attachment 1 to tile buffer 0, and the back end draws the two
+/// attachments with exactly that program: one that claims eight registers,
+/// or stores nothing, is refused.
 #[test]
-fn modf_vertex_vec3_and_vec4_stay_refused() {
-    for ty in ["vec3", "vec4"] {
-        let e = compile_for(&passthrough_fragment(ty, "highp"), u32_key(4)).expect_err("refused");
-        assert!(e.contains("integer colour outputs past the pixel's four output registers"), "{ty}: {e}");
+fn modf_vertex_vec3_and_vec4_are_drawn_with_the_spilling_program() {
+    for prec in ["lowp", "mediump", "highp"] {
+        for ty in ["vec3", "vec4"] {
+            let rec = compile_for(&passthrough_fragment(ty, prec), u32_key(4))
+                .unwrap_or_else(|e| panic!("{ty} {prec} passthrough: {e}"));
+            assert_eq!((rec.num_outputs, rec.num_tile_buffers), (4, 1), "{ty} {prec}");
+            assert_eq!(tile_stores(&rec.image), 4, "{ty} {prec}");
+            let fs = record(&rec);
+            let d = executor_draw(GLES_SURF_RGBA32UI, 2, &fs);
+            assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()), "{ty} {prec}: drawn");
+        }
     }
-    let fs = ShcShader { blend_key: u32_key(4), num_outputs: 8, ..ShcShader::ZERO };
-    assert_eq!(
-        int_targets_drawn(&executor_draw(GLES_SURF_RGBA32UI, 2, &fs), Some(&fs)),
-        Err(REFUSE_ONE_LAYOUT_PAST_FOUR)
-    );
+    let d = |fs: &ShcShader| int_targets_drawn(&executor_draw(GLES_SURF_RGBA32UI, 2, fs), Some(fs));
+    let ok = ShcShader { blend_key: u32_key(4), num_outputs: 4, num_tile_buffers: 1, ..ShcShader::ZERO };
+    assert_eq!(d(&ok), Ok(()));
+    let eight = ShcShader { num_outputs: 8, num_tile_buffers: 0, ..ok };
+    assert_eq!(d(&eight), Err(REFUSE_NOT_A_MIX), "eight registers");
+    let no_store = ShcShader { num_tile_buffers: 0, ..ok };
+    assert_eq!(d(&no_store), Err(REFUSE_NOT_A_MIX), "attachment 1 from a tile buffer nothing stored to");
+    let one_target = ShcShader { num_outputs: 4, num_tile_buffers: 0, ..ok };
+    assert_eq!(d(&one_target), Err(REFUSE_NOT_A_MIX), "one RGBA32UI target's program");
 }
 
 /// What the back end still refuses beside an integer attachment: two
@@ -397,8 +446,9 @@ fn several_int_targets_are_drawn_only_with_their_program() {
 /// of the two. The program writes register 0, then the pair 2-3 (a
 /// two-dword target on an even register, 1 a hole), spans four registers,
 /// and the back end draws it; under one layout's key it does not. RGBA8
-/// beside RGBA32UI passes the pixel's four registers and stays refused by
-/// name, whatever the program.
+/// beside RGBA32UI passes the pixel's four registers: it is drawn under its
+/// own mixed key's program, which stores the RGBA32UI target to tile buffer
+/// 0, and under no other.
 #[test]
 fn two_integer_layouts_are_drawn_under_their_mixed_key() {
     let src = "#version 300 es\n\
@@ -426,5 +476,20 @@ fn two_integer_layouts_are_drawn_under_their_mixed_key() {
 
     let mut wide = executor_draw(0, 2, &fs);
     wide.targets[1].format = GLES_SURF_RGBA32UI;
-    assert_eq!(int_targets_drawn(&wide, Some(&fs)), Err(REFUSE_FOUR_REGISTERS));
+    assert_eq!(int_targets_drawn(&wide, Some(&fs)), Err(REFUSE_NOT_A_MIX), "another list's program");
+    let wide_src = "#version 300 es
+                    flat in highp vec4 v;
+                    layout(location = 0) out highp vec4 o0;
+                    layout(location = 1) out highp uvec4 o1;
+                    void main (void)
+{
+                    \to0 = v;
+                    \to1 = floatBitsToUint(v);
+                    }
+";
+    let wide_key = shc_blend_key_mixed(&[0, u32_key(4)]).expect("a mix past four registers");
+    let rec = compile_for(wide_src, wide_key).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!((rec.num_outputs, rec.num_tile_buffers, rec.blend_key), (1, 1, wide_key), "RGBA8 at r0, a spill");
+    let wide_fs = record(&rec);
+    assert_eq!(int_targets_drawn(&wide, Some(&wide_fs)), Ok(()));
 }

@@ -86,9 +86,10 @@ static struct {
 	struct pvr_gpu_bo eot_n[PVR_RENDER_EOT_MAX_RT + 1];
 	uint64_t eot_doutu_n[PVR_RENDER_EOT_MAX_RT + 1];
 	/* the same programs for a render whose last attachment comes from a
-	 * tile buffer, the four-target ones with the last k from tile buffers
-	 * (k = 1 is eot_tb_n[4], not uploaded twice), and the tile buffers
-	 * themselves */
+	 * tile buffer ([1], which no render of one attachment uses: three
+	 * attachments, the last two from tile buffers), the four-target ones
+	 * with the last k from tile buffers (k = 1 is eot_tb_n[4], not
+	 * uploaded twice), and the tile buffers themselves */
 	struct pvr_gpu_bo eot_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
 	uint64_t eot_doutu_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
 	struct pvr_gpu_bo eot_tb4_k[PVR_RENDER_TILE_BUFFERS + 1];
@@ -624,7 +625,8 @@ static void static_areas_init(void)
 						 TILE_BUFFER_ALLOC_BYTES);
 	for (unsigned n = 1; n <= PVR_RENDER_EOT_MAX_RT; n++)
 		eot_tb_upload(pvr_usc_eot_tb_n_words[n], pvr_usc_eot_tb_n_dwords[n],
-			      pvr_usc_eot_tb_n_addr_bytes[n], 1, &R.eot_tb_n[n], &R.eot_doutu_tb_n[n]);
+			      pvr_usc_eot_tb_n_addr_bytes[n], pvr_usc_eot_tb_n_spills[n],
+			      &R.eot_tb_n[n], &R.eot_doutu_tb_n[n]);
 	R.eot_tb4_k[1] = R.eot_tb_n[PVR_RENDER_EOT_MAX_RT];
 	R.eot_doutu_tb4_k[1] = R.eot_doutu_tb_n[PVR_RENDER_EOT_MAX_RT];
 	for (unsigned k = 2; k <= PVR_RENDER_TILE_BUFFERS; k++)

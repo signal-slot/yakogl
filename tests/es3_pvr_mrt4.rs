@@ -471,13 +471,29 @@ fn four_targets_spill_per_mrt_layout() {
     assert_spill(&rec, &[(0, 58), (2, 58), (4, 58)]);
 }
 
-/// The layouts no end-of-tile program was captured for are refused by name
-/// (an RGBA32UI target and one after it, two targets).
+/// Two targets with the second spilled, and three with the last two: the
+/// layouts that were refused by name until their end-of-tile programs were
+/// captured (`eot2_tb1`, `eot3_tb12`). An RGBA32UI target fills the four
+/// registers and the R32F one after it goes to tile buffer 0; of three
+/// RGBA32UI the last two go to tile buffers 0 and 1, four dwords each.
 #[test]
-fn a_spill_with_no_end_of_tile_program_is_refused() {
+fn two_and_three_targets_spill_past_an_rgba32ui() {
     let src = fragment(&[(0, "uvec4", "1u"), (1, "float", "0.5")]);
-    let e = compile(&src, Ok(&[RGBA32UI, R32F])).expect_err("refused");
-    assert!(e.contains("no end-of-tile program"), "{e}");
+    let t = [RGBA32UI, R32F];
+    assert_eq!(places(&t), [reg(0), tb(0)]);
+    let rec = compile_targets(&src, &t);
+    assert_eq!((rec.num_outputs, rec.num_tile_buffers), (4, 1));
+    assert_eq!(pixout_writes(&rec.image).iter().map(|w| w.0).collect::<Vec<_>>(), [0, 1, 2, 3]);
+    assert_spill(&rec, &[(0, 58)]);
+
+    let src = fragment(&[(0, "uvec4", "1u, 2u, 3u, 4u"), (1, "uvec4", "5u, 6u, 7u, 8u"), (2, "uvec4", "9u")]);
+    let t = [RGBA32UI; 3];
+    assert_eq!(places(&t), [reg(0), tb(0), tb(1)]);
+    let rec = compile_targets(&src, &t);
+    assert_eq!((rec.num_outputs, rec.num_tile_buffers), (4, 2));
+    assert_eq!(pixout_writes(&rec.image).iter().map(|w| w.0).collect::<Vec<_>>(), [0, 1, 2, 3]);
+    let four = |sh| [(sh, 58), (sh, 59), (sh, 60), (sh, 61)];
+    assert_spill(&rec, &[four(0), four(2)].concat());
 }
 
 /// The buffers' address pairs follow everything the program reads from the
