@@ -1143,4 +1143,277 @@ mod tests {
         let ops = [un(0, 0), fadd(1, 0, 0), Op71::LoopHead, un(2, 1), st(2, 1)];
         assert_eq!(sunk(&ops, false), ops);
     }
+
+    /// A vertex shader with `n` vec4 attributes, all read.
+    fn attrs_vs(n: usize) -> std::string::String {
+        let mut s = std::string::String::new();
+        for i in 0..n {
+            s += &std::format!("attribute vec4 a{i}; ");
+        }
+        s += "varying vec4 v_color; void main() { vec4 s = vec4(0.0); ";
+        for i in 0..n {
+            s += &std::format!("s += a{i}; ");
+        }
+        s += "v_color = s; gl_Position = s; }";
+        s
+    }
+
+    /// A fragment shader reading `n` vec4 varyings, each combined with a
+    /// uniform twice, all the results summed last: a great many values live
+    /// at once.
+    fn wide_fs(n: usize) -> std::string::String {
+        let mut s = std::string::String::from("precision mediump float; uniform vec4 u; ");
+        for i in 0..n {
+            s += &std::format!("varying vec4 v{i}; ");
+        }
+        s += "void main() { ";
+        for i in 0..n {
+            s += &std::format!("vec4 p{i} = v{i} * u; vec4 q{i} = v{i} + u; ");
+        }
+        s += "vec4 s = vec4(0.0); ";
+        for i in 0..n {
+            s += &std::format!("s += p{i} * q{i}; ");
+        }
+        s += "gl_FragColor = s; }";
+        s
+    }
+
+    fn wide_vs(n: usize) -> std::string::String {
+        let mut s = std::string::String::from("attribute vec4 a_pos; ");
+        for i in 0..n {
+            s += &std::format!("varying vec4 v{i}; ");
+        }
+        s += "void main() { gl_Position = a_pos; ";
+        for i in 0..n {
+            s += &std::format!("v{i} = a_pos; ");
+        }
+        s += "}";
+        s
+    }
+
+    const OPTS: (Prim, LodKey, LodKey) = (Prim::Triangles, LodKey::NONE, LodKey::NONE);
+
+    fn tri_result(vs: &str, fs: &str) -> Result<(), V3d71Error> {
+        let mut r = Ok(());
+        with_modules(vs, fs, |v, f, a| {
+            r = compile_program71_keyed(v, f, OPTS.0, TARGET71, OPTS.1, OPTS.2, a).map(|_| ());
+        });
+        r
+    }
+
+    /// `records.len() > 16` (the check after the attribute records are
+    /// collected): 16 attribute locations compile, 17 are refused by name,
+    /// as the 4.2 chain does.
+    #[test]
+    fn more_than_16_attribute_records_is_refused() {
+        assert_eq!(tri_result(&attrs_vs(16), INTERP_FS), Ok(()));
+        let want = V3dError::NotYet("more than 16 vertex attributes");
+        assert_eq!(tri_result(&attrs_vs(17), INTERP_FS), Err(V3d71Error::Chain(want)));
+        with_modules(&attrs_vs(17), INTERP_FS, |v, f, a| {
+            let r = chain::compile_program_keyed(v, f, OPTS.0, TARGET71, OPTS.1, OPTS.2, a).map(|_| ());
+            assert_eq!(r, Err(want));
+        });
+    }
+
+    /// A fragment shader reading 65 scalar varying inputs is past
+    /// MAX_FS_INPUTS (64): refused before selection, in the chain's error.
+    #[test]
+    fn more_than_64_fragment_inputs_is_refused() {
+        let mut fs = std::string::String::from("precision mediump float; varying float extra; ");
+        let mut vs = wide_vs(16);
+        vs = vs.replace("void main() {", "varying float extra; void main() { extra = 1.0;");
+        for i in 0..16 {
+            fs += &std::format!("varying vec4 v{i}; ");
+        }
+        fs += "void main() { gl_FragColor = extra";
+        for i in 0..16 {
+            fs += &std::format!(" + v{i}");
+        }
+        fs += "; }";
+        assert_eq!(tri_result(&vs, &fs), Err(V3d71Error::Chain(V3dError::TooManyFragmentInputs)));
+    }
+
+    /// A vertex shader the program's fragment shader reads no varying of is
+    /// still a program; but a varying the vertex shader lacks is
+    /// VaryingWithoutVertexOutput, in the chain's own error.
+    #[test]
+    fn a_varying_without_a_vertex_output_is_the_chains_error() {
+        let vs = "attribute vec4 a_pos; void main() { gl_Position = a_pos; }";
+        assert_eq!(tri_result(vs, INTERP_FS), Err(V3d71Error::Chain(V3dError::VaryingWithoutVertexOutput)));
+        let fs = "precision mediump float; void main() { gl_FragColor = vec4(1.0); }";
+        assert_eq!(tri_result(vs, fs), Ok(()));
+    }
+
+    /// A vertex stage with no viewport x/y pair is select71's defect
+    /// refusal, [`V3d71Error::Select`], not an unfinished stage.
+    #[test]
+    fn a_select71_refusal_is_the_select_variant() {
+        let sel = super::super::vop71::empty_selected(false);
+        let mut buf = std::vec![0u8; 4096];
+        let a = Arena::new(&mut buf);
+        assert_eq!(compile_stage71(&sel, &a).err(), Some(V3d71Error::Select(Select71Error::ViewportXyMissing)));
+        assert_eq!(build71(&sel, true, &a).err(), Some(V3d71Error::Select(Select71Error::ViewportXyMissing)));
+    }
+
+    /// Every stage error converts as the `From` impls say: the arena's and
+    /// the stages' own out-of-scratch to [`V3d71Error::OutOfScratch`], the
+    /// rest to the stage's variant.
+    #[test]
+    fn stage_errors_convert_to_their_variant() {
+        assert_eq!(V3d71Error::from(ArenaError::OutOfScratch), V3d71Error::OutOfScratch);
+        assert_eq!(V3d71Error::from(Select71Error::OutOfScratch), V3d71Error::OutOfScratch);
+        assert_eq!(V3d71Error::from(Alloc71Error::OutOfScratch), V3d71Error::OutOfScratch);
+        assert_eq!(V3d71Error::from(Sched71Error::OutOfScratch), V3d71Error::OutOfScratch);
+        assert_eq!(V3d71Error::from(Select71Error::NotOn71("x")), V3d71Error::Select(Select71Error::NotOn71("x")));
+        assert_eq!(V3d71Error::from(Alloc71Error::Threads), V3d71Error::Alloc(Alloc71Error::Threads));
+        assert_eq!(V3d71Error::from(Sched71Error::ControlFlow(3)), V3d71Error::Sched(Sched71Error::ControlFlow(3)));
+        assert_eq!(V3d71Error::from(V3dError::VpmTooSmall), V3d71Error::Chain(V3dError::VpmTooSmall));
+        assert_eq!(
+            V3d71Error::from(SelectError::NotSelected),
+            V3d71Error::Chain(V3dError::from(SelectError::NotSelected))
+        );
+    }
+
+    /// A scratch arena with nothing left: every compile that reaches
+    /// allocation ends in an out-of-scratch error (the stage's own, or the
+    /// chain's), never a panic, and never a program.
+    #[test]
+    fn an_arena_with_no_room_left_is_out_of_scratch() {
+        for left in [0usize, 64, 1024] {
+            let mut r = Ok(());
+            with_modules(PASSTHROUGH_VS, INTERP_FS, |v, f, a| {
+                let keep = a.left().saturating_sub(left);
+                let _ = a.alloc_filled(keep, 0u8);
+                r = compile_program71_keyed(v, f, OPTS.0, TARGET71, OPTS.1, OPTS.2, a).map(|_| ());
+            });
+            let oom = r.err().is_some_and(|e| std::format!("{e:?}").contains("OutOfScratch"));
+            assert!(oom, "{left} bytes left: {r:?}");
+        }
+    }
+
+    /// Too many values live at once at any pressure and either order:
+    /// DoesNotFit at 2 threads, the allocator's own refusal (no spilling).
+    #[test]
+    fn values_that_fit_no_register_file_are_refused_as_alloc_does_not_fit() {
+        assert_eq!(tri_result(&wide_vs(16), &wide_fs(16)), Err(V3d71Error::Alloc(Alloc71Error::DoesNotFit)));
+        /* fifteen of them fit, at some pressure or order */
+        assert_eq!(tri_result(&wide_vs(15), &wide_fs(15)), Ok(()));
+    }
+
+    /// The fragment shader's [`Selected`] at pressure `pr`, as
+    /// compile_program71_keyed selects it (no flat or centroid inputs).
+    fn fs_selected<'a>(f: &'a ir::Module<'a>, pr: Pressure, a: &'a Arena<'a>) -> Result<Selected<'a>, SelectError> {
+        let fsp = prepare_fragment_with(f, &[], 0, a).unwrap();
+        let inputs = fragment_inputs(&fsp, a).unwrap();
+        select_fragment_keyed(&fsp, inputs, 0, 0, LodKey::NONE, pr, a)
+    }
+
+    /// under_pressure71 asks for each pressure in the order given, with
+    /// select71's order of operations; when none fits it asks for them all
+    /// again with the operations sunk, then gives DoesNotFit. A stage that
+    /// fits stops the walk at once.
+    #[test]
+    fn under_pressure71_walks_the_pressures_twice_then_gives_up() {
+        use std::cell::RefCell;
+        let stages = [Pressure::None, Pressure::Remat, Pressure::Serial];
+        with_modules(&wide_vs(16), &wide_fs(16), |_, f, a| {
+            let asked = RefCell::new(std::vec::Vec::new());
+            let r = under_pressure71(
+                &stages,
+                |pr| {
+                    asked.borrow_mut().push(pr);
+                    fs_selected(f, pr, a)
+                },
+                false,
+                a,
+            );
+            assert_eq!(r.err(), Some(V3d71Error::Alloc(Alloc71Error::DoesNotFit)));
+            let want: std::vec::Vec<Pressure> = stages.iter().chain(stages.iter()).copied().collect();
+            assert_eq!(*asked.borrow(), want);
+        });
+        with_modules(PASSTHROUGH_VS, INTERP_FS, |_, f, a| {
+            let asked = RefCell::new(0);
+            let (sel, (code, threads)) = under_pressure71(
+                &stages,
+                |pr| {
+                    *asked.borrow_mut() += 1;
+                    fs_selected(f, pr, a)
+                },
+                false,
+                a,
+            )
+            .unwrap();
+            assert_eq!(*asked.borrow(), 1, "the first pressure fits");
+            assert!(sel.fragment);
+            check71("fs", &code, threads, false);
+        });
+    }
+
+    /// A selection error is the walk's end: its own variant, no further
+    /// pressure asked; an empty list of pressures is DoesNotFit.
+    #[test]
+    fn under_pressure71_stops_at_a_selection_error() {
+        with_modules(PASSTHROUGH_VS, INTERP_FS, |_, f, a| {
+            let n = std::cell::Cell::new(0);
+            let r = under_pressure71(
+                &[Pressure::None, Pressure::Remat],
+                |_| {
+                    n.set(n.get() + 1);
+                    Err(SelectError::NotSelected)
+                },
+                false,
+                a,
+            );
+            let _ = f;
+            assert_eq!(r.err(), Some(V3d71Error::Chain(V3dError::from(SelectError::NotSelected))));
+            assert_eq!(n.get(), 1);
+            let r = under_pressure71(&[], |_| Err(SelectError::NotSelected), false, a);
+            assert_eq!(r.err(), Some(V3d71Error::Alloc(Alloc71Error::DoesNotFit)));
+        });
+    }
+
+    /// A fragment shader reading nothing but gl_PointCoord: the points
+    /// variant takes the two implicit varyings (and no declared one), the
+    /// lines variant none, and the triangles build is the points one.
+    #[test]
+    fn a_point_coord_only_shader_in_each_variant() {
+        let fs = "precision mediump float; void main() { gl_FragColor = vec4(gl_PointCoord, 0.0, 1.0); }";
+        with_modules(PASSTHROUGH_VS, fs, |v, f, a| {
+            let tri = compile71(v, f, Prim::Triangles, a);
+            let pts = compile71(v, f, Prim::Points, a);
+            let lines = compile71(v, f, Prim::Lines, a);
+            assert_eq!(pts.fs.code.words, tri.fs.code.words);
+            assert!(pts.fs.uses_implicit_point_line_varyings && tri.fs.uses_implicit_point_line_varyings);
+            assert_eq!(pts.fs.num_inputs, 0);
+            assert_eq!(ldvarys(&pts.fs.code), 2);
+            assert!(!lines.fs.uses_implicit_point_line_varyings);
+            assert_eq!(lines.fs.num_inputs, 0);
+            assert_eq!(ldvarys(&lines.fs.code), 0);
+            assert_ne!(lines.fs.code.words, pts.fs.code.words);
+        });
+    }
+
+    /// Every word of a wide set of programs decodes with codec71 to its
+    /// instruction and passes verify71 at the stage's thread count, for each
+    /// primitive: 16 attribute records, 15 live varyings (built sunk or at a
+    /// higher pressure), a loop with a branch.
+    #[test]
+    fn every_word_of_other_programs_decodes_and_verifies() {
+        let looped = include_str!("../../../../tools/shaders/es100/databreak.frag");
+        let progs: [(&str, std::string::String, std::string::String); 3] = [
+            ("attrs16", attrs_vs(16), INTERP_FS.into()),
+            ("wide15", wide_vs(15), wide_fs(15)),
+            ("loop", PASSTHROUGH_VS.into(), looped.into()),
+        ];
+        for (what, vs, fs) in &progs {
+            with_modules(vs, fs, |v, f, a| {
+                for prim in [Prim::Triangles, Prim::Points, Prim::Lines] {
+                    let p = compile71(v, f, prim, a);
+                    for c in [&p.fs.code, &p.vs.code, &p.cs.code] {
+                        assert!(!c.words.is_empty(), "{what} {prim:?}");
+                    }
+                }
+            });
+        }
+    }
 }
