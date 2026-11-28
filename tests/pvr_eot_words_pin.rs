@@ -682,7 +682,7 @@ struct Fmt {
 }
 
 const RGBA8: Fmt = Fmt { name: "RGBA8", gl: GL_RGBA8, ty: Ty::F, dwords: 1 };
-const RGB10_A2: Fmt = Fmt { name: "RGB10_A2", gl: GL_RGB10_A2, ty: Ty::F, dwords: 1 };
+const RGB10_A2: Fmt = Fmt { name: "RGB10_A2", gl: GL_RGB10_A2, ty: Ty::F, dwords: 2 };
 const RGBA16F: Fmt = Fmt { name: "RGBA16F", gl: GL_RGBA16F, ty: Ty::F, dwords: 2 };
 const R32F: Fmt = Fmt { name: "R32F", gl: GL_R32F, ty: Ty::F, dwords: 1 };
 const R32UI: Fmt = Fmt { name: "R32UI", gl: GL_R32UI, ty: Ty::U, dwords: 1 };
@@ -766,9 +766,11 @@ fn one_rgba8() {
     pin(&[&RGBA8], 0x1001, &[0x0008_2000]);
 }
 
+/* RGB10_A2 is the 10/10/10/2 surface (tests/pvr_rgb10a2_rb.rs): F16 source
+ * (bit 19 clear), normalised, pack mode A2R10B10G10 (14) */
 #[test]
 fn one_rgb10_a2() {
-    pin(&[&RGB10_A2], 0x1001, &[0x0008_2000]);
+    pin(&[&RGB10_A2], 0x1001, &[0x0000_2700]);
 }
 
 #[test]
@@ -820,12 +822,46 @@ fn two_rg32i() {
     pin(&[&RG32I, &RG32I], 0x1002, &[0x0008_1480, 0x0009_9480]);
 }
 
-/* RGBA8 and RGB10_A2 are both one dword and the unorm class: the same words
- * in either order. */
+/// Draws `fmts`, which the back end must refuse: `GL_INVALID_OPERATION`, no
+/// kick. Returns the log (the back end names a refusal once a process).
+fn refused(fmts: &[&Fmt]) -> Vec<String> {
+    let _r = rig(0);
+    let tys: Vec<Ty> = fmts.iter().map(|f| f.ty).collect();
+    let gl: Vec<GLenum> = fmts.iter().map(|f| f.gl).collect();
+    let (fb, rbs) = framebuffer(&gl);
+    assert_eq!(err(), GL_NO_ERROR);
+    // SAFETY: plain GL calls; readable enums.
+    unsafe {
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        glDrawBuffers(fmts.len() as GLsizei, ATT.as_ptr());
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    use_program(&fs_for(&tys));
+    let before = kicks();
+    draw_triangle();
+    let e = err();
+    let k = kicks();
+    release(fb, &rbs);
+    assert_eq!(
+        e,
+        GL_INVALID_OPERATION,
+        "{} refused: {:?}",
+        fmts.iter().map(|f| f.name).collect::<Vec<_>>().join("+"),
+        logs()
+    );
+    assert_eq!(k, before, "no kick");
+    logs()
+}
+
+/* An RGB10_A2 attachment (two dwords of halves) beside another is refused by
+ * name (`REFUSE_RGB10A2_MRT`), in either order and beside itself. */
 #[test]
 fn rgba8_beside_rgb10_a2() {
-    pin(&[&RGBA8, &RGB10_A2], 0x1002, &[0x0008_2000, 0x0009_6000]);
-    pin(&[&RGB10_A2, &RGB10_A2], 0x1002, &[0x0008_2000, 0x0009_6000]);
+    let why = "an RGB10_A2 colour attachment beside another";
+    let mut log = refused(&[&RGBA8, &RGB10_A2]);
+    log.extend(refused(&[&RGB10_A2, &RGBA8]));
+    log.extend(refused(&[&RGB10_A2, &RGB10_A2]));
+    assert!(log.iter().any(|l| l.contains(why)), "{why}: {log:?}");
 }
 
 /* Two RGBA16F and two R32F targets: the GL core keys the draw with the plain
@@ -851,10 +887,12 @@ fn two_r32f() {
  * (RGBA32UI has no accepted pair today). */
 #[test]
 fn dwords_per_format_from_source_positions() {
-    for (f, dw) in [(&RGBA8, 1), (&RGB10_A2, 1), (&R32UI, 1), (&RG32I, 2), (&RGBA16F, 2), (&R32F, 1)] {
+    for (f, dw) in [(&RGBA8, 1), (&R32UI, 1), (&RG32I, 2), (&RGBA16F, 2), (&R32F, 1)] {
         assert_eq!(f.dwords, dw, "{} table", f.name);
         let s = draw(&[f, f]).unwrap_or_else(|| panic!("{} pair refused", f.name));
         assert_eq!(source_pos(s.words[1][1]), dw, "{}: the second target's source_pos", f.name);
     }
     assert_eq!(RGBA32UI.dwords, 4);
+    /* RGB10_A2 has no accepted pair: its two dwords are the back end's */
+    assert_eq!(RGB10_A2.dwords, surf_out_dwords(backend::GLES_SURF_RGB10_A2));
 }

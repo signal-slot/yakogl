@@ -24,8 +24,11 @@
 //!   GL_RGB10_A2 from an RGBA8 framebuffer is refused with the error the
 //!   code gives (see `es2` below).
 //!
+//! The PowerVR build holds the class (`PVR_SAMPLED_TEXFMTS` has
+//! `GLES_TEXFMT_RGB10A2`, tests/pvr_rgb10a2_rb.rs) and compiles this file
+//! only under `report-es2`.
+//!
 //! ```text
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,test-knobs --test es3_rgb10a2_copytex_fallback
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --test es3_rgb10a2_copytex_fallback
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es3_rgb10a2_copytex_fallback
 //! ```
@@ -33,7 +36,7 @@
 //! Compiled only where the class falls back: the V3D build without
 //! `report-es2` stores the class and runs zero tests of this file.
 
-#![cfg(all(feature = "host-test", any(feature = "gpu-powervr", feature = "gpu-vivante", feature = "report-es2")))]
+#![cfg(all(feature = "host-test", any(feature = "gpu-vivante", feature = "report-es2")))]
 // the ES 2.0 report runs the one refusal pin; the helpers of the rest are idle there
 #![cfg_attr(feature = "report-es2", allow(dead_code, unused_imports))]
 

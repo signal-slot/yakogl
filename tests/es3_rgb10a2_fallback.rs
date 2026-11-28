@@ -36,8 +36,11 @@
 //! RGBA8888 target as the RGBA8 bytes a back end would, at the core's
 //! pair-padded pitch, and records each target's surface; no GPU runs.
 //!
+//! The PowerVR build holds the class (`PVR_SAMPLED_TEXFMTS` has
+//! `GLES_TEXFMT_RGB10A2`, tests/pvr_rgb10a2_rb.rs) and compiles this file
+//! only under `report-es2`.
+//!
 //! ```text
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,test-knobs --test es3_rgb10a2_fallback
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --test es3_rgb10a2_fallback
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es3_rgb10a2_fallback
 //! ```
@@ -47,7 +50,7 @@
 //! answers are the read-back item's, src/gl/blit.rs and
 //! tests/es3_readback_v3d.rs).
 
-#![cfg(all(feature = "host-test", any(feature = "gpu-powervr", feature = "gpu-vivante", feature = "report-es2")))]
+#![cfg(all(feature = "host-test", any(feature = "gpu-vivante", feature = "report-es2")))]
 // the ES 2.0 report runs the allocation pins only; the helpers of the rest are idle there
 #![cfg_attr(feature = "report-es2", allow(dead_code, unused_imports))]
 

@@ -236,10 +236,10 @@ fn storage_per_gpu_and_the_refusals() {
             }
         }
     }
-    /* the PowerVR samples every class natively (formats-pvr) but RGB10_A2's,
-     * which stays in RGBA8 until it is a render target there */
+    /* the PowerVR samples every class natively (formats-pvr), RGB10_A2's
+     * too since it renders it (tests/pvr_rgb10a2_rb.rs) */
     let pvr = PVR_SAMPLED_TEXFMTS;
-    for e in FORMATS.iter().filter(|e| e.name != "GL_RGB10_A2") {
+    for e in FORMATS.iter() {
         assert_eq!(e.storage_in(pvr), sampled_class(e), "PowerVR {}: its own class", e.name);
     }
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(pvr), Some(GLES_TEXFMT_R11G11B10F));
@@ -247,7 +247,7 @@ fn storage_per_gpu_and_the_refusals() {
     assert_eq!(fmt(GL_RGB16F).storage_in(pvr), Some(GLES_TEXFMT_RGBA16F));
     assert_eq!(fmt(GL_RGBA8_SNORM).storage_in(pvr), Some(GLES_TEXFMT_RGBA8_SNORM));
     assert_eq!(fmt(GL_RG32F).storage_in(pvr), Some(GLES_TEXFMT_RGBA32F));
-    assert_eq!(fmt(GL_RGB10_A2).storage_in(pvr), Some(GLES_TEXFMT_RGBA8));
+    assert_eq!(fmt(GL_RGB10_A2).storage_in(pvr), Some(GLES_TEXFMT_RGB10A2));
     assert_eq!(fmt(GL_RGB10_A2UI).storage_in(pvr), Some(GLES_TEXFMT_RGB10A2UI));
     assert_eq!(fmt(GL_RG16UI).storage_in(pvr), Some(GLES_TEXFMT_RGBA16UI));
     /* the GC7000 samples the eight decoded classes natively (formats-gc) */

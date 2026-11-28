@@ -53,8 +53,11 @@
 //!   there for a rule to reach (as tests/es3_rgb10a2_fallback.rs holds for
 //!   glTexImage2D).
 //!
+//! The PowerVR build holds the class (`PVR_SAMPLED_TEXFMTS` has
+//! `GLES_TEXFMT_RGB10A2`, tests/pvr_rgb10a2_rb.rs) and compiles this file
+//! only under `report-es2`.
+//!
 //! ```text
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,test-knobs --test es3_rgb10a2_texstorage_fallback
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --test es3_rgb10a2_texstorage_fallback
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test es3_rgb10a2_texstorage_fallback
 //! ```
@@ -65,7 +68,7 @@
 //! No GPU runs: the stand-in back end draws nothing but the clears the tests
 //! make it store.
 
-#![cfg(all(feature = "host-test", any(feature = "gpu-powervr", feature = "gpu-vivante", feature = "report-es2")))]
+#![cfg(all(feature = "host-test", any(feature = "gpu-vivante", feature = "report-es2")))]
 // the ES 2.0 report runs the refusal pins only; the helpers of the rest are idle there
 #![cfg_attr(feature = "report-es2", allow(dead_code, unused_imports))]
 
