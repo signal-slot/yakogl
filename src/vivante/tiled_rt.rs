@@ -406,12 +406,15 @@ mod tests {
     #[test]
     fn long_program_splits_terrain_from_blits_and_overlays() {
         for (name, instrs, want) in [
-            ("terrain.frag", 80, true),
-            ("tilt_h.frag", 57, false),
-            ("bloom_v.frag", 32, false),
-            ("normalmap.frag", 20, false),
-            ("luminance.frag", 7, false),
+            /* the current pins of tests/gc_terrain_shader_count.rs and gc_sr_shader_count.rs */
+            ("terrain.frag", 75, true),
+            ("tilt_h.frag", 29, false),
+            ("bloom_v.frag", 16, false),
+            ("normalmap.frag", 17, false),
+            ("luminance.frag", 6, false),
             ("overlay.frag", 2, false),
+            /* 64 before rank 3, which was long; 55 now */
+            ("refract.frag", 55, false),
         ] {
             assert_eq!(long_program(instrs * 4, LONG_PROGRAM_INSTRS), want, "{name}");
         }
