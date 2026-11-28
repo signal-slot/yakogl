@@ -2489,9 +2489,11 @@ fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
 /// `convert_inputs16`). A varying whose lanes read are all one lane is one
 /// conversion (deqp_varylink_swz_xx, byte-equal in
 /// tests/mali_deqp_varylink.rs). Equal lanes beside another lane read
-/// (`in0.xxy`) and equal lanes of two varyings have no reference: the
-/// fragment shader is refused by name, and compiles where the vertex
-/// shader stores no equal lanes.
+/// (`in0.xxy`) are the distinct lanes' conversions, the merged lane read
+/// from its first one's (deqp_varylink2_swz_mixed, byte-equal in
+/// tests/mali_deqp_varylink2.rs): the fragment shader compiles. Equal lanes
+/// of two varyings have no reference: the fragment shader is refused by
+/// name, and compiles where the vertex shader stores no equal lanes.
 #[test]
 fn merged_lanes_of_a_result_check_without_a_reference_are_refused() {
     const VS_XYZ: &str = "attribute highp vec4 p; attribute mediump vec3 in0; varying mediump vec3 out0; void main(){ out0 = in0; gl_Position = p; }";
@@ -2509,7 +2511,9 @@ fn merged_lanes_of_a_result_check_without_a_reference_are_refused() {
         store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
             .expect("the scratch arena is free")
     };
-    for (name, apart, merged, fs) in [("xxy", VS_XYZ, VS_XXY, FS_ONE), ("two varyings", VS_APART, VS_SAME, FS_TWO)] {
+    compile(VS_XYZ, FS_ONE).unwrap_or_else(|e| panic!("xyz: the fragment shader is refused: {e:?}"));
+    compile(VS_XXY, FS_ONE).unwrap_or_else(|e| panic!("xxy: the fragment shader of merged lanes is refused: {e:?}"));
+    for (name, apart, merged, fs) in [("two varyings", VS_APART, VS_SAME, FS_TWO)] {
         compile(apart, fs).unwrap_or_else(|e| panic!("{name}: the fragment shader of lanes apart is refused: {e:?}"));
         match compile(merged, fs) {
             Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => {

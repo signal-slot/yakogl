@@ -9,8 +9,13 @@
 //! proposed lowering are in `docs/notes/mali-deqp-varylink2.md`.
 //!
 //! `fract_vec2` is byte-equal (plan #387 item negzero-lower, step V1 = P2
-//! of `docs/notes/mali-posvary-lowering.md`). Every other reference is
-//! refused at the tip: each test is `#[ignore]`d with its refusal quoted.
+//! of `docs/notes/mali-posvary-lowering.md`), and `swz_mixed`,
+//! `mediump_vec4_yyw`, `mediump_vec3_bbg` and `mediump_vec4_aaag` (nir_fs.rs
+//! `convert_inputs16`: equal lanes beside a distinct lane, the distinct
+//! lanes paired by their place in the compacted slot). `prec_mixed`
+//! compiles with other words than Mesa's ([`DIFFERS`]). Every other
+//! reference is refused at the tip: each test is `#[ignore]`d with its
+//! refusal quoted.
 //! `refusals_pinned` runs now and asserts each reference's exact current
 //! refusal, so the lowering that reaches one moves its pin and
 //! removes its ignore. Shape U (`a varying lane left unwritten`) and the
@@ -27,9 +32,7 @@ const EQUAL: &str = "Valhall: two varying lanes of equal value (Mesa's link merg
 const NO_ATTRIBUTE: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
 
 /// Each reference and the refusal it meets at the tip.
-const PINS: [(&str, &str); 7] = [
-    ("swz_mixed", EQUAL),
-    ("prec_mixed", EQUAL),
+const PINS: [(&str, &str); 5] = [
     ("mat2", EQUAL),
     ("loop_bcast", EQUAL),
     ("vec_uniform", NO_ATTRIBUTE),
@@ -37,18 +40,46 @@ const PINS: [(&str, &str); 7] = [
     ("loop_uniform", NO_ATTRIBUTE),
 ];
 
+/// The references that compile with other words than Mesa's:
+/// `prec_mixed`'s fragment sum `var.x + var.y + var.z + var.w` of the merged
+/// `z` and `w` is two `FADD.v2f16` of `z` where Mesa makes one `FMA.v2f16
+/// z, 2.0, x + y` (a rewrite of `(a + b) + b` no rule of ours makes).
+const DIFFERS: &[&str] = &["prec_mixed"];
+
 /// `out0 = in0.grg`: Mesa merges lane 2 into lane 0 at the link and stores
-/// two lanes (`VAR0.xy`).
+/// two lanes (`VAR0.xy`); the fragment shader converts lanes 0 and 1 as a
+/// pair and reads lane 2 as lane 0.
 #[test]
-#[ignore = "refused at the link: two varying lanes of equal value (Mesa's link merges them); pinned by refusals_pinned"]
 fn swz_mixed() {
     mali_ref::assert_matches("deqp_varylink2_swz_mixed");
+}
+
+/// `out0 = in0.yyw`: Mesa merges lane 1 into lane 0 and compacts the slot,
+/// storing y and w as `VAR0.xy`; the fragment shader converts lanes 0 and 2
+/// as one pair (`V2F32_TO_V2F16`) and reads lane 1 as lane 0.
+#[test]
+fn mediump_vec4_yyw() {
+    mali_ref::assert_matches("deqp_varylink2_mediump_vec4_yyw");
+}
+
+/// `out0 = in0.bbg`: lane 1 merged into lane 0, b and g stored as
+/// `VAR0.xy`, lanes 0 and 2 converted as one pair.
+#[test]
+fn mediump_vec3_bbg() {
+    mali_ref::assert_matches("deqp_varylink2_mediump_vec3_bbg");
+}
+
+/// `out0 = in0.aaag`: lanes 1 and 2 merged into lane 0, a and g stored as
+/// `VAR0.xy`, lanes 0 and 3 converted as one pair.
+#[test]
+fn mediump_vec4_aaag() {
+    mali_ref::assert_matches("deqp_varylink2_mediump_vec4_aaag");
 }
 
 /// `var = vec4(in0, 2.0*in0, -in0, -in0)`: Mesa merges `w` into `z` and
 /// stores three lanes (`VAR0.xyz`).
 #[test]
-#[ignore = "refused at the link: two varying lanes of equal value (Mesa's link merges them); pinned by refusals_pinned"]
+#[ignore = "compiles with other words than Mesa's: two FADD.v2f16 of the merged lane where Mesa makes FMA.v2f16 z, 2.0, x + y; pinned by refusals_pinned"]
 fn prec_mixed() {
     mali_ref::assert_matches("deqp_varylink2_prec_mixed");
 }
@@ -105,9 +136,19 @@ fn fract_vec2() {
 /// reference that moved.
 #[test]
 fn refusals_pinned() {
-    let moved: Vec<String> = PINS
+    let mut moved: Vec<String> = PINS
         .iter()
         .filter_map(|(name, text)| mali_ref::refusal_change(&format!("deqp_varylink2_{name}"), text))
         .collect();
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(&format!("deqp_varylink2_{name}"));
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(pair) if mali_ref::differences(&r, &pair).is_empty() => {
+                moved.push(format!("{name}: now matches; remove its #[ignore] and its DIFFERS entry"))
+            }
+            Ok(_) => {}
+            Err(e) => moved.push(format!("{name}: expected to compile with other words, refused: {e}")),
+        }
+    }
     assert!(moved.is_empty(), "pins moved:\n{}", moved.join("\n"));
 }

@@ -958,3 +958,49 @@ scenes compile-clean, as before) and no `tools/mali/corpus-verdicts.txt`
 line. The unit test `each_mali_link_outcome_is_its_own_line` now asserts
 that an unwritten varying has no stored slot, where it used to assert a
 refusal.
+
+## Equal lanes beside a distinct lane (item lower-smallrest, 2026-11-28)
+
+Patch A of spike-smallrest, in `convert_inputs16` (nir_fs.rs). Until now a
+mediump fragment shader refused the read of a varying in which some lanes
+were merged by the link and others were not (`VaryingDuplicate`, "two
+varying lanes of equal value"). Only the case where every lane read was
+one lane (deqp_varylink_swz_xx) compiled. The rule is now:
+
+- Each lane equal to an earlier lane of the same varying (the same
+  `(slot, lane)` in `lane_of`) reads that earlier lane's conversion
+  (`from[c]`, Mesa's `nir_opt_cse` of the one load). The other lanes are
+  converted.
+- With a lane merged, the converted lanes pair by their **place in the
+  slot**, not their GLSL lane. The link compacts the slot, so a lane at an
+  even place pairs with the lane at the next place. `out0 = in0.yyw` stores
+  y and w as `VAR0.xy`, and Mesa converts them as one `V2F32_TO_V2F16 r0,
+  r0^, r1^` (GLSL lanes 0 and 2). Pairing by GLSL lane, as the first version
+  of the patch did, gives two single conversions and fails `yyw`, `bbg` and
+  `aaag`. With no lane merged, the old rule (aligned GLSL pairs) holds.
+- Equal lanes of **two** varyings still have no reference and are still
+  refused by name.
+
+Byte-equal in `tests/mali_deqp_varylink2.rs`: `swz_mixed` (`in0.grg`),
+`mediump_vec4_yyw`, `mediump_vec3_bbg` and `mediump_vec4_aaag` (the Mesa
+26.2.1 references of item ref-varylink2-swz). spike-smallrest found all 33
+swizzle cases of this refusal byte-equal against scratch references. Only
+these four are committed.
+
+`prec_mixed` now compiles, but with other words than Mesa's: its fragment
+sum adds the merged lane `z` twice (two `FADD.v2f16`), where Mesa rewrites
+`(a + b) + b` into `FMA.v2f16 z, 2.0, x + y`. It stays ignored, and the
+`DIFFERS` list in `refusals_pinned` checks that it still compiles and does
+not yet match.
+
+Moved beside it: no glmark2 verdict (`mali_glmark2_corpus` passes
+unchanged) and no `tools/mali/corpus-verdicts.txt` line. The unit test
+`merged_lanes_of_a_result_check_without_a_reference_are_refused` keeps its
+name, but now asserts that `xxy` compiles. Only its two-varying case is
+still refused.
+
+Left: `mat2` and the other `scalar_to_matrix` cases (spike-smallrest's
+patch B: the conversion of a shared-slot column must be placed at its first
+reader, and the `bool_to_mat*` / `int_to_mat*` vertex programs must be
+studied), `prec_mixed`'s rewrite, and the 9 NS `loop_bcast` cases (the
+vertex fp16 loop).
