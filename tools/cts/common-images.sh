@@ -63,16 +63,32 @@
 #   ZEPHYR_SDK_INSTALL_DIR, RUSTUP_TOOLCHAIN as for any sample with Rust in it
 #   GLMARK2_SRC      the glmark2 checkout the glmark2 sample pins (its CMakeLists)
 #   am62p: driver/src/fw/pvr_fw_blob.h in this checkout (driver/tools/mkfwblob.sh,
-#          never committed)
+#          never committed), or PVR_FW_BLOB, the file to copy there when it is
+#          missing (an existing header is never overwritten; with neither the
+#          script stops before any build)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 die() { echo "common-images: $*" >&2; exit 2; }
-DRY=0 CASES= PIPE=0
+DRY=0 CASES= PIPE=0 FWONLY=0
+# place_fw_blob: the AM62P build includes driver/src/fw/pvr_fw_blob.h (gitignored,
+# never committed). An existing header is kept as it is; else it is copied from
+# the file $PVR_FW_BLOB names; with neither, stop before any build.
+place_fw_blob() {
+    local h=$REPO/driver/src/fw/pvr_fw_blob.h
+    [ -e "$h" ] && return 0
+    [ -n "${PVR_FW_BLOB:-}" ] ||
+        die "driver/src/fw/pvr_fw_blob.h is missing and PVR_FW_BLOB is not set: set PVR_FW_BLOB to the firmware header file (made by driver/tools/mkfwblob.sh; never commit it)"
+    [ -f "$PVR_FW_BLOB" ] && [ -r "$PVR_FW_BLOB" ] ||
+        die "driver/src/fw/pvr_fw_blob.h is missing and PVR_FW_BLOB ($PVR_FW_BLOB) is not a readable file"
+    mkdir -p "$REPO/driver/src/fw" && cp "$PVR_FW_BLOB" "$h" ||
+        die "cannot copy PVR_FW_BLOB to driver/src/fw/pvr_fw_blob.h"
+}
 while [ $# -gt 0 ]; do
     case "$1" in
     --dry-run) DRY=1; shift ;;
     --pipe) PIPE=1; shift ;;
+    --fw-blob-only) FWONLY=1; shift ;;
     --cases) [ $# -ge 2 ] || die "--cases needs a list"; CASES=$2; shift 2 ;;
     --cases=*) CASES=${1#--cases=}; shift ;;
     -*) die "unknown option $1" ;;
@@ -80,6 +96,10 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -z "$CASES" ] || [[ $CASES =~ ^[0-9]+(,[0-9]+)*$ ]] || die "--cases takes comma-separated case numbers, not '$CASES'"
+if [ "$FWONLY" = 1 ]; then # self-test hook (test_common_images_fw_blob.sh): only the header step
+    [ "${1:-}" = am62p ] && place_fw_blob
+    exit 0
+fi
 [ $# -ge 3 ] || die "usage: $0 [--dry-run] [--cases LIST] [--pipe] <am62p|pi4|imx8mp> <table> <img-dir> [LABEL...]"
 BOARD=$1 TABLE=$2 OUT=$3
 shift 3
@@ -173,8 +193,7 @@ fi
 [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
 command -v west > /dev/null || die "west not on PATH (set WEST_VENV)"
 if [ "$BOARD" = am62p ]; then
-    [ -f "$REPO/driver/src/fw/pvr_fw_blob.h" ] ||
-        die "driver/src/fw/pvr_fw_blob.h missing: generate it with driver/tools/mkfwblob.sh (never commit it)"
+    place_fw_blob
 fi
 # each input a selected row needs, checked before the first build
 need=$(selected "$@" | cut -f2 | sort -u)
