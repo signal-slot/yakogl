@@ -1,0 +1,2 @@
+board.sh am62p deqp-01 rc=0 verdict=done boot=tftp row boot_verdict=ok result=ok resets=0 record=x back_after=90s
+board.sh am62p deqp-11 rc=4 verdict=done_lossy boot=tftp row boot_verdict=ok result=ok resets=0 record=x back_after=90s lost=7
