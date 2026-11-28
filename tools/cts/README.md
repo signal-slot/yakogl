@@ -29,7 +29,7 @@ tools/cts/
   am62p-deqp-images.sh         stage 2, AM62P: one image per line of a filter file
   am62p-full-tree.txt          the whole GLES2 tree for the AM62P, 17 images
   am62p-ms4-tree.txt           the AM62P's 18th image: multisample.* on rgba8888d24s8ms4
-  am62p-gles3-tree.txt         the dEQP-GLES3 tree for the AM62P, 46 images (section 2e)
+  am62p-gles3-tree.txt         the dEQP-GLES3 tree for the AM62P, 50 images (section 2e)
   gen-am62p-gles3-tree.py      writes am62p-gles3-tree.txt; --check is a gate row
   am62p-pixel-cases.txt        the AM62P single-case images of the merged PowerVR pixel causes (9 images, gl_test list in its tail)
   imx8mp-env.sh                sourced by the i.MX8MP build scripts: checks their environment
@@ -964,7 +964,7 @@ board, through the runner.
 ## 2e. The AM62P dEQP-GLES3 tree
 
 `am62p-gles3-tree.txt` is generated (`tools/cts/gen-am62p-gles3-tree.py`; `--check`
-is a gate row in `tools/check.sh`) from `gles3-mustpass.txt`: 46 images, every
+is a gate row in `tools/check.sh`) from `gles3-mustpass.txt`: 50 images, every
 mustpass case matched by exactly one line. The board resets the SoC 600 s after
 an image booted (the RTI watchdog, `CONFIG_YAKOGL_AM62P_WDT_SECONDS`, minus the
 boot), so a row's run must end well inside that; the generator keeps each image

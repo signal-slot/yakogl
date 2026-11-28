@@ -44,6 +44,8 @@ SPLIT = {
     'functional.texture.filtering.3d',
     'functional.shaders.builtin_functions',
     'functional.shaders.builtin_functions.precision',
+    'functional.texture.shadow',
+    'functional.texture.vertex',
 }
 # Units whose cases are slow, by name prefix: a case counts WEIGHT times in
 # the packing. Image 7 of 2026-10-25 (main be84094b) ran 584 of the 1,147
@@ -58,6 +60,19 @@ WEIGHT = {
 OWN = {
     'functional.texture.filtering.3d.formats',
     'functional.texture.filtering.3d.sizes',
+    # Board run of rows 39-45 at 472630df: the shadow and vertex images
+    # aborted or overran the 600 s watchdog, so each shadow subgroup
+    # (2d, 2d_array, cube: 144 cases each) gets an image of its own.
+    'functional.texture.shadow.2d',
+    'functional.texture.shadow.2d_array',
+    'functional.texture.shadow.cube',
+}
+# Units that start a new image (the packing closes the one before them)
+# without being alone in it: the texture.vertex subgroups share one image
+# apart from texture.specification, and texture.wrap keeps its own.
+BREAK = {
+    'functional.texture.vertex.2d',
+    'functional.texture.wrap',
 }
 # 3d.combinations in the mustpass list is only linear_linear_*, linear_nearest_*
 # and nearest_*; dEQP also has linear_mipmap_* and nearest_mipmap_* there, of
@@ -139,7 +154,7 @@ def isolate_lines(unit, cases):
     return [globs] + [[c] for c in slow]
 
 
-def pack(us, max_cases=MAX_CASES, own=OWN):
+def pack(us, max_cases=MAX_CASES, own=OWN, brk=BREAK):
     rows, cur, n = [], [], 0
     for u, c in us:
         c *= max([w for p, w in WEIGHT.items() if u.startswith(p)] or [1])
@@ -149,7 +164,7 @@ def pack(us, max_cases=MAX_CASES, own=OWN):
             rows.append([u])
             cur, n = [], 0
             continue
-        if cur and n + c > max_cases:
+        if cur and (n + c > max_cases or u in brk):
             rows.append(cur)
             cur, n = [], 0
         cur.append(u)
