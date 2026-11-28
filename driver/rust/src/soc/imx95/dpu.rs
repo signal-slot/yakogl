@@ -112,6 +112,32 @@ pub const ADDR_BITS: u32 = 40;
 /// The poll step of the waits, µs.
 pub const POLL_STEP_US: u32 = 100;
 
+/// The display engine 0 interrupt block, from the DPU's base: hal_nxp's
+/// BSD-3 `PERI_DISPLAY_SEERIS.h` for the i.MX 95 (`DISPIRQ0_LOCKUNLOCK`,
+/// offset 0x381000) and NXP's `dpu95-core.c` (`disp_irq0_reg =
+/// devm_ioremap(dev, dpu_base + 0x381000, SZ_64)`). The generated
+/// `regs::display_seeris` does not carry this block, so its three words
+/// are written here, in [`disp_irq`]. FrameGen0's sequence complete is in
+/// it (the board's down waits for it); [`wait_stopped`] reads its status
+/// for the record.
+pub const DISP_IRQ0: u32 = 0x38_1000;
+
+/// The words of an interrupt block, group 0, from the block's base
+/// (`PERI_DISPLAY_SEERIS.h` `DISPIRQ0_*`; NXP's `dpu95.h`
+/// `INTERRUPTENABLE(n)` 0x8, `INTERRUPTCLEAR(n)` 0x20,
+/// `INTERRUPTSTATUS(n)` 0x2c). `INTERRUPTCLEAR0` is write-only (`__O`),
+/// `INTERRUPTSTATUS0` read-only (`__I`), `INTERRUPTENABLE0` read-write.
+pub mod disp_irq {
+    pub const INTERRUPTENABLE0: u32 = 0x08;
+    pub const INTERRUPTCLEAR0: u32 = 0x20;
+    pub const INTERRUPTSTATUS0: u32 = 0x2c;
+}
+
+/// Display engine 0's raw `DISPIRQ0_INTERRUPTSTATUS0`.
+pub fn disp_irq0_status(m: &impl Mmio, base: usize) -> u32 {
+    rd(m, base, DISP_IRQ0 + disp_irq::INTERRUPTSTATUS0)
+}
+
 /// The scan-out buffer: XRGB8888, the mode's size, `stride` bytes a line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Framebuffer {
@@ -537,17 +563,20 @@ pub struct FgStatus {
     pub stop: Option<StopWait>,
 }
 
-/// A wait for FrameGen0 to stop ([`wait_stopped`]): the time waited, the
-/// polls and `FGTIMESTAMP` (frame index in bits 31:14, line index in 13:0)
-/// read when the wait began and when it ended. A frame index that did not
-/// move over the wait says the pixel clock is dead; one that moved says the
-/// stop was slow.
+/// A wait for FrameGen0 to stop ([`wait_stopped`], or the board's wait for
+/// the sequence complete): the time waited, the polls, `FGTIMESTAMP` (frame
+/// index in bits 31:14, line index in 13:0) read when the wait began and
+/// when it ended, and display engine 0's raw `DISPIRQ0_INTERRUPTSTATUS0`
+/// at the end. A timestamp that did not move over the wait says the pixel
+/// clock is dead ([`Self::frozen`]); one that moved says FrameGen0 still
+/// ran frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StopWait {
     pub waited_us: u32,
     pub polls: u32,
     pub ts_start: u32,
     pub ts_end: u32,
+    pub irq: u32,
 }
 
 impl StopWait {
@@ -556,6 +585,25 @@ impl StopWait {
     }
     pub const fn frame_end(&self) -> u32 {
         self.ts_end >> r::diseng_framegen0_fgtimestamp::FRAMEINDEX_SHIFT
+    }
+    /// The line index (bits 13:0) at the first and the last read.
+    pub const fn line_start(&self) -> u32 {
+        self.ts_start & r::diseng_framegen0_fgtimestamp::LINEINDEX_MASK
+    }
+    pub const fn line_end(&self) -> u32 {
+        self.ts_end & r::diseng_framegen0_fgtimestamp::LINEINDEX_MASK
+    }
+    /// Neither the frame nor the line index moved over the wait.
+    pub const fn frozen(&self) -> bool {
+        self.ts_start == self.ts_end
+    }
+    /// The verdict the console prints after a failed wait.
+    pub const fn verdict(&self) -> &'static str {
+        if self.frozen() {
+            "frozen: the pixel clock is dead"
+        } else {
+            "moving: FrameGen0 still runs frames"
+        }
     }
     /// Frames counted between the two reads (the counter is 18 bits).
     pub const fn frames(&self) -> u32 {
@@ -608,8 +656,9 @@ pub fn fg_timestamp(m: &impl Mmio, base: usize) -> u32 {
 /// Wait up to `budget_us` until FrameGen0 reads stopped, in
 /// [`POLL_STEP_US`] steps through `delay_us`. `FGTIMESTAMP` is read when the
 /// wait starts and when it ends (stopped or out of budget), so the result
-/// tells a frozen frame counter from a moving one. On a timeout the error
-/// is the last status with [`FgStatus::stop`] set.
+/// tells a frozen frame counter from a moving one; `DISPIRQ0_INTERRUPTSTATUS0`
+/// is read just before the last `FGTIMESTAMP`. On a timeout the error is
+/// the last status with [`FgStatus::stop`] set.
 pub fn wait_stopped(
     m: &impl Mmio,
     base: usize,
@@ -624,7 +673,8 @@ pub fn wait_stopped(
         polls += 1;
         let done = !s.running();
         if done || waited >= budget_us {
-            let w = StopWait { waited_us: waited, polls, ts_start, ts_end: fg_timestamp(m, base) };
+            let irq = disp_irq0_status(m, base);
+            let w = StopWait { waited_us: waited, polls, ts_start, ts_end: fg_timestamp(m, base), irq };
             if done {
                 return Ok(w);
             }

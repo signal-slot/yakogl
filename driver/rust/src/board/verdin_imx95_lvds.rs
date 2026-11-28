@@ -100,24 +100,9 @@ pub const SEQ_COMPLETE0: u32 = 1 << 20;
 /// `dpu::POLL_STEP_US`.
 pub const SEQ_COMPLETE_BUDGET_US: u32 = 1_000_000;
 
-/// The display engine 0 interrupt block, from the DPU's base: hal_nxp's
-/// BSD-3 `PERI_DISPLAY_SEERIS.h` for the i.MX 95 (`DISPIRQ0_LOCKUNLOCK`,
-/// offset 0x381000) and NXP's `dpu95-core.c` (`disp_irq0_reg =
-/// devm_ioremap(dev, dpu_base + 0x381000, SZ_64)`). The generated
-/// `regs::display_seeris` does not carry this block, so its three words
-/// are written here, in [`disp_irq`]. Nothing else of ours uses it.
-pub const DISP_IRQ0: u32 = 0x38_1000;
-
-/// The words of an interrupt block, group 0, from the block's base
-/// (`PERI_DISPLAY_SEERIS.h` `DISPIRQ0_*`; NXP's `dpu95.h`
-/// `INTERRUPTENABLE(n)` 0x8, `INTERRUPTCLEAR(n)` 0x20,
-/// `INTERRUPTSTATUS(n)` 0x2c). `INTERRUPTCLEAR0` is write-only (`__O`),
-/// `INTERRUPTSTATUS0` read-only (`__I`), `INTERRUPTENABLE0` read-write.
-pub mod disp_irq {
-    pub const INTERRUPTENABLE0: u32 = 0x08;
-    pub const INTERRUPTCLEAR0: u32 = 0x20;
-    pub const INTERRUPTSTATUS0: u32 = 0x2c;
-}
+/// The display engine 0 interrupt block and its group 0 words
+/// ([`dpu::DISP_IRQ0`], [`dpu::disp_irq`], with their sources).
+pub use crate::soc::imx95::dpu::{disp_irq, DISP_IRQ0};
 
 /// The backlight as Linux runs it (module text): TPM5 channel 0, 150 Hz,
 /// low-true, 119 of 255.
@@ -163,12 +148,13 @@ pub enum Error {
     /// The DPU side: power and LDB PLL, routing, DPU, FrameGen0's sync.
     Display(display::Error),
     /// The down: FrameGen0's [`SEQ_COMPLETE0`] did not set within
-    /// `waited_us` after `FGENABLE` was cleared; `irq` is the last
-    /// [`DISP_IRQ0`] `INTERRUPTSTATUS0`, `comctrl` the common-control
-    /// block's `IRQ_INTERRUPTSTATUS0` then (for the record), `fg`
-    /// FrameGen0's state. The LDB's clocks and the display's power were left
-    /// on.
-    SeqTimeout { waited_us: u32, irq: u32, comctrl: u32, fg: dpu::FgStatus },
+    /// [`SEQ_COMPLETE_BUDGET_US`] after `FGENABLE` was cleared. `wait` is
+    /// the wait: the time, the polls, `FGTIMESTAMP` after the disable and at
+    /// the end (the frame counter), the last [`DISP_IRQ0`]
+    /// `INTERRUPTSTATUS0`; `comctrl` the common-control block's
+    /// `IRQ_INTERRUPTSTATUS0` then (for the record), `fg` FrameGen0's state.
+    /// The LDB's clocks and the display's power were left on.
+    SeqTimeout { wait: dpu::StopWait, comctrl: u32, fg: dpu::FgStatus },
     /// TPM5's clock over SCMI: the message (CLOCK_CONFIG_SET 0x07 or
     /// CLOCK_RATE_GET 0x06) and what came back; the picture is up, dark.
     BacklightClock { msg: u8, fault: Fault },
@@ -253,6 +239,47 @@ pub fn display_up<T: Transport>(t: &mut T, m: &impl Mmio, env: &impl Env, cfg: &
     Ok(Up { stream, ldb, tpm_hz, backlight })
 }
 
+/// One failed FrameGen0 wait on the console, in three lines that each fit
+/// `env::LINE_MAX`: what ended it (`what`), FrameGen0's state, the time,
+/// the polls and the raw `DISPIRQ0_INTERRUPTSTATUS0`; the frame counter at
+/// the start and the end with the frozen/moving verdict; `FGTIMESTAMP` at
+/// both reads with its frame and line index. Both failure paths of
+/// [`display_down`] print it ([`Error::SeqTimeout`],
+/// `display::Error::NotStopped`).
+pub fn log_stop_wait(env: &impl Env, what: &str, fg: &dpu::FgStatus, w: &dpu::StopWait) {
+    ylog!(
+        env,
+        Err,
+        "verdin-imx95 X12: {} after {} us ({} polls): FGENABLE {} FGENSTS {:#x}, DISPIRQ0 INTERRUPTSTATUS0 {:#010x}",
+        what,
+        w.waited_us,
+        w.polls,
+        fg.fgenable,
+        fg.fgensts,
+        w.irq
+    );
+    ylog!(
+        env,
+        Err,
+        "verdin-imx95 X12: frame counter {} -> {} ({} frames): {}",
+        w.frame_start(),
+        w.frame_end(),
+        w.frames(),
+        w.verdict()
+    );
+    ylog!(
+        env,
+        Err,
+        "verdin-imx95 X12: FGTIMESTAMP 0x{:08x} (frame {} line {}) -> 0x{:08x} (frame {} line {})",
+        w.ts_start,
+        w.frame_start(),
+        w.line_start(),
+        w.ts_end,
+        w.frame_end(),
+        w.line_end()
+    );
+}
+
 /// The backlight off, FrameGen0 stopped, the LDB down, then stream 0 and the
 /// display's power (the LDB PLL and DISPLAY).
 ///
@@ -277,7 +304,9 @@ pub fn display_up<T: Transport>(t: &mut T, m: &impl Mmio, env: &impl Env, cfg: &
 /// sequence does not complete nothing more is touched: the LDB and the power
 /// stay on and [`Error::SeqTimeout`] comes back. When it completes but
 /// FrameGen0 still reads running, the LDB is still brought down and the
-/// first error is returned; the power stays on then.
+/// first error is returned; the power stays on then. Each failure logs its
+/// wait (frame counter, `FGTIMESTAMP`, `DISPIRQ0_INTERRUPTSTATUS0`) through
+/// [`log_stop_wait`].
 pub fn display_down<T: Transport>(
     t: &mut T,
     m: &impl Mmio,
@@ -306,15 +335,22 @@ pub fn display_down<T: Transport>(
         SEQ_COMPLETE_BUDGET_US,
         DISP_IRQ0 + disp_irq::INTERRUPTSTATUS0
     );
+    // the frame counter once FrameGen0 was told to stop, so a timeout tells
+    // a frozen counter (no pixel clock) from a moving one
+    let ts_start = dpu::fg_timestamp(m, base);
     // 3: FrameGen0's sequence complete, polled as dpu's waits poll
     let mut waited = 0;
-    loop {
+    let mut polls = 0;
+    let seq = loop {
         let irq = m.read32(status);
-        if irq & SEQ_COMPLETE0 != 0 {
-            m.write32(clear, SEQ_COMPLETE0);
-            break;
-        }
-        if waited >= SEQ_COMPLETE_BUDGET_US {
+        polls += 1;
+        let done = irq & SEQ_COMPLETE0 != 0;
+        if done || waited >= SEQ_COMPLETE_BUDGET_US {
+            let wait = dpu::StopWait { waited_us: waited, polls, ts_start, ts_end: dpu::fg_timestamp(m, base), irq };
+            if done {
+                m.write32(clear, SEQ_COMPLETE0);
+                break wait;
+            }
             // 4 also on the way out
             m.write32(enable, 0);
             let comctrl = m.read32(base + r::IRQ_INTERRUPTSTATUS0 as usize);
@@ -322,34 +358,35 @@ pub fn display_down<T: Transport>(
             ylog!(
                 env,
                 Err,
-                "verdin-imx95 LVDS down: no SeqComplete0 in {} us (DISPIRQ0 INTERRUPTSTATUS0 {:#010x}, COMCTRL IRQ_INTERRUPTSTATUS0 {:#010x}, FGENABLE {} FGENSTS {:#x} FGCHSTAT {:#x}); the LDB and the power stay on",
+                "verdin-imx95 LVDS down: no SeqComplete0 in {} us: COMCTRL {:#010x}, FGCHSTAT {:#x}; the LDB and the power stay on",
                 waited,
-                irq,
                 comctrl,
-                fg.fgenable,
-                fg.fgensts,
                 fg.fgchstat
             );
-            return Err(Error::SeqTimeout { waited_us: waited, irq, comctrl, fg });
+            log_stop_wait(env, "no SeqComplete0", &fg, &wait);
+            return Err(Error::SeqTimeout { wait, comctrl, fg });
         }
         delay(dpu::POLL_STEP_US);
         waited += dpu::POLL_STEP_US;
-    }
+    };
     // 4: masked again
     m.write32(enable, 0);
     let stopped = dpu::wait_stopped(m, base, display::STOP_WAIT_US, &mut delay).map_err(display::Error::NotStopped);
     ylog!(
         env,
         Inf,
-        "verdin-imx95 LVDS down: SeqComplete0 after {} us, FGENSTS {}, frame {}",
-        waited,
-        if stopped.is_ok() { "stopped" } else { "running" },
-        match &stopped {
-            Ok(w) => w.frame_end(),
-            Err(display::Error::NotStopped(fg)) => fg.stop.map_or(0, |w| w.frame_end()),
-            Err(_) => 0,
-        }
+        "verdin-imx95 LVDS down: SeqComplete0 after {} us ({} polls, frame {} -> {}), FGENSTS {}",
+        seq.waited_us,
+        seq.polls,
+        seq.frame_start(),
+        seq.frame_end(),
+        if stopped.is_ok() { "stopped" } else { "running" }
     );
+    if let Err(display::Error::NotStopped(fg)) = &stopped {
+        if let Some(w) = &fg.stop {
+            log_stop_wait(env, "FrameGen0 still running", fg, w);
+        }
+    }
     // 5: the pixel clock goes
     ldb::down(m, cfg.ldb);
     // the pixel link off, the power; no second wait when the first failed
