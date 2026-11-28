@@ -721,6 +721,12 @@ pub struct MaliShader<'k> {
     /// complete cube map for it, in either stage (src/mali/backend.rs
     /// `stage_texture`).
     pub cube_samplers: u64,
+    /// Bit i: the cube look-up at descriptor index i is the `cube_noseam`
+    /// variant's (`TEX_SINGLE ... .2d.array_enable` at the face's layer,
+    /// docs/notes/mali-cube-noseam.md), whose texture descriptor must be
+    /// the cube's six faces as a 2D array of six layers (src/mali/backend.rs
+    /// `stage_texture`). A subset of [`MaliShader::cube_samplers`].
+    pub cube_layers: u64,
     /// Fragment: the uniform block the program loads from memory (an
     /// `LD_PKA` of a uniform array element at a run-time index), in Mesa's
     /// packed layout ([`select::UboLayout`]'s rows), which the frame uploads
@@ -1427,6 +1433,7 @@ fn compile_stage<'s>(
         sampler: None,
         samplers: &[],
         cube_samplers: 0,
+        cube_layers: 0,
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -1538,6 +1545,9 @@ fn compile_stage<'s>(
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
         for index in vs.cube_samplers() {
             sc.info.cube_samplers |= 1u64.checked_shl(u32::from(index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        }
+        for index in vs.cube_layers() {
+            sc.info.cube_layers |= 1u64.checked_shl(u32::from(index)).ok_or(MaliError::Defect(Defect::IrIndex))?;
         }
         if var.words > 0 {
             sc.info.secondary = Some(Secondary {

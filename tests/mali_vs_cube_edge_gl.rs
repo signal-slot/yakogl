@@ -94,6 +94,16 @@
 //! vertex stage's equal the fragment stage's. What issue #7489 sees on the
 //! board is therefore not a word of these descriptors.
 //!
+//! But for one change, ours by design, in the `report-es2` build: every state
+//! here has a LINEAR filter, so its vertex look-up draws the `cube_noseam`
+//! variant (cube-noseam, docs/notes/mali-cube-noseam.md), which reads the map
+//! as the 2D array of its six faces so that the unit wraps and filters
+//! inside the face (ES 2.0 3.7.5; the fix for #7489). The vertex stage's
+//! texture is then Mesa's with `Dimension` 2D and `Array size` 6 over the
+//! same planes, and its sampler Mesa's ES 2.0 words with `Seamless Cube Map`
+//! set (word 0 bit 23), the bit of every sampler of a texture that is not a
+//! cube; the fragment stage keeps Mesa's cube words ([`vertex_view`]).
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_vs_cube_edge_gl
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table,report-es2 --test mali_vs_cube_edge_gl
@@ -329,6 +339,24 @@ fn stages(label: &str, drew: impl FnOnce() -> (GLenum, u32)) -> (Stage, Stage) {
 /// The context's seamless cube maps: M:mesa/main/version.c:682-690.
 const SEAMLESS: bool = !cfg!(feature = "report-es2");
 
+/// The vertex look-ups of these states draw the `cube_noseam` variant (the
+/// module comment): in the `report-es2` build only.
+const NOSEAM: bool = cfg!(feature = "report-es2");
+
+/// What the vertex stage of a `cube_noseam` draw reads in place of the
+/// cube's `sampler` and `texture` words (the module comment): the six-layer
+/// 2D array view, `Seamless Cube Map` set, `Dimension` 2D, `Array size` 6.
+/// Without [`NOSEAM`], the words as they are.
+fn vertex_view(sampler: Sampler, texture: Texture) -> (Sampler, Texture) {
+    if !NOSEAM {
+        return (sampler, texture);
+    }
+    (
+        Sampler { seamless_cube_map: true, ..sampler },
+        Texture { dimension: TextureDimension::_2D, array_size: 6, ..texture },
+    )
+}
+
 /// The 13-bit `ulod` maximum the CSO's 1000 packs to (v10.xml:1147).
 const MAX_LOD: f32 = 8191.0 / 256.0;
 
@@ -430,17 +458,23 @@ fn words(d: &[u8; 32]) -> [u32; 8] {
     core::array::from_fn(|i| u32::from_le_bytes(d[i * 4..i * 4 + 4].try_into().unwrap()))
 }
 
-/// A stage that reads the map: its sampler and texture are Mesa's, and its
-/// planes are one a face and level, face-major, each of its level's extent.
-fn check_reads(label: &str, c: &Case, s: &Stage) {
-    let want = mesa_sampler(c);
+/// A stage that reads the map: its sampler and texture are Mesa's (for the
+/// `vertex` stage, their [`vertex_view`]), and its planes are one a face and
+/// level, face-major, each of its level's extent.
+fn check_reads(label: &str, c: &Case, s: &Stage, vertex: bool) {
+    let (tex, planes) = s.texture.as_ref().unwrap_or_else(|| panic!("{label}: no texture in the table"));
+    let (mut want, mut want_tex) = (mesa_sampler(c), mesa_texture(c, tex.surfaces));
+    let mut word0 = c.word0[usize::from(!SEAMLESS)];
+    if vertex {
+        (want, want_tex) = vertex_view(want, want_tex);
+        word0 |= u32::from(NOSEAM) << 23;
+    }
     let got = Sampler::unpack(&s.sampler).unwrap_or_else(|e| panic!("{label}: the sampler does not unpack: {e:?}"));
     assert_eq!(got, want, "{label}: the sampler's fields are not Mesa's (words {:08x?})", words(&s.sampler));
     assert_eq!(s.sampler, want.pack().unwrap(), "{label}: the sampler's words");
-    assert_eq!(words(&s.sampler)[0], c.word0[usize::from(!SEAMLESS)], "{label}: sampler word 0");
+    assert_eq!(words(&s.sampler)[0], word0, "{label}: sampler word 0");
     assert_eq!(words(&s.sampler)[1], 0x1fff_0000, "{label}: sampler word 1 (the LOD range)");
-    let (tex, planes) = s.texture.as_ref().unwrap_or_else(|| panic!("{label}: no texture in the table"));
-    assert_eq!(*tex, mesa_texture(c, tex.surfaces), "{label}: the texture's fields are not Mesa's");
+    assert_eq!(*tex, want_tex, "{label}: the texture's fields are not Mesa's");
     let levels = c.levels as usize;
     assert_eq!(planes.len(), 6 * levels, "{label}: planes");
     for (k, p) in planes.iter().enumerate() {
@@ -470,11 +504,17 @@ fn check_reads_nothing(label: &str, s: &Stage) {
 }
 
 /// Two stages' words of one map are the same but for where the planes are
-/// written (`Surfaces`).
-fn check_same(label: &str, a: &Stage, b: &Stage) {
-    assert_eq!(words(&a.sampler), words(&b.sampler), "{label}: the two stages' sampler words differ");
+/// written (`Surfaces`); `a` a vertex stage and `b` a fragment one, `a`'s
+/// are the [`vertex_view`] of `b`'s.
+fn check_same(label: &str, a: &Stage, b: &Stage, b_fragment: bool) {
     let ((ta, pa), (tb, pb)) = (a.texture.as_ref().unwrap(), b.texture.as_ref().unwrap());
-    assert_eq!(*ta, Texture { surfaces: ta.surfaces, ..*tb }, "{label}: the two stages' texture words differ");
+    let mut sb = Sampler::unpack(&b.sampler).unwrap();
+    let mut tb = Texture { surfaces: ta.surfaces, ..*tb };
+    if b_fragment {
+        (sb, tb) = vertex_view(sb, tb);
+    }
+    assert_eq!(words(&a.sampler), words(&sb.pack().unwrap()), "{label}: the two stages' sampler words differ");
+    assert_eq!(*ta, tb, "{label}: the two stages' texture words differ");
     assert_eq!(pa, pb, "{label}: the two stages' planes differ");
 }
 
@@ -750,23 +790,23 @@ fn vertex_cube_edge_descriptors_equal_mesas() {
         let label = format!("vcube {}", c.name);
         cube_texture(&c);
         let (vs, fs) = stages(&label, || draw(VCUBE_VERT, VCUBE_FRAG, &vcube, vcube_uniforms));
-        check_reads(&label, &c, &vs);
+        check_reads(&label, &c, &vs, true);
         check_reads_nothing(&label, &fs);
 
         /* the same draw's fragment stage reads the same map */
         let label = format!("vcube {} with a fragment look-up", c.name);
         let (vs2, fs2) = stages(&label, || draw(BOTH_VERT, BOTH_FRAG, &vcube, vcube_uniforms));
-        check_reads(&label, &c, &vs2);
-        check_reads(&label, &c, &fs2);
-        check_same(&label, &vs2, &fs2);
-        check_same(&label, &vs2, &vs);
+        check_reads(&label, &c, &vs2, true);
+        check_reads(&label, &c, &fs2, false);
+        check_same(&label, &vs2, &fs2, true);
+        check_same(&label, &vs2, &vs, false);
 
         /* the fragment stage alone (the shape that passes on the board) */
         let label = format!("vcube {} in the fragment stage", c.name);
         let (vs3, fs3) = stages(&label, || draw(FS_VERT, FS_FRAG, &vcube, texture_uniform));
         check_reads_nothing(&label, &vs3);
-        check_reads(&label, &c, &fs3);
-        check_same(&label, &vs, &fs3);
+        check_reads(&label, &c, &fs3, false);
+        check_same(&label, &vs, &fs3, true);
     }
 
     /* shaders.texture_functions.vertex.texturecubelod */
@@ -775,14 +815,14 @@ fn vertex_cube_edge_descriptors_equal_mesas() {
     cube_texture(&c);
     let (vs, fs) =
         stages(c.name, || draw(LOD_VERT, LOD_FRAG, &lod, |p| unsafe { glUniform1i(uniform(p, c"u_sampler"), 0) }));
-    check_reads(c.name, &c, &vs);
+    check_reads(c.name, &c, &vs, true);
     check_reads_nothing(c.name, &fs);
     let label = "texturecubelod's map in the fragment stage";
     let fs_only: [Attrib; 2] = [(c"a_position", 2, &POS2), (c"a_texCoord", 3, &LOD_COORD)];
     let (vs3, fs3) = stages(label, || draw(FS_VERT, FS_FRAG, &fs_only, texture_uniform));
     check_reads_nothing(label, &vs3);
-    check_reads(label, &c, &fs3);
-    check_same(label, &vs, &fs3);
+    check_reads(label, &c, &fs3, false);
+    check_same(label, &vs, &fs3, true);
 
     eprintln!(
         "mali vertex cube edge descriptors vs mesa ({} context): 3 vcube states and texturecubelod, vertex and fragment tables",
