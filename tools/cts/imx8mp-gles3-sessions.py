@@ -80,6 +80,8 @@ SLICE_NAME = re.compile(r'(\d{4}-\d{2}(?:-\d{2})?)-imx8mp-gles3-(x2-)?([0-9a-f]{
 # 'board.sh x2 e<NN> ...' (the Armadillo-X2; board.sh's X2 targets are x2, x2-console, x2-display, as in
 # imx8mp-gles3-merge.py's board_of). An e<NN>-p<page> page line does not match: the digits are followed by '-'.
 # Groups: 1 board name, 2 entry index, 3 back_after seconds.
+# A refused x2 jump ('rc=3 verdict=refused ... back_after=?s') did not run and never matches: no rate, no pass. A return
+# seen only over ssh (timeline 'ping n/a') is an ordinary verdict=done line with its back_after.
 VERDICT_LINE = re.compile(r'^board\.sh (imx8mp\S*|x2\S*) e(\d+) .*verdict=done.* back_after=(\d+)s')
 
 
