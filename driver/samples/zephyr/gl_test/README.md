@@ -282,7 +282,9 @@ job wrote, and the target has no depth/stencil buffer to keep it in",
 `tests/v3d71_refuse.rs`). Case 67 is drawn with no refusal: the 7.1 job loads
 alpha as 1 and clears mask bit 3 for a target with no alpha
 (`docs/notes/v3d71-gl-table.md`, section 5; `tests/v3d71_refuse67.rs`). Any
-further refusal must carry a name too.
+further refusal must carry a name too. These verdicts need a recording
+library: until the 7.1 table records in the product build, an image fails every
+case with the one named cause given under "On the board".
 
 The PM watchdog is armed for the run: `YAKOGL_RPI5_WDOG_HOLD_S` takes
 `V3D_GL_TEST_HOLD_S`, so the run and its record end before it fires. It
