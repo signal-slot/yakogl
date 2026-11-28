@@ -67,13 +67,20 @@ fn gm2_cf_earlyret_vs_fragment_shader_stays_refused() {
 /// ideas fs c565 and 1aca: `a.w == 0.0 && b.w == 0.0` of two run-time vec4s
 /// is an `iand` of two masks, which Mesa's flattened function selects with at
 /// fp16 (`LSHIFT_AND.v2i16`, `MUX.v2i16`) beside the fp32 `CSEL.u32.eq` of the
-/// return value (gm2_ideas_2's fs.fragment). Not lowered: when they move,
-/// make these [`mali_ref::assert_matches`].
+/// return value (gm2_ideas_2's fs.fragment). The `iand` of the two `==` is
+/// lowered (plan #377 report-draft-2) and BOOL_AND's `walk_if16` flattens the
+/// `if` on it; each stops at a later refusal: gm2_ideas_2 at an operand form,
+/// gm2_ideas_3 at its colour lanes. When they move, make these
+/// [`mali_ref::assert_matches`].
 #[test]
-fn gm2_ideas_2_and_3_stay_refused_at_their_int_values() {
-    let int = "an integer or boolean value is not lowered yet";
-    let moved: Vec<String> =
-        ["gm2_ideas_2", "gm2_ideas_3"].iter().filter_map(|n| mali_ref::refusal_change(n, int)).collect();
+fn gm2_ideas_2_and_3_stay_refused_past_their_and() {
+    let moved: Vec<String> = [
+        ("gm2_ideas_2", "a fragment shader operand of a form or in a place no reference draws"),
+        ("gm2_ideas_3", "a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"),
+    ]
+    .iter()
+    .filter_map(|(n, t)| mali_ref::refusal_change(n, t))
+    .collect();
     assert!(moved.is_empty(), "{}", moved.join("\n"));
 }
 

@@ -12,7 +12,10 @@
 //! note), the pair verbatim from the case's `.qpa`.
 //!
 //! `rsg_sconv55_fs` is byte-equal since its dead `bvec4` local is left out
-//! of the walk (`nir_fs.rs` `ir_live`). Every other reference is refused, so
+//! of the walk (`nir_fs.rs` `ir_live`); the [`LOWERED`] rest since the
+//! intval-rest steps (M1, then report-draft-2's `&&` / `||`, `inot` of
+//! `fneu`, an int's `-1` and `* -1`, `bool(uniform float)`). Every other
+//! reference is refused, so
 //! its byte-compare is `#[ignore]`d and `refusals_pinned` holds the refusal
 //! ([`REFUSED`]): the integer/boolean text, or for two the next one past
 //! their dead int and bool values. The lowering step that lifts one moves it to
@@ -37,20 +40,30 @@ mod mali_ref;
 /// The references a lowering step made byte-equal, without the
 /// `deqp_intval3_` prefix: each has a byte-compare test below.
 const LOWERED: &[&str] = &[
+    "opfs_logical_and_bool",
     "opfs_not_equal_int_highp",
     "opfs_notequal_ivec3_mediump",
+    "opfs_post_decrement_effect_ivec2_highp",
+    "opfs_pre_decrement_result_int_mediump",
+    "reslib_func_bool_fs",
+    "reslib_inout_int_fs",
     "reslib_int_to_bool_fs",
     "reslib_ivec4_to_bvec4_fs",
     "rsg_sconv55_fs",
+    "rsg_sconv72_fs",
 ];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
 
 const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet";
-/// `rsg_condcomb80_fs` past its `!=` of run-time ints (intval-rest M1): the
-/// `if` on it.
+/// `rsg_condcomb80_fs` past its `!=` of run-time ints (intval-rest M1), and
+/// `rsg_cond12_fs` past its `-1` (report-draft-2): the `if` on it.
 const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
+/// Past the integer values the intval-rest steps lowered (report-draft-2):
+/// `exp2` / `sqrt` (`rsg_exp76_fs`) and the dynamic write's selects
+/// (`idx_tmp_vec3_dynwrite_fs`).
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 /// The later refusals of the references whose int and bool values are all
 /// dead (`nir_fs.rs` `ir_live`).
 const FRAGCOLOR: &str =
@@ -60,23 +73,19 @@ const FS_UNIFORM: &str = "Valhall: a mediump fragment shader uniform other than 
 /// Every ignored reference with its whole `MaliError` message (all 22 were
 /// the integer/boolean text at `3497799a`).
 const REFUSED: &[(&str, &str)] = &[
+    /* past its `&&` (report-draft-2) and the `if` on it (BOOL_AND's
+     * `walk_if16`): `b2f` of `RES && isOk(..)`'s select of two masks */
     ("cond_complex_fs", INT_VALUE),
     ("cond_compound_fs", INT_VALUE),
-    ("idx_tmp_vec3_dynwrite_fs", INT_VALUE),
-    ("opfs_logical_and_bool", INT_VALUE),
-    ("opfs_post_decrement_effect_ivec2_highp", INT_VALUE),
-    ("opfs_pre_decrement_result_int_mediump", INT_VALUE),
+    ("idx_tmp_vec3_dynwrite_fs", ARITH),
     /* the sequence's first operand is dead: the colour's lanes next */
     ("opfs_sequence_bool_vec2_mediump", FRAGCOLOR),
     ("opfs_step_float_vec2_mediump", INT_VALUE),
     ("opfs_step_vec3_highp", INT_VALUE),
     ("reslib_const_int_vs", INT_VALUE),
-    ("reslib_func_bool_fs", INT_VALUE),
-    ("reslib_inout_int_fs", INT_VALUE),
-    ("rsg_cond12_fs", INT_VALUE),
+    ("rsg_cond12_fs", CONTROL_FLOW),
     ("rsg_condcomb80_fs", CONTROL_FLOW),
-    ("rsg_exp76_fs", INT_VALUE),
-    ("rsg_sconv72_fs", INT_VALUE),
+    ("rsg_exp76_fs", ARITH),
     /* every int and bool value dead: the uniform's form next */
     ("rsg_swizzle12_fs", FS_UNIFORM),
 ];
@@ -112,7 +121,7 @@ const FS_WORDS: &[(&str, usize)] = &[
 /// `shaders.conditionals.if.complex_condition_fragment`: `false || a && b`
 /// of two fp16 compares, `LSHIFT_AND.v2i16`, the `if` as `MUX.v2i16`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: an integer or boolean value (`RES && isOk(..)` past the `if`); pinned by refusals_pinned"]
 fn cond_complex_fs() {
     mali_ref::assert_matches("deqp_intval3_cond_complex_fs");
 }
@@ -129,7 +138,7 @@ fn cond_compound_fs() {
 /// local array written at `uniform int` indices, `ICMP_OR.s32.lt` against
 /// the lane constants and a `MUX`/`CSEL` select per element.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: fragment arithmetic (past its integer values); pinned by refusals_pinned"]
 fn idx_tmp_vec3_dynwrite_fs() {
     mali_ref::assert_matches("deqp_intval3_idx_tmp_vec3_dynwrite_fs");
 }
@@ -137,7 +146,6 @@ fn idx_tmp_vec3_dynwrite_fs() {
 /// `shaders.operator.binary_operator.logical_and.bool_fragment`: `&&` of two
 /// `> 0.0` compares is `FMIN.v2f16` and one `FCMP_OR.v2f16.lt.f1`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_logical_and_bool() {
     mali_ref::assert_matches("deqp_intval3_opfs_logical_and_bool");
 }
@@ -159,7 +167,6 @@ fn opfs_notequal_ivec3_mediump() {
 /// `shaders.operator.unary_operator.post_decrement_effect.highp_ivec2_fragment`:
 /// `res--` is `IADD_IMM.i32 #0xFFFFFFFF` per lane.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_post_decrement_effect_ivec2_highp() {
     mali_ref::assert_matches("deqp_intval3_opfs_post_decrement_effect_ivec2_highp");
 }
@@ -167,7 +174,6 @@ fn opfs_post_decrement_effect_ivec2_highp() {
 /// `shaders.operator.unary_operator.pre_decrement_result.mediump_int_fragment`:
 /// `--in0` of a mediump int.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_pre_decrement_result_int_mediump() {
     mali_ref::assert_matches("deqp_intval3_opfs_pre_decrement_result_int_mediump");
 }
@@ -207,7 +213,6 @@ fn reslib_const_int_vs() {
 /// `shaders.functions.datatypes.bool_bool_fragment`: `!bool(v)` is
 /// `FCMP_OR.v2f16.eq`, compared with a `uniform bool` by `ICMP_OR.v2u16.eq`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn reslib_func_bool_fs() {
     mali_ref::assert_matches("deqp_intval3_reslib_func_bool_fs");
 }
@@ -215,7 +220,6 @@ fn reslib_func_bool_fs() {
 /// `shaders.functions.qualifiers.inout_int_fragment`: an `inout int`
 /// negated, `ISUB.s32 0, x`, compared with a `uniform int`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn reslib_inout_int_fs() {
     mali_ref::assert_matches("deqp_intval3_reslib_inout_int_fs");
 }
@@ -237,7 +241,7 @@ fn reslib_ivec4_to_bvec4_fs() {
 /// `shaders.random.conditionals.fragment.12`: an `if` on `ivec2` uniform
 /// arithmetic `!=`, `ICMP_OR.u32.ne` chained and `CSEL.u32.eq` per lane.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: control flow (the `if` on the ivec2 `!=`); pinned by refusals_pinned"]
 fn rsg_cond12_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_cond12_fs");
 }
@@ -253,7 +257,7 @@ fn rsg_condcomb80_fs() {
 /// `shaders.random.exponential.fragment.76`: a dead `int(varying)` and
 /// `exp2(float(uniform int))` as `LDEXP.f32 1.0, u`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: fragment arithmetic (exp2 and sqrt past its dead ints); pinned by refusals_pinned"]
 fn rsg_exp76_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_exp76_fs");
 }
@@ -268,7 +272,6 @@ fn rsg_sconv55_fs() {
 /// `shaders.random.scalar_conversion.fragment.72`: `vec4(bool(uniform
 /// float), ...)` is `FCMP_OR.v2f16.ne.f1` of the FAU word.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn rsg_sconv72_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_sconv72_fs");
 }
