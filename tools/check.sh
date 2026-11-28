@@ -3021,6 +3021,56 @@ step "test    $MALI_CONFIG,report-es2 (tests/mali_{zs_words,blend_words_es2,blen
 step "test    $MALI_CONFIG (tests/mali_glmark2_blend_draw.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
     --test mali_glmark2_blend_draw
+# Plan #395's coverage rows (gate-coverage-audit; cov-run-mali, cov-run-other):
+# the Mali-config test files no row above named and no CONFIGS row builds (the
+# generic rows have no gpu-mali build, so these files are compiled out there).
+# Feature sets are those of each file's header; the ES 2.0 cases of four files
+# need `report-es2`, and es3_msaa_mali_{sizes,zs} need `msaa-fbo`.
+# tests/mali_locals.rs failed in cov-run-mali and has no row here. Scope `mali`
+# only: the full plan and a Mali change run them; the --local set stays small.
+scope mali
+step "test    $MALI_CONFIG (tests/es3_{blit_ds_layers_mali,blit_ds_mali,blit_ds_window_mali,depth_image_switch_mali}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test es3_blit_ds_layers_mali --test es3_blit_ds_mali \
+    --test es3_blit_ds_window_mali --test es3_depth_image_switch_mali
+step "test    $MALI_CONFIG (tests/mali_deqp_{ctrlres,fclres,fmares,fsunif4,highpfs,irindex4,kfold,t3gap,t4gap,varydup,varyres,vsloop3}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_deqp_ctrlres --test mali_deqp_fclres --test mali_deqp_fmares \
+    --test mali_deqp_fsunif4 --test mali_deqp_highpfs --test mali_deqp_irindex4 \
+    --test mali_deqp_kfold --test mali_deqp_t3gap --test mali_deqp_t4gap \
+    --test mali_deqp_varydup --test mali_deqp_varyres --test mali_deqp_vsloop3
+step "test    $MALI_CONFIG (tests/mali_glmark2_{buffer_draw,client_arrays,corpus,fbo_depth_rb,index_draw,many_draws,pingpong_blur,program_switch,refused_program,rtt_draw,scene_draw,startup_queries,tex_upload}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_glmark2_buffer_draw --test mali_glmark2_client_arrays \
+    --test mali_glmark2_corpus --test mali_glmark2_fbo_depth_rb \
+    --test mali_glmark2_index_draw --test mali_glmark2_many_draws \
+    --test mali_glmark2_pingpong_blur --test mali_glmark2_program_switch \
+    --test mali_glmark2_refused_program --test mali_glmark2_rtt_draw \
+    --test mali_glmark2_scene_draw --test mali_glmark2_startup_queries \
+    --test mali_glmark2_tex_upload
+step "test    $MALI_CONFIG (tests/mali_{3d_levels,attr_inactive_loc,attr_records_gl,bool_and,bool_uniform,const_fold,const_rcp16,depth_texture,depthonly_gl,depthtex_gl,effect2d_tex,fragcoord16,fs_operand,fs_refract,ideas,int_loops,int_value_ideas,link_varying_offsets}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_3d_levels --test mali_attr_inactive_loc --test mali_attr_records_gl \
+    --test mali_bool_and --test mali_bool_uniform --test mali_const_fold \
+    --test mali_const_rcp16 --test mali_depth_texture --test mali_depthonly_gl \
+    --test mali_depthtex_gl --test mali_effect2d_tex --test mali_fragcoord16 \
+    --test mali_fs_operand --test mali_fs_refract --test mali_ideas \
+    --test mali_int_loops --test mali_int_value_ideas --test mali_link_varying_offsets
+step "test    $MALI_CONFIG (tests/mali_{mploop,nonfinite_const,npot_mip_gl,shadow_pass,tex_dependent,tex_multi,tex_vertex,texcoord2,texcoord_425b,texcoord_lane,varying_load,vs_arith,vs_cube_edge,vs_cube_edge_gl,vs_fma,vs_tex2d_cube,vs_tex2d_cube_gl,vsmin_compile}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_mploop --test mali_nonfinite_const --test mali_npot_mip_gl \
+    --test mali_shadow_pass --test mali_tex_dependent --test mali_tex_multi \
+    --test mali_tex_vertex --test mali_texcoord2 --test mali_texcoord_425b \
+    --test mali_texcoord_lane --test mali_varying_load --test mali_vs_arith \
+    --test mali_vs_cube_edge --test mali_vs_cube_edge_gl --test mali_vs_fma \
+    --test mali_vs_tex2d_cube --test mali_vs_tex2d_cube_gl --test mali_vsmin_compile
+step "test    $MALI_CONFIG,report-es2 (tests/mali_{depth_texture,glmark2_startup_queries,shadow_pass,vs_cube_edge_gl}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
+    --test mali_depth_texture --test mali_glmark2_startup_queries \
+    --test mali_shadow_pass --test mali_vs_cube_edge_gl
+step "test    $MALI_CONFIG,msaa-fbo (tests/es3_msaa_mali_{sizes,zs}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,msaa-fbo" \
+    --test es3_msaa_mali_sizes --test es3_msaa_mali_zs
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.
