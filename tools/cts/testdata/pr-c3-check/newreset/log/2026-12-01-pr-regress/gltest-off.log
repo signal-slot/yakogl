@@ -1,0 +1,4 @@
+gl_test: case 1 clear: PASS
+gl_test: case 2 tri: PASS
+gl_test: case 175 refusehang: PASS
+[00:09:00.000,000] <inf> yakogl: render freelists: 2 grow requests; GPU recoveries 0 (HWR counter 0)
