@@ -74,15 +74,43 @@ fn refuse_srgb() {
     assert_eq!(draw_mixed_key(&draw(&[GLES_SURF_R32UI, GLES_SURF_SRGB8_A8])), Err(REFUSE_SRGB));
 }
 
+/// Past the pixel's four registers no list of two or three targets is
+/// refused for its registers any more (`REFUSE_FOUR_REGISTERS`): the
+/// targets that do not fit spill to tile buffers, and every such spill has
+/// its end-of-tile program (`eot2_tb1`, `eot3_tb`, `eot3_tb12`).
 #[test]
-fn refuse_four_registers() {
-    // RGBA32UI takes four registers, the RGBA8 one more
-    assert_eq!(draw_target_keys(&draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI])), Err(REFUSE_FOUR_REGISTERS));
-    // three two-register targets
-    assert_eq!(
-        draw_mixed_key(&draw(&[GLES_SURF_RGBA16F, GLES_SURF_RGBA16F, GLES_SURF_RGBA16F])),
-        Err(REFUSE_FOUR_REGISTERS)
-    );
+fn past_four_registers_spills() {
+    // RGBA32UI takes four registers, the RGBA8 one more: the second spills
+    assert_mix(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI]);
+    assert_mix(&[GLES_SURF_RGBA32UI, GLES_SURF_R32F]);
+    // RGBA32UI first of three: the two after it both spill
+    assert_mix(&[GLES_SURF_RGBA32UI, GLES_SURF_R32UI, GLES_SURF_RGBA8888]);
+    // two RGBA32UI: keys, and one layout everywhere is no mix
+    let d = draw(&[GLES_SURF_RGBA32UI, GLES_SURF_RGBA32UI]);
+    assert_eq!(draw_target_keys(&d).map(|k| k.1), Ok(2));
+    assert_eq!(draw_mixed_key(&d), Err(REFUSE_NOT_A_MIX));
+    for a in [GLES_SURF_RGBA8888, GLES_SURF_RGBA16F, GLES_SURF_RG32UI, GLES_SURF_RGBA32UI] {
+        for b in [GLES_SURF_R32UI, GLES_SURF_RGBA16I, GLES_SURF_RGBA32UI] {
+            for c in [GLES_SURF_R32F, GLES_SURF_RGBA32I] {
+                assert_ne!(draw_target_keys(&draw(&[a, b])), Err(REFUSE_FOUR_REGISTERS), "{a} {b}");
+                assert_ne!(draw_target_keys(&draw(&[a, b, c])), Err(REFUSE_FOUR_REGISTERS), "{a} {b} {c}");
+            }
+        }
+    }
+}
+
+/// Three targets whose last one does not fit the four registers: it spills
+/// to tile buffer 0 (`eot3_tb`), so the list has its keys; a mix with an
+/// integer target has its mixed key, one float class everywhere is no mix.
+#[test]
+fn the_last_of_three_spills() {
+    let d = draw(&[GLES_SURF_RGBA16F, GLES_SURF_RGBA16F, GLES_SURF_RGBA16F]);
+    assert_eq!(draw_target_keys(&d).map(|k| k.1), Ok(3));
+    assert_eq!(draw_mixed_key(&d), Err(REFUSE_NOT_A_MIX));
+    // dEQP fragment_out.random seed 9
+    assert_mix(&[GLES_SURF_R32I, GLES_SURF_R16I, GLES_SURF_RGBA32UI]);
+    // RGBA8, RG32UI, R32UI: register 1 is not back-filled
+    assert_mix(&[GLES_SURF_RGBA8888, GLES_SURF_RG32UI, GLES_SURF_R32UI]);
 }
 
 #[test]
