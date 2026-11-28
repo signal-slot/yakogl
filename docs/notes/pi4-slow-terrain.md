@@ -47,6 +47,12 @@ this section is the history of how that was found and is left as written.
 - **#1209.** Its title (terrain slow, 161.8 ms) no longer holds. See the report
   of this item for the verdict; this note records the figures and does not
   judge them for the roadmap.
+- **At `dfabc888`.** The Pi 4 glmark2 run of origin/main `dfabc888` reports
+  terrain at **34.68 ms a frame (29 fps)**, record
+  `records/pi4/common-dfabc888/` (figure as reported by that session; the
+  record was not readable when this line was written). Recorded, not judged.
+  #1209's title (terrain slow, 161.8 ms) does not hold at about 35 ms, so
+  #1209 can close.
 
 
 The host breakdown of glmark2 terrain on the Pi 4 (#1209): at main `c4af4917`
