@@ -218,6 +218,12 @@ fn fbo(f3: GLenum) -> (GLuint, [GLuint; 4]) {
         glGenFramebuffers(1, &mut fb);
         glBindFramebuffer(GL_FRAMEBUFFER, fb);
         for (i, t) in texs.iter().enumerate() {
+            /* the widened R32UI target takes all four output registers:
+             * RGBA8 beside it is over the budget (GL_FRAMEBUFFER_UNSUPPORTED,
+             * plan #368 pvr-budget-fb), so it stands alone */
+            if f3 == GL_R32UI && i < 3 {
+                continue;
+            }
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i as GLenum, GL_TEXTURE_2D, *t, 0);
         }
         let bufs: [GLenum; 4] = core::array::from_fn(|i| GL_COLOR_ATTACHMENT0 + i as GLenum);
@@ -313,7 +319,7 @@ fn a_clear_with_four_draw_buffers_reaches_four_targets() {
     release(fb, texs);
 }
 
-/// An R32UI texture at attachment 3 next to three RGBA8 ones: glClearBuffer
+/// An R32UI texture at attachment 3 (alone: see `fbo`): glClearBuffer
 /// uiv of draw buffer 3 and the read-back as RGBA_INTEGER (ES 3.0 4.3.2 allows no other for an integer buffer).
 #[test]
 fn read_buffer_3_reads_an_r32ui_attachment() {

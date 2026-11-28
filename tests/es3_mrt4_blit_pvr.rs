@@ -533,9 +533,10 @@ fn r32ui_attachment3_is_drawable_and_its_blit_follows_the_integer_rules() {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, W, GL_RED_INTEGER, GL_UNSIGNED_INT, p);
         glGenFramebuffers(1, &mut fb);
         glBindFramebuffer(GL_FRAMEBUFFER, fb);
-        for (i, t) in texs.iter().enumerate() {
-            glFramebufferTexture2D(GL_FRAMEBUFFER, att(i), GL_TEXTURE_2D, *t, 0);
-        }
+        /* the widened R32UI target takes all four output registers, so
+         * RGBA8 beside it is over the budget (GL_FRAMEBUFFER_UNSUPPORTED,
+         * plan #368 pvr-budget-fb): attachment 3 stands alone */
+        glFramebufferTexture2D(GL_FRAMEBUFFER, att(3), GL_TEXTURE_2D, texs[3], 0);
         assert_eq!(err(), GL_NO_ERROR, "attach an R32UI texture at attachment 3");
         assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "widened integer RT");
     }
