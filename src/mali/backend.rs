@@ -100,7 +100,7 @@ use crate::shaderc::online::mali::MaliShader;
 use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::util::{Global, EBUSY, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
 use core::ffi::c_void;
-use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 
 /// A framebuffer with no colour attachment is drawn
 /// (`backend::DEPTH_ONLY_TARGETS`): the GL core reports it complete and
@@ -292,6 +292,20 @@ pub const INVALID_TEXTURE_STORAGE: &str = "mali: a texture to copy without a CPU
 /// what the draw renders is undefined in GL (ES 2.0 4.4.3, a feedback loop).
 pub const NOT_BUILT_TEXTURE_FEEDBACK: &str =
     "mali: a draw that samples the texture its own frame renders into is not built yet";
+/// A draw's binding names a depth texture this backend said it samples
+/// from its own buffer ([`mali_depth_sampled`]), and no buffer holds that
+/// depth any more: the GL core left the texels stale, so nothing else is
+/// right to sample.
+pub const NOT_BUILT_DEPTH_SAMPLE_GONE: &str =
+    "mali: a depth texture sampled from its depth buffer, and no buffer holds its depth any more";
+
+/// Does a draw sample a rendered depth texture from the attachment pair's
+/// D24S8 buffer in place ([`mali_depth_sampled`])? On (the default): the
+/// GL core neither waits for the depth pass nor resolves it on the CPU.
+/// Off: every such draw samples the R32F texels [`mali_depth_resolve`]
+/// fills, as before; host tests that check those texels turn it off.
+pub static DEPTH_IN_PLACE: AtomicBool = AtomicBool::new(true);
+
 /// A frame starts from the old image and the preload program did not build
 /// at init (its log line says why).
 pub const NOT_BUILT_PRELOAD_PROGRAM: &str =
@@ -1869,7 +1883,8 @@ unsafe fn slot_arenas<'m>(
 /// programs; `vs_attributes` the vertex shader's (GL location, record)
 /// pairs; `occlusion` the counter of the query that counts it;
 /// `blend_shader` the address of target 0's blend shader, when its blend
-/// needs one.
+/// needs one; `views` the depth buffers its depth textures read in place
+/// ([`depth_views`]).
 #[allow(clippy::too_many_arguments)]
 fn add_gl_draw(
     open: &mut frame::OpenFrame,
@@ -1881,6 +1896,7 @@ fn add_gl_draw(
     has_zs: bool,
     occlusion: Option<u64>,
     blend_shader: Option<u64>,
+    views: &DepthViews,
     a: &mut Arenas,
     cs: &mut Stream,
 ) -> Result<(), FrameError> {
@@ -1896,8 +1912,8 @@ fn add_gl_draw(
     /* the data arena's order: the attributes, the indices, the fragment
      * textures, the vertex textures */
     let indices = indices(d, &mut a.data)?;
-    let fs_tex = stage_textures(d, false, &mut a.data)?;
-    let vs_tex = stage_textures(d, true, &mut a.data)?;
+    let fs_tex = stage_textures(d, false, views, &mut a.data)?;
+    let vs_tex = stage_textures(d, true, views, &mut a.data)?;
     let programs = (
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, vs.code, vs.meta)?,
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, fs.code, fs.meta)?,
@@ -2240,6 +2256,9 @@ fn volume_chain_levels(g: SliceGrid, depth: u32) -> u32 {
 /// them). A format this backend does not sample is never copied (it is
 /// refused).
 fn needs_copy(t: &backend::GlesTextureBind) -> bool {
+    if t.depth_id != 0 {
+        return false;
+    }
     let Some(f) = texel_format(t.format) else { return false };
     if is_volume(t) {
         return is_volume_texel(&f);
@@ -2307,6 +2326,7 @@ const BLACK_TEXEL: [u8; 4] = [0, 0, 0, 0xff];
 fn stage_textures(
     d: &GlesDraw,
     vertex: bool,
+    views: &DepthViews,
     data: &mut Pool,
 ) -> Result<Option<([frame::SampledTexture; frame::MAX_STAGE_TEXTURES], usize)>, FrameError> {
     let bindings = sampler_bindings(d, vertex);
@@ -2314,9 +2334,9 @@ fn stage_textures(
     if bindings.len() > frame::MAX_STAGE_TEXTURES {
         return Err(FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE));
     }
-    let mut out = [stage_texture(d, vertex, 0, first, data)?; frame::MAX_STAGE_TEXTURES];
+    let mut out = [stage_texture(d, vertex, 0, first, views, data)?; frame::MAX_STAGE_TEXTURES];
     for (i, (slot, &b)) in out.iter_mut().zip(bindings).enumerate().skip(1) {
-        *slot = stage_texture(d, vertex, i, b, data)?;
+        *slot = stage_texture(d, vertex, i, b, views, data)?;
     }
     Ok(Some((out, bindings.len())))
 }
@@ -2327,15 +2347,22 @@ fn stage_textures(
 /// reads a one-texel black cube of six faces, as Mesa's fallback texture of
 /// the target's kind does (`_mesa_get_fallback_texture`, src/mesa/main/
 /// texobj.c, Mesa 26.2.1), through the same cube descriptor as a complete
-/// one ([`black_texture`]).
+/// one ([`black_texture`]). A depth texture whose binding names its depth
+/// object (`GlesTextureBind::depth_id`) reads the buffer that holds the
+/// depth, `views`' entry for it ([`depth_texture`]).
 fn stage_texture(
     d: &GlesDraw,
     vertex: bool,
     index: usize,
     binding: u8,
+    views: &DepthViews,
     data: &mut Pool,
 ) -> Result<frame::SampledTexture, FrameError> {
     let bind = sampled_bind(d, vertex, binding);
+    if let Some(t) = bind.filter(|t| t.depth_id != 0 && t.incomplete == 0) {
+        let v = views.of(t.depth_id).ok_or(FrameError::NotBuilt(NOT_BUILT_DEPTH_SAMPLE_GONE))?;
+        return Ok(depth_texture(t, &v));
+    }
     let sh = if vertex { d.vs } else { d.fs };
     // SAFETY: as in `sampler_bindings`.
     let cubes = unsafe { sh.as_ref() }.and_then(MaliShader::of).map_or(0, |r| r.cube_samplers);
@@ -3334,6 +3361,7 @@ fn add_to_open(g: &mut MaliState, d: &GlesDraw, ctx: &frame::Context) -> Result<
     /* `check` refused a handle past the counters */
     let occlusion = query_counter(g, d.occlusion_query);
     texture_ready(g, d)?;
+    let views = depth_views(g, d, &o.key)?;
     let copied = sampled_binds(d).any(|t| t.incomplete == 0 && needs_copy(t));
     /* the colour type the fragment program writes (Mesa's blend[0].type) */
     // SAFETY: `programs` found the fragment record non-null; it lives in
@@ -3365,7 +3393,7 @@ fn add_to_open(g: &mut MaliState, d: &GlesDraw, ctx: &frame::Context) -> Result<
             }
             None => None,
         };
-        add_gl_draw(fr, d, shaders, vs_attributes, ctx, &target, has_zs, occlusion, blend_shader, a, cs)
+        add_gl_draw(fr, d, shaders, vs_attributes, ctx, &target, has_zs, occlusion, blend_shader, &views, a, cs)
     };
     match with_open(g, draw) {
         Ok(()) => {
@@ -3786,6 +3814,136 @@ pub unsafe extern "C" fn mali_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u
         })
     };
     0
+}
+
+/// Where a depth texture's rendered depth is read in place: the linear
+/// D24S8 buffer of the attachment pair whose frame stored it (`ZsBuf`,
+/// `4 * w` bytes a row, the depth in the low 24 bits, row 0 at GL's y 0:
+/// the layout [`mali_depth_resolve`] reads).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DepthView {
+    /// The depth object (`GlesTextureBind::depth_id`).
+    id: u32,
+    /// The attachment pair whose buffer holds it.
+    ds_id: u32,
+    gpu: u64,
+    row_stride: u32,
+    w: u32,
+    h: u32,
+}
+
+/// The depth views of one draw's bindings, at most one a binding.
+struct DepthViews([Option<DepthView>; backend::GLES_MAX_TEX_BINDS + backend::GLES_MAX_VS_TEX_BINDS]);
+
+impl DepthViews {
+    const NONE: DepthViews = DepthViews([None; backend::GLES_MAX_TEX_BINDS + backend::GLES_MAX_VS_TEX_BINDS]);
+
+    fn of(&self, id: u32) -> Option<DepthView> {
+        self.0.iter().flatten().find(|v| v.id == id).copied()
+    }
+}
+
+/// The buffer that holds the depth of GL object `id`, `w` x `h`, as a
+/// texture may read it: a live depth plane (a frame drew it; a plane that
+/// holds a clear alone is resolved on the CPU, which writes one value) in
+/// its pair's buffer of exactly that size, on a row stride the texture unit
+/// reads ([`TEXTURE_ROW_ALIGN`]), and not drawn into by the frame of
+/// `frame` (the open frame's: its write-back has not run,
+/// [`mali_depth_resolve`]'s -EBUSY case).
+fn depth_view(g: &MaliState, id: u32, w: u32, h: u32, frame: Option<&TargetKey>) -> Option<DepthView> {
+    if !g.up || id == 0 {
+        return None;
+    }
+    let e = g.planes.iter().find(|p| p.id == id && p.aspect == ds_retention::DEPTH && p.plane.is_live())?;
+    if frame.is_some_and(|k| k.ds_id == e.ds_id || k.objects.iter().any(|&(obj, _)| obj == id)) {
+        return None;
+    }
+    let z = g.zsbufs.iter().find(|z| z.ds_id == e.ds_id && !z.mem.cpu.is_null() && z.mem.gpu != 0)?;
+    let row_stride = w.checked_mul(4)?;
+    let bytes = (row_stride as usize).checked_mul(h as usize)?;
+    let fits = (z.w, z.h) == (w, h) && bytes != 0 && bytes <= z.mem.size;
+    let aligned = row_stride % TEXTURE_ROW_ALIGN == 0 && z.mem.gpu % u64::from(TEXTURE_ROW_ALIGN) == 0;
+    (fits && aligned).then_some(DepthView { id, ds_id: e.ds_id, gpu: z.mem.gpu, row_stride, w, h })
+}
+
+/// Will the next draw sample the depth GL object `id` (a depth texture's
+/// `GlesDraw::depth_id` form, `w` x `h`) rendered from the buffer that
+/// holds it, instead of the GL core's texels
+/// (`crate::backend::samples_rendered_depth`)? True when [`depth_view`]
+/// finds it: the GL core then neither waits for the depth pass nor runs
+/// [`mali_depth_resolve`] (for glmark2's shadow and refract, a 1600x1200
+/// map detiled on the CPU every frame), and the draw's texture reads the
+/// buffer as Z24X8 UNORM ([`depth_texture`]). False, or with
+/// [`DEPTH_IN_PLACE`] off: the GL core resolves on the CPU as before.
+///
+/// A reading of the planes, nothing more: the GL core has submitted the
+/// frame that rendered the depth first (`backend::flush`), whose submit
+/// recorded the plane live. The GPU runs kicks in order, so the kick that
+/// samples the buffer reads it after the one that wrote it back; a CPU
+/// write of the buffer ([`seed_depth`], [`take_plane`]) waits for every
+/// frame first.
+pub extern "C" fn mali_depth_sampled(id: u32, w: u32, h: u32) -> bool {
+    if !DEPTH_IN_PLACE.load(Ordering::Relaxed) {
+        return false;
+    }
+    // SAFETY: as in `mali_init`; a read of the backend's state.
+    let g = unsafe { STATE.get() };
+    depth_view(g, id, w, h, g.open.as_ref().map(|o| &o.key)).is_some()
+}
+
+/// The depth views of draw `d`, drawn into the frame of `key`: one for each
+/// binding the GL core gave a depth object (`GlesTextureBind::depth_id`,
+/// after [`mali_depth_sampled`] answered yes for it). Refused
+/// ([`NOT_BUILT_DEPTH_SAMPLE_GONE`]) when no buffer holds that depth any
+/// more (its texels are stale), and as a feedback loop
+/// ([`NOT_BUILT_TEXTURE_FEEDBACK`]) when the frame draws into the buffer
+/// it would read.
+fn depth_views(g: &MaliState, d: &GlesDraw, key: &TargetKey) -> Result<DepthViews, Fail> {
+    let mut views = DepthViews::NONE;
+    let binds = sampled_binds(d).filter(|t| t.depth_id != 0 && t.incomplete == 0);
+    for (slot, t) in views.0.iter_mut().zip(binds) {
+        /* `key` is the open frame's, this draw's: a buffer it writes back
+         * is a feedback loop, not a buffer gone */
+        let v = depth_view(g, t.depth_id, t.width, t.height, None)
+            .ok_or(FrameError::NotBuilt(NOT_BUILT_DEPTH_SAMPLE_GONE))?;
+        if key.ds_id == v.ds_id || key.objects.iter().any(|&(obj, _)| obj == t.depth_id) {
+            return Err(FrameError::NotBuilt(NOT_BUILT_TEXTURE_FEEDBACK).into());
+        }
+        *slot = Some(v);
+    }
+    Ok(views)
+}
+
+/// The texture a look-up of depth binding `t` reads from buffer `v`: one
+/// level, the buffer's words as Z24X8 UNORM in RGBA order on a RAW32 clump,
+/// the depth in the red channel; read (d, d, d, 1) on the ES 2.0 surface
+/// (GL_OES_depth_texture's luminance) and (d, 0, 0, 1) otherwise (ES 3.0.6
+/// 3.8.8). Mesa samples a depth resource this way (pan_format.c, Z24X8
+/// UNORM; the board's case 169 trace, `frame_tex_tests::check_depth`), and
+/// this backend's own depth preload reads the same buffer so
+/// (`frame::zs_preload_dcd`). The binding's filters, wraps and compare
+/// apply as to the texels.
+fn depth_texture(t: &backend::GlesTextureBind, v: &DepthView) -> frame::SampledTexture {
+    let f = TexelFormat {
+        format: Format::Z24X8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
+        clump: ClumpFormat::RAW32,
+        swizzle: frame::SWIZZLE_RGBA,
+        block_bytes: 0,
+        texel_bytes: 4,
+    };
+    let mut level = [frame::TextureLevel::default(); frame::MAX_TEXTURE_LEVELS];
+    level[0] = frame::TextureLevel { gpu: v.gpu, row_stride: v.row_stride };
+    let swizzle = if t.depth_luminance != 0 { frame::SWIZZLE_RRR1 } else { frame::swizzle4(0, 4, 4, 5) };
+    frame::SampledTexture {
+        width: v.w,
+        height: v.h,
+        levels: 1,
+        faces: 1,
+        array: false,
+        mipmap: MipmapMode::NONE,
+        swizzle,
+        ..sampled(t, &f, level)
+    }
 }
 
 /// The GL core is about to free the storage `[base_gpu, + bytes)` of a
