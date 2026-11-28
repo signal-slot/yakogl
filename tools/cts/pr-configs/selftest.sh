@@ -18,13 +18,17 @@
 #      -DCONFIG_ option of that line is in the fragment, so neither side can
 #      gain a setting the other lacks -- except case 217's own settings
 #      (GL_TEST_FORCEDPR_LAYERS=1220 in every gl_test-217-* fragment,
-#      FL_PROBE_NO_RESERVE=y in the gl_test-217-runC-* pair), which
+#      FL_PROBE_NO_RESERVE=y in the gl_test-217-runC-* pair and the
+#      gl_test-217-bgnd{A,B}-on probes, PR_BGND_PLACEMENT in those probes), which
 #      pr-session.sh has no -D option for and which only these fragments may
 #      carry. The dry run reads no board or toolchain environment
 #      (GLMARK2_SRC only names a path in the printed line); --allow-local lets
 #      it print on a topic branch. A --leg line builds with a fragment file:
 #      the check keeps that it names exactly the pair's committed file.
 # The knob differs only between each -off/-on pair (every other setting equal).
+# Each gl_test-217-bgnd{A,B}-on.conf is gl_test-217-runC-on.conf plus one
+# CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT line (A = 1, B = 2), compared
+# against runC-on's pr-session.sh line.
 # Also: README.md here has its SPDX header and names every fragment.
 #
 # Exit 0 when every check passes, 1 otherwise (each failure is one line).
@@ -33,9 +37,11 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../.." && pwd)
 SESSION=$REPO/tools/cts/pr-session.sh
 KCONFIGS=(driver/zephyr/Kconfig driver/samples/zephyr/glmark2/Kconfig driver/samples/zephyr/gl_test/Kconfig)
-EXPECTED=(gl_test-175-off.conf gl_test-175-on.conf gl_test-217-off.conf gl_test-217-on.conf
+EXPECTED=(gl_test-175-off.conf gl_test-175-on.conf gl_test-217-bgndA-on.conf gl_test-217-bgndB-on.conf
+    gl_test-217-off.conf gl_test-217-on.conf
     gl_test-217-runC-off.conf gl_test-217-runC-on.conf glmark2-d320c8a5-off.conf glmark2-d320c8a5-on.conf)
 KNOB=YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
+PLACEMENT=YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT
 
 fails=0
 passes=0
@@ -109,6 +115,7 @@ for f in "${EXPECTED[@]}"; do
     gl_test-217-on.conf) image=gltest opts=(--leg 217-on) leg=217-on ;;
     gl_test-217-runC-off.conf) image=gltest opts=(--knob off --cap-pages 0 --cases 217) ;;
     gl_test-217-runC-on.conf) image=gltest opts=(--knob on --cap-pages 0 --cases 217) ;;
+    gl_test-217-bgnd[AB]-on.conf) image=gltest opts=(--knob on --cap-pages 0 --cases 217) ;;
     glmark2-d320c8a5-off.conf) image=glmark2 opts=(--knob off --glmark2 --one-in-flight) ;;
     glmark2-d320c8a5-on.conf) image=glmark2 opts=(--knob on --glmark2 --one-in-flight) ;;
     esac
@@ -129,7 +136,8 @@ for f in "${EXPECTED[@]}"; do
     # fragment, and are not compared here.
     board_arg() { case "$1" in YAKOGL_AM62P_RTI_SELF_ARM | SOC_AM62PX_A53_FEED_INHERITED_WDT) return 0 ;; esac; return 1; }
     # case 217's own settings, which pr-session.sh has no option for
-    extra_ok() { case "$f:$1" in gl_test-217-*:GL_TEST_FORCEDPR_LAYERS | gl_test-217-runC-*:YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE) return 0 ;; esac; return 1; }
+    extra_ok() { case "$f:$1" in gl_test-217-*:GL_TEST_FORCEDPR_LAYERS | gl_test-217-runC-*:YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE) return 0 ;;
+        gl_test-217-bgnd[AB]-on.conf:YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE | gl_test-217-bgnd[AB]-on.conf:$PLACEMENT) return 0 ;; esac; return 1; }
     for sym in "${!frag[@]}"; do
         if [ -z "${want[$sym]+x}" ] && extra_ok "$sym"; then
             ok "$f: CONFIG_$sym=${frag[$sym]} (case 217's own setting)"
@@ -153,7 +161,12 @@ for f in "${EXPECTED[@]}"; do
             ok "$f: pr-session.sh --leg $leg builds with this file" ||
             bad "$f: pr-session.sh --leg $leg's west line does not name this file in -DEXTRA_CONF_FILE"
     fi
-    case "$f" in gl_test-217-runC-*) [ "${frag[YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE]:-}" = y ] || bad "$f: run C needs FL_PROBE_NO_RESERVE=y" ;; esac
+    case "$f" in gl_test-217-runC-* | gl_test-217-bgnd[AB]-on.conf) [ "${frag[YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE]:-}" = y ] || bad "$f: run C needs FL_PROBE_NO_RESERVE=y" ;; esac
+    case "$f" in
+    gl_test-217-bgndA-on.conf) [ "${frag[$PLACEMENT]:-}" = 1 ] && ok "$f: placement A (1)" || bad "$f: CONFIG_$PLACEMENT is not 1 (placement A)" ;;
+    gl_test-217-bgndB-on.conf) [ "${frag[$PLACEMENT]:-}" = 2 ] && ok "$f: placement B (2)" || bad "$f: CONFIG_$PLACEMENT is not 2 (placement B)" ;;
+    *) [ -z "${frag[$PLACEMENT]+x}" ] || bad "$f: sets CONFIG_$PLACEMENT (only the bgnd probes may)" ;;
+    esac
     case "$f" in gl_test-217-*) [ "${frag[GL_TEST_FORCEDPR_LAYERS]:-}" = 1220 ] || bad "$f: layers are not 1220" ;; esac
     unset frag want
 done
@@ -171,6 +184,20 @@ for pair in gl_test-175 gl_test-217 gl_test-217-runC glmark2-d320c8a5; do
         ok "$pair: off and on differ only in CONFIG_$KNOB (n, y)"
     else
         bad "$pair: off and on differ in more than CONFIG_$KNOB (n in off, y in on)"
+    fi
+done
+
+# the placement probes: run C's knob-on fragment plus the one placement line
+for p in A B; do
+    a=$HERE/gl_test-217-runC-on.conf
+    b=$HERE/gl_test-217-bgnd$p-on.conf
+    [ -f "$a" ] && [ -f "$b" ] || continue
+    da=$(grep -vE '^[[:space:]]*(#|$)' "$a" | LC_ALL=C sort)
+    db=$(grep -vE '^[[:space:]]*(#|$)' "$b" | grep -v "^CONFIG_$PLACEMENT=" | LC_ALL=C sort)
+    if [ "$da" = "$db" ] && [ "$(grep -c "^CONFIG_$PLACEMENT=" "$b")" = 1 ]; then
+        ok "gl_test-217-bgnd$p-on: gl_test-217-runC-on plus CONFIG_$PLACEMENT only"
+    else
+        bad "gl_test-217-bgnd$p-on: differs from gl_test-217-runC-on in more than one CONFIG_$PLACEMENT line"
     fi
 done
 
