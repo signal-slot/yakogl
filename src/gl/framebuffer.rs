@@ -172,18 +172,17 @@ pub fn draw_buffer0_none(c: &GlContext) -> bool {
 /// GL_MAX_DRAW_BUFFERS.
 ///
 /// The default framebuffer: GL_BACK or GL_NONE for buffer 0, GL_NONE after.
-/// A framebuffer object after glDrawBuffers: what it recorded. A framebuffer
-/// object glDrawBuffers never touched writes output `i` to attachment `i`
-/// ([`fb_target_n`]), so that is what is answered, although ES 3.0 says the
-/// initial value past buffer 0 is GL_NONE (see GL_CORE_NOTES.md, "Draw
-/// buffers").
+/// A framebuffer object after glDrawBuffers: what it recorded. One
+/// glDrawBuffers never touched answers its initial state (ES 3.0 4.2.1):
+/// GL_COLOR_ATTACHMENT0, then GL_NONE. (A draw into such an object still
+/// writes output `i` to attachment `i`, [`fb_target_n`].)
 pub fn draw_buffer(c: &GlContext, i: usize) -> GLenum {
     if c.bound_framebuffer == 0 {
         return if i == 0 && !default_draw_none(c) { GL_BACK } else { GL_NONE };
     }
     /* an object with no state of its own yet answers the initial mapping */
     let fb = c.framebuffer_ref(c.bound_framebuffer).filter(|fb| fb.num_draw_buf != 0);
-    let Some(fb) = fb else { return GL_COLOR_ATTACHMENT0 + i as GLenum };
+    let Some(fb) = fb else { return if i == 0 { GL_COLOR_ATTACHMENT0 } else { GL_NONE } };
     match fb.draw_buf.get(i) {
         Some(&b) if b >= 0 => GL_COLOR_ATTACHMENT0 + b as GLenum,
         _ => GL_NONE,
@@ -7136,7 +7135,7 @@ mod tests {
         assert_eq!(draw_buffer_q(0), GL_COLOR_ATTACHMENT0);
         assert!(fb_target_n(gl.ctx(), 1).is_some(), "never set: output 1 writes attachment 1");
         if two {
-            assert_eq!(draw_buffer_q(1), GL_COLOR_ATTACHMENT1);
+            assert_eq!(draw_buffer_q(1), GL_NONE, "initial state: buffers past 0 are GL_NONE");
         }
         // SAFETY: n = 0 reads nothing.
         unsafe { glDrawBuffers(0, core::ptr::null()) };

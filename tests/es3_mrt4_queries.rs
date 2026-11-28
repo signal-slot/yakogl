@@ -445,7 +445,6 @@ fn draw_buffer3_lists_with_and_without_gaps() {
 /// ES 3.0 6.1.? table 6.?: the initial draw buffers of a framebuffer object are
 /// COLOR_ATTACHMENT0 and then GL_NONE.
 #[test]
-#[ignore = "defect: src/gl/framebuffer.rs:184-185 (draw_buffer) answers COLOR_ATTACHMENTi for an object with no draw-buffer state yet; ES 3.0 says GL_NONE past buffer 0 (the doc comment at :176 records the choice)"]
 fn fresh_fbo_draw_buffer3_is_none() {
     let _g = context(4);
     let _f = fbo();
