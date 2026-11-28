@@ -19,7 +19,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-build
 BUILD_SH=$HERE/mali-glmark2-build.sh
-EXPECT=41
+EXPECT=43
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-build-selftest-XXXXXX")
 cleanup() {
   if [ "${MALI_GLMARK2_SELFTEST_KEEP-}" = 1 ]; then echo "mali-glmark2-build-selftest: kept $tmp"; else rm -rf "$tmp"; fi
@@ -83,6 +83,11 @@ echo "mali-glmark2-build-selftest: --dry-run of main's c1"
 dry main -- --dry-run "$tmp/out"
 check "a dry run on main exits 0 and says it runs nothing" \
   bash -c "[ \"\$(cat '$tmp/main.rc')\" = 0 ] && grep -q -- '--dry-run: the steps below are printed, none is run' '$tmp/main.txt'"
+dry es3 -- --dry-run --es3 "$tmp/out"
+check "the pair reports ES 2.0 by default (gl_report=es2)" \
+  says main "BUILD-INFO also gets gl_report=es2"
+check "--es3 keeps the ES 3.0 report (gl_report=es3, the pair built with --es3)" \
+  bash -c "grep -q 'BUILD-INFO also gets gl_report=es3' '$tmp/es3.txt' && grep -q 'build.sh --es3' '$tmp/es3.txt'"
 check "it prints the commit, dev=no, the glmark2 pin and flavour pbuffer" \
   says main "commit=$c1 dev=no glmark2=22c527cb0556f3a1ac4445aaa52cc532760928d5 flavour=pbuffer"
 check "it prints the six steps in order" \
