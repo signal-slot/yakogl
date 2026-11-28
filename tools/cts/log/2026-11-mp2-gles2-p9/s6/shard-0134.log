@@ -1,0 +1,1793 @@
+board-stm32mp2.sh <board-host>: shard-0134: build 14afa7748 boot uboot-sd image sha256 bf50a311851400f5 footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0134 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=70s
+board-stm32mp2.sh <board-host>: record <repo>.tmp/s6/run/shard-0134/20261128-0703-shard-0134-bf50a311/INDEX.txt
+[   72.541082] reboot: Restarting system
+INFO:    PSCI Power Domain Map:
+INFO:      Domain Node : Level 4, parent_node 4294967295, State ON (0x0)
+INFO:      Domain Node : Level 3, parent_node 0, State ON (0x0)
+INFO:      Domain Node : Level 2, parent_node 1, State ON (0x0)
+INFO:      Domain Node : Level 1, parent_node 2, State ON (0x0)
+INFO:      CPU Node : MPID 0x0, parent_node 3, State ON (0x0)
+INFO:      CPU Node : MPID 0x1, parent_node 3, State ON (0x0)
+NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Model: STMicroelectronics STM32MP257F-DK Discovery Board
+NOTICE:  Board: MB1605 Var1.0 Rev.C-01
+NOTICE:  Reset reason: System reset (SYSRST) (0x2074). Warm boot.
+INFO:    PMIC2 version = 0x11
+INFO:    PMIC2 product ID = 0x20
+INFO:    FCONF: Reading TB_FW firmware configuration file from: 0xe011000
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_io
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_fuse
+INFO:    Using SDMMC
+INFO:      Instance 1
+INFO:    Boot used partition fsbl1
+NOTICE:  BL2: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL2: Built : 16:16:36, Oct  3 2025
+INFO:    BL2: Loading image id 26
+INFO:    Loading image id=26 at address 0xe041000
+INFO:    Image id=26 loaded: 0xe041000 - 0xe049650
+INFO:    BL2: Doing platform setup
+INFO:    RAM: LPDDR4 1x32Gbits 1x32bits 1200MHz
+INFO:    Memory size = 0x100000000 (4096 MB)
+INFO:    BL2: Loading image id 1
+INFO:    Loading image id=1 at address 0xe000000
+INFO:    Image id=1 loaded: 0xe000000 - 0xe000326
+INFO:    FCONF: Reading FW_CONFIG firmware configuration file from: 0xe000000
+INFO:    FCONF: Reading firmware configuration information for: dyn_cfg
+INFO:    FCONF: Reading firmware configuration information for: risaf_config
+INFO:    RISAF2: No configuration in DT, use default
+INFO:    BL31 max size = 0x17000 (94208B)
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=3 at address 0xe000000
+INFO:    Image id=3 loaded: 0xe000000 - 0xe0169f8
+INFO:    BL2: Loading image id 19
+INFO:    Loading image id=19 at address 0x81fc0000
+INFO:    Image id=19 loaded: 0x81fc0000 - 0x81fc39a4
+INFO:    BL2: Loading image id 4
+INFO:    Loading image id=4 at address 0x82000000
+INFO:    Image id=4 loaded: 0x82000000 - 0x8200001c
+INFO:    OPTEE ep=0x82000000
+INFO:    OPTEE header info:
+INFO:          magic=0x4554504f
+INFO:          version=0x2
+INFO:          arch=0x1
+INFO:          flags=0x0
+INFO:          nb_images=0x1
+INFO:    BL2: Loading image id 8
+INFO:    Loading image id=8 at address 0x82000000
+INFO:    Image id=8 loaded: 0x82000000 - 0x820fe7b8
+INFO:    BL2: Loading image id 2
+INFO:    Loading image id=2 at address 0x84400000
+INFO:    Image id=2 loaded: 0x84400000 - 0x8441d498
+INFO:    BL2: Loading image id 5
+INFO:    Loading image id=5 at address 0x84000000
+INFO:    Image id=5 loaded: 0x84000000 - 0x841c5b80
+NOTICE:  BL2: Booting BL31
+INFO:    Entry point address = 0xe000000
+INFO:    SPSR = 0x3cd
+INFO:    ARM GICv2 driver initialized
+NOTICE:  BL31: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL31: Built : 16:16:36, Oct  3 2025
+INFO:    BL31: Initializing runtime services
+INFO:    BL31: Initializing BL32
+I/TC: Early console on UART#2
+I/TC: 
+I/TC: Embedded DTB found
+I/TC: OP-TEE version: 4.0.0-dev (gcc version 13.4.0 (GCC)) #1 Fri Oct 20 18:29:31 UTC 2023 aarch64
+I/TC: WARNING: This OP-TEE configuration might be insecure!
+I/TC: WARNING: Please check https://optee.readthedocs.io/en/latest/architecture/porting_guidelines.html
+I/TC: Primary CPU initializing
+I/TC: WARNING: All debug access are allowed
+I/TC: Override the OTP 124: 0 to 0x18db6
+I/TC: WARNING: Embeds insecure stm32mp_provisioning driver
+I/TC: PMIC STPMIC REFID:2.@ V1.1
+I/TC: Platform stm32mp2: flavor PLATFORM_FLAVOR - DT <board-host>.dts
+I/TC: OP-TEE ST profile: secure_and_system_services
+[    0.000000] SCP-firmware 2.13.0-intree-optee-os-4.0.0-dev
+[    0.000000] 
+[    0.000000] [FWK] Module initialization complete!
+I/TC: Primary CPU switching to normal world boot
+INFO:    BL31: Preparing for EL3 exit to normal world
+INFO:    Entry point address = 0x84000000
+INFO:    SPSR = 0x3c9
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+
+
+U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)
+
+CPU: STM32MP257FAK Rev.Y
+Model: STMicroelectronics STM32MP257F-DK Discovery Board
+Board: stm32mp2 (st,<board-host>)
+Board: MB1605 Var1.0 Rev.C-01
+DRAM:  4 GiB
+optee optee: OP-TEE: revision 4.0 (2a5b1d12)
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+Core:  420 devices, 42 uclasses, devicetree: board
+WDT:   Started watchdog with servicing every 1000ms (32s timeout)
+NAND:  0 MiB
+MMC:   STM32 SD/MMC: 0, STM32 SD/MMC: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: eth1@482c0000
+\x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+yakogl-mp2: hook
+yakogl-mp2: once=shard-0134-bf50a311851400f5-1795849437
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+10808384 bytes read in 659 ms (15.6 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 x2=0xf8099c98 x3=0xa0000000 pc=0xa0747eec cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 166450580 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 600 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 600000 ms of uptime
+sample: build tree=66fcaa3a2 table=6c5b8a70
+gc_power: gpu at 0x48280000, rcc 0x44200000 at 0x44200000, shm pa 0xa0b53000
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+gc_power: optee smc 0xb2000009 0x0 0x0 0x0 -> 0x0 0x8074 0x45 0x4
+gc_power: optee msg > 04000000000000000000000000000000000000000000000000000000010000000a020000000000000040b5a00000000000100000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 04000000000000000000000000000000000000000000000000000000010000000a020000000000000040b5a00000000000100000000000000100000000000000
+gc_power: optee msg > 00000000000000000000000000000000000000000000000000000000020000000101000000000000a8cfe406d4f54a2e9f8da25dc754c09900000000000000000101000000000000000000000000000000000000000000000000008000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 00000000000000000100000000000000000000000000000004000000020000000101000000000000a8cfe406d4f54a2e9f8da25dc754c09900000000000000000101000000000000000000000000000000000000000000000000008000000000
+gc_power: optee msg > 01000000030000000100000000000000000000000000000000000000010000000300000000000000000000000000000002000000000000000000000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 01000000030000000100000000000000000000000000000004000000010000000300000000000000000000000000000002000000000000000000000000000000
+gc_power: scmi > 004c0400
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000040000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000004000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 004c04000000000000000200
+gc_power: scmi > 084c040001000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000080000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000008000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 084c0400000000000008af2f
+gc_power: scmi > 074c0400010000000008af2f
+gc_power: optee msg > 01000000040000000100000000000000000000000000000000000000030000000100000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000c0000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 01000000040000000100000000000000000000000000000004000000030000000100000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000c0000000000000001000000000000000600000000000000800000000000000008000000000000000100000000000000
+gc_power: scmi < 074c040000000000
+gc_power: scmi > 084c040001000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000080000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000008000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 084c0400000000000008af2f
+gc_power: scmi > 00440400
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000040000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000004000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 004404000000000000000200
+gc_power: scmi > 04440400000000000000000000000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000100000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 0100000004000000010000000000000000000000000000000400000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000100000000000000001000000000000000600000000000000800000000000000008000000000000000100000000000000
+gc_power: scmi < 0444040000000000
+gc_power: scmi > 0544040000000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000080000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000008000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 054404000000000000000000
+gc_power: rcc gpucfgr 0x00000006 at entry
+gc_power: rcc gpucfgr 0x00000007 (reset held)
+gc_power: rcc gpucfgr 0x00000006
+gc_power: rcc reset released after 1 reads
+gc_power: gpu idle 0x7fffffff after 1 reads
+gc_power: optee msg > 0200000000000000010000000000000000000000000000000000000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 0200000000000000010000000000000000000000000000000300000000000000
+gc_power: optee msg > 05000000000000000000000000000000000000000000000000000000010000000500000000000000000000000000000000000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 05000000000000000000000000000000000000000000000000000000010000000500000000000000000000000000000000000000000000000100000000000000
+gc_power: powered: level 800000000 (found 800000000), rcc 0x00000006, idle 0x7fffffff after 1 reads
+gc_power: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+gc_power: registers say: features 0xe0687ca5 minor0 0xc9799eff minor1 0xfefbfadb
+gc_power: database: MMU v2 secure AHB yes, 2 shader cores, 1 pixel pipe(s)
+gc_power: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 table=1
+gc_power: ahb-reset-release off
+I: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+I: registers say: features 0xe0687ca5 minor0 0xc9799eff minor1 0xfefbfadb
+I: database: MMU v2 secure AHB yes, 2 shader cores, 1 pixel pipe(s)
+I: gc diag: reset-attempt n=1 004=0x7fffffff 000=0x00070100
+I: reset to idle: CLOCK_CONTROL=0x00070100 IDLE_STATE=0x7fffffff
+I: gc diag: after-reset 3a8=0xdeaddeac 10c=0x01590880
+I: GC8000 bring-up milestone 1 complete (Rust; core clock 800000000 Hz, carveout 0xfa800000+64M)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+deqp: slot filter, 13156 bytes
+deqp: case filter 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_0,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_17,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_32,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_8,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_0,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_17,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_32,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_8,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_0,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_17,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_32,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_8,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_0,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_17,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_32,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_8,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_0,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_17,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_32,dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_8,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride17_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride17_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride2_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride2_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride17_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride17_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride2_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride2_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride17_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride17_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride2_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride2_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride17_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride17_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride2_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride2_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride17_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride17_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride2_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride2_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride17_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride17_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride2_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride2_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride8_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride8_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride8_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride8_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride8_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride8_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride32_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride32_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride8_quads256,dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride8_quads5,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte2_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte2_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte3_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte3_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte4_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte4_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed2_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed2_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed3_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed3_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed4_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed4_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float2_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float2_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float3_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float3_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float4_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float4_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short2_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short2_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short3_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short3_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short4_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short4_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte2_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte2_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte3_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte3_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte4_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte4_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short2_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short2_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short3_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short3_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short4_normalized_vec4_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short4_normalized_vec4_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_17_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_17_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_2_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_2_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_32_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_32_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_17_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_17_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_2_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_2_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_32_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_32_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_17_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_17_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_2_byte2_vec2_dynamic_draw_quads_1,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_2_byte2_vec2_dynamic_draw_quads_256,dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_32_byte2_vec2_dynamic_draw_quads_1'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-192.0.2.1-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: carveout: 0xfa800000 (64 MiB) at 0xbbe00000
+W: AHB_CONTROL (0x3a8) reads 0xdeaddeac: the interconnect's pattern for an address no slave decodes; writing the non-secure grant alone
+I: hw init: AXI_CONFIG 0x00000000 (write-only or absent) AHB_CONTROL 0xdeaddeae (absent: no slave at that address) INTR_ENBL 0xffffffff
+I: gc diag: after-init 3a8=0xdeaddeae 10c=0x015d0880
+I: mmu: MTLB at 0xfa800000, carveout 0xfa800000+65536K identity-mapped in 16 slave tables
+I: irq 215 connected
+gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0xa0 group=0 pend=0 active=0 gicd_ctlr=0x1 typer=0xfc2c secext=1 gicc_ctlr=0x41 pmr=0xf0 route=ours
+gc_irq: igroupr=0x00000000 (GICD_IGROUPR6) bit23=0 expect=1 mismatch
+I: mmu: on (PTA 0xfa801000 entry 0 -> MTLB 0xfa800000, safe page 0xfa802000)
+I: fe: running the idle loop at 0xfa844000 (WAIT 24414 cycles)
+I: render service up: 30 events, pool 65152 KiB free
+I: osal(gc): ready
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_0'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_17'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_32'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_8'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_32_float2_8_float2_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_0'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_17'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_32'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_8'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_0_float2_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_0'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_17'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_32'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_8'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_17_float2_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_0'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_17'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_32'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_8'..
+I: GL error 0x500 in glGetIntegerv
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_32_float2_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_0'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_17'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_32'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_8'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.multiple_attributes.stride.3_float2_8_float2_8_float2_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride17_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride17_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride17_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride17_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride2_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride2_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride2_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride2_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset16_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride17_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride17_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride17_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride17_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride2_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride2_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride2_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride2_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset17_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride17_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride17_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride17_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride17_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride2_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride2_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride2_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride2_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first24_offset1_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride17_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride17_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride17_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride17_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride2_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride2_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride2_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride2_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset16_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride17_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride17_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride17_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride17_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride2_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride2_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride2_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride2_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset17_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride17_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride17_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride17_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride17_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride2_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride2_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride2_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride2_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.byte_first6_offset1_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride8_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride8_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride8_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first24_offset16_stride8_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride8_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride8_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride8_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.fixed_first6_offset16_stride8_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride8_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride8_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride8_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first24_offset16_stride8_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride32_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride32_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride32_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride32_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride8_quads256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride8_quads256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride8_quads5'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.first.float_first6_offset16_stride8_quads5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte2_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte2_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte2_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte2_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte3_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte3_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte3_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte3_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte4_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte4_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte4_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_byte4_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed2_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed2_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed2_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed2_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed3_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed3_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed3_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed3_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed4_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed4_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed4_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_fixed4_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float2_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float2_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float2_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float2_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float3_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float3_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float3_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float3_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float4_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float4_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float4_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_float4_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short2_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short2_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short2_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short2_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short3_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short3_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short3_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short3_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short4_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short4_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short4_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_short4_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte2_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte2_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte2_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte2_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte3_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte3_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte3_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte3_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte4_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte4_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte4_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_byte4_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short2_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short2_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short2_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short2_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short3_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short3_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short3_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short3_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short4_normalized_vec4_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short4_normalized_vec4_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short4_normalized_vec4_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.normalize.user_ptr_0_0_unsigned_short4_normalized_vec4_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_17_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_17_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_17_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_17_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_2_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_2_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_2_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_2_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_32_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_32_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_32_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_17_32_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_17_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_17_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_17_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_17_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_2_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_2_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_2_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_2_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_32_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_32_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_32_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_1_32_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_17_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_17_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_17_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_17_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_2_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_2_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_2_byte2_vec2_dynamic_draw_quads_256'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_2_byte2_vec2_dynamic_draw_quads_256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_32_byte2_vec2_dynamic_draw_quads_1'..
+deqp: Pass dEQP-GLES2.functional.vertex_arrays.single_attribute.offset.buffer_32_32_byte2_vec2_dynamic_draw_quads_1
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        125/125 (100.0%)
+  Failed:        0/125 (0.0%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 125 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 6400 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: PASS
+yk-record: 594b0201 00000001 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 19267 ms
+INFO:    PSCI Power Domain Map:
+INFO:      Domain Node : Level 4, parent_node 4294967295, State ON (0x0)
+INFO:      Domain Node : Level 3, parent_node 0, State ON (0x0)
+INFO:      Domain Node : Level 2, parent_node 1, State ON (0x0)
+INFO:      Domain Node : Level 1, parent_node 2, State ON (0x0)
+INFO:      CPU Node : MPID 0x0, parent_node 3, State ON (0x0)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 3, State OFF (0x3)
+NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Model: STMicroelectronics STM32MP257F-DK Discovery Board
+NOTICE:  Board: MB1605 Var1.0 Rev.C-01
+NOTICE:  Reset reason: System reset (SYSRST) (0x2074). Warm boot.
+INFO:    PMIC2 version = 0x11
+INFO:    PMIC2 product ID = 0x20
+INFO:    FCONF: Reading TB_FW firmware configuration file from: 0xe011000
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_io
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_fuse
+INFO:    Using SDMMC
+INFO:      Instance 1
+INFO:    Boot used partition fsbl1
+NOTICE:  BL2: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL2: Built : 16:16:36, Oct  3 2025
+INFO:    BL2: Loading image id 26
+INFO:    Loading image id=26 at address 0xe041000
+INFO:    Image id=26 loaded: 0xe041000 - 0xe049650
+INFO:    BL2: Doing platform setup
+INFO:    RAM: LPDDR4 1x32Gbits 1x32bits 1200MHz
+INFO:    Memory size = 0x100000000 (4096 MB)
+INFO:    BL2: Loading image id 1
+INFO:    Loading image id=1 at address 0xe000000
+INFO:    Image id=1 loaded: 0xe000000 - 0xe000326
+INFO:    FCONF: Reading FW_CONFIG firmware configuration file from: 0xe000000
+INFO:    FCONF: Reading firmware configuration information for: dyn_cfg
+INFO:    FCONF: Reading firmware configuration information for: risaf_config
+INFO:    RISAF2: No configuration in DT, use default
+INFO:    BL31 max size = 0x17000 (94208B)
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=3 at address 0xe000000
+INFO:    Image id=3 loaded: 0xe000000 - 0xe0169f8
+INFO:    BL2: Loading image id 19
+INFO:    Loading image id=19 at address 0x81fc0000
+INFO:    Image id=19 loaded: 0x81fc0000 - 0x81fc39a4
+INFO:    BL2: Loading image id 4
+INFO:    Loading image id=4 at address 0x82000000
+INFO:    Image id=4 loaded: 0x82000000 - 0x8200001c
+INFO:    OPTEE ep=0x82000000
+INFO:    OPTEE header info:
+INFO:          magic=0x4554504f
+INFO:          version=0x2
+INFO:          arch=0x1
+INFO:          flags=0x0
+INFO:          nb_images=0x1
+INFO:    BL2: Loading image id 8
+INFO:    Loading image id=8 at address 0x82000000
+INFO:    Image id=8 loaded: 0x82000000 - 0x820fe7b8
+INFO:    BL2: Loading image id 2
+INFO:    Loading image id=2 at address 0x84400000
+INFO:    Image id=2 loaded: 0x84400000 - 0x8441d498
+INFO:    BL2: Loading image id 5
+INFO:    Loading image id=5 at address 0x84000000
+INFO:    Image id=5 loaded: 0x84000000 - 0x841c5b80
+NOTICE:  BL2: Booting BL31
+INFO:    Entry point address = 0xe000000
+INFO:    SPSR = 0x3cd
+INFO:    ARM GICv2 driver initialized
+NOTICE:  BL31: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL31: Built : 16:16:36, Oct  3 2025
+INFO:    BL31: Initializing runtime services
+INFO:    BL31: Initializing BL32
+I/TC: Early console on UART#2
+I/TC: 
+I/TC: Embedded DTB found
+I/TC: OP-TEE version: 4.0.0-dev (gcc version 13.4.0 (GCC)) #1 Fri Oct 20 18:29:31 UTC 2023 aarch64
+I/TC: WARNING: This OP-TEE configuration might be insecure!
+I/TC: WARNING: Please check https://optee.readthedocs.io/en/latest/architecture/porting_guidelines.html
+I/TC: Primary CPU initializing
+I/TC: WARNING: All debug access are allowed
+I/TC: Override the OTP 124: 0 to 0x18db6
+I/TC: WARNING: Embeds insecure stm32mp_provisioning driver
+I/TC: PMIC STPMIC REFID:2.@ V1.1
+I/TC: Platform stm32mp2: flavor PLATFORM_FLAVOR - DT <board-host>.dts
+I/TC: OP-TEE ST profile: secure_and_system_services
+[    0.000000] SCP-firmware 2.13.0-intree-optee-os-4.0.0-dev
+[    0.000000] 
+[    0.000000] [FWK] Module initialization complete!
+I/TC: Primary CPU switching to normal world boot
+INFO:    BL31: Preparing for EL3 exit to normal world
+INFO:    Entry point address = 0x84000000
+INFO:    SPSR = 0x3c9
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+
+
+U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)
+
+CPU: STM32MP257FAK Rev.Y
+Model: STMicroelectronics STM32MP257F-DK Discovery Board
+Board: stm32mp2 (st,<board-host>)
+Board: MB1605 Var1.0 Rev.C-01
+DRAM:  4 GiB
+optee optee: OP-TEE: revision 4.0 (2a5b1d12)
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+Core:  420 devices, 42 uclasses, devicetree: board
+WDT:   Started watchdog with servicing every 1000ms (32s timeout)
+NAND:  0 MiB
+MMC:   STM32 SD/MMC: 0, STM32 SD/MMC: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: eth1@482c0000
+\x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+yakogl-mp2: hook
+Hit any key to stop autoboot:  1 \x08\x08\x08 0 
+Boot over mmc0!
+switch to partitions #0, OK
+mmc0 is current device
+Scanning mmc 0:8...
+Found /mmc0_extlinux/extlinux.conf
+Retrieving file: /mmc0_extlinux/extlinux.conf
+Retrieving file: /splash_landscape.bmp
+1:	OpenSTLinux
+Enter choice: 1:	OpenSTLinux
+Retrieving file: /Image.gz
+Retrieving file: /st-image-resize-initrd
+append: root=PARTUUID=e91c4e10-16e6-4c0e-bd0e-77becf4a3582 rootwait rw   earlycon console=ttySTM0,115200
+Retrieving file: /<board-host>.dtb
+   Uncompressing Kernel Image
+## Flattened Device Tree blob at 90000000
+   Booting using the fdt blob at 0x90000000
+Working FDT set to 90000000
+   Loading Ramdisk to 8f7c0000, end 8ffff41a ... OK
+   Loading Device Tree to 000000008f79f000, end 000000008f7bf24e ... OK
+Working FDT set to 8f79f000
+
+Starting kernel ...
+
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x411fd040]
+[    0.000000] Linux version 6.6.129 (oe-user@oe-host) (aarch64-ostl-linux-gcc (GCC) 13.4.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP PREEMPT Thu Mar  5 15:03:43 UTC 2026
+[    0.000000] KASLR disabled due to lack of seed
+[    0.000000] Machine model: STMicroelectronics STM32MP257F-DK Discovery Board
+[    0.000000] efi: UEFI not found.
+[    0.000000] Reserved memory: created CMA memory pool at 0x00000000f2800000, size 128 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000f2800000..0x00000000fa7fffff (131072 KiB) map reusable linux,cma
+[    0.000000] OF: reserved mem: 0x000000000a000000..0x000000000a01ffff (128 KiB) nomap non-reusable tfa-bl31@a000000
+[    0.000000] OF: reserved mem: 0x000000000a020000..0x000000000a02ffff (64 KiB) nomap non-reusable hpdma1-lli@a020000
+[    0.000000] OF: reserved mem: 0x000000000a030000..0x000000000a03dfff (56 KiB) nomap non-reusable hpdma2-lli@a030000
+[    0.000000] OF: reserved mem: 0x000000000a03e000..0x000000000a03ffff (8 KiB) nomap non-reusable hpdma3-lli@a03e000
+[    0.000000] OF: reserved mem: 0x000000000a040000..0x000000000a040fff (4 KiB) nomap non-reusable bsec-mirror@a040000
+[    0.000000] OF: reserved mem: 0x000000000a041000..0x000000000a041fff (4 KiB) nomap non-reusable scmi-cid2-s@a041000
+[    0.000000] OF: reserved mem: 0x000000000a042000..0x000000000a042fff (4 KiB) nomap non-reusable scmi-cid2-ns@a042000
+[    0.000000] OF: reserved mem: 0x000000000a043000..0x000000000a05ffff (116 KiB) nomap non-reusable cm33-sram1@a043000
+[    0.000000] OF: reserved mem: 0x000000000a060000..0x000000000a07ffff (128 KiB) nomap non-reusable cm33-sram2@a060000
+[    0.000000] OF: reserved mem: 0x000000000a080000..0x000000000a09efff (124 KiB) nomap non-reusable cm33-retram@a080000
+[    0.000000] OF: reserved mem: 0x000000000a09f000..0x000000000a09ffff (4 KiB) nomap non-reusable ddr-param@a09f000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000200c0000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node cm0-cube-fw@200C0000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000200c0000..0x00000000200c3fff (16 KiB) nomap non-reusable cm0-cube-fw@200C0000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000200c4000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node cm0-cube-data@200C4000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000200c4000..0x00000000200c5fff (8 KiB) nomap non-reusable cm0-cube-data@200C4000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000200c6000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node ipc-shmem-2@200C6000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000200c6000..0x00000000200c7fff (8 KiB) nomap non-reusable ipc-shmem-2@200C6000
+[    0.000000] OF: reserved mem: 0x0000000042000000..0x0000000042000fff (4 KiB) nomap non-reusable bl31-lowpower@42000000
+[    0.000000] OF: reserved mem: 0x0000000042001000..0x0000000042001fff (4 KiB) nomap non-reusable tfm-its@42001000
+[    0.000000] OF: reserved mem: 0x0000000060000000..0x000000006fffffff (262144 KiB) nomap non-reusable mm-ospi@60000000
+[    0.000000] OF: reserved mem: 0x0000000080000000..0x00000000800fffff (1024 KiB) nomap non-reusable tfm-code@80000000
+[    0.000000] OF: reserved mem: 0x0000000080100000..0x00000000808fffff (8192 KiB) nomap non-reusable cm33-cube-fw@80100000
+[    0.000000] OF: reserved mem: 0x0000000080900000..0x00000000809fffff (1024 KiB) nomap non-reusable tfm-data@80900000
+[    0.000000] OF: reserved mem: 0x0000000080a00000..0x00000000811fffff (8192 KiB) nomap non-reusable cm33-cube-data@80a00000
+[    0.000000] Reserved memory: created DMA memory pool at 0x0000000081200000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node ipc-shmem-1@81200000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x0000000081200000..0x00000000812f7fff (992 KiB) nomap non-reusable ipc-shmem-1@81200000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000812f8000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node vdev0vring0@812f8000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000812f8000..0x00000000812f8fff (4 KiB) nomap non-reusable vdev0vring0@812f8000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000812f9000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node vdev0vring1@812f9000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000812f9000..0x00000000812f9fff (4 KiB) nomap non-reusable vdev0vring1@812f9000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000812fa000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node vdev0buffer@812fa000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000812fa000..0x00000000812fffff (24 KiB) nomap non-reusable vdev0buffer@812fa000
+[    0.000000] OF: reserved mem: 0x0000000081300000..0x0000000081fbffff (13056 KiB) nomap non-reusable spare1@81300000
+[    0.000000] OF: reserved mem: 0x0000000081fc0000..0x0000000081ffffff (256 KiB) nomap non-reusable bl31-context@81fc0000
+[    0.000000] OF: reserved mem: 0x0000000082000000..0x0000000083ffffff (32768 KiB) nomap non-reusable op-tee@82000000
+[    0.000000] OF: reserved mem: 0x00000000fa800000..0x00000000fe7fffff (65536 KiB) nomap non-reusable gpu-reserved@fa800000
+[    0.000000] OF: reserved mem: 0x00000000fe800000..0x00000000feffffff (8192 KiB) nomap non-reusable ltdc-sec-layer@fe800000
+[    0.000000] OF: reserved mem: 0x00000000ff000000..0x00000000ffffffff (16384 KiB) nomap non-reusable ltdc-sec-rotation@ff000000
+[    0.000000] earlycon: stm32 at MMIO 0x00000000400e0000 (options '115200n8')
+[    0.000000] printk: bootconsole [stm32] enabled
+[    0.000000] NUMA: No NUMA configuration found
+[    0.000000] NUMA: Faking a node at [mem 0x0000000080000000-0x000000017fffffff]
+[    0.000000] NUMA: NODE_DATA [mem 0x17f7a49c0-0x17f7a6fff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000017fffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x0000000083ffffff]
+[    0.000000]   node   0: [mem 0x0000000084000000-0x00000000fa7fffff]
+[    0.000000]   node   0: [mem 0x00000000fa800000-0x00000000ffffffff]
+[    0.000000]   node   0: [mem 0x0000000100000000-0x000000017fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x000000017fffffff]
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.4
+[    0.000000] psci: OSI mode supported.
+[    0.000000] percpu: Embedded 22 pages/cpu s49640 r8192 d32280 u90112
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: root=PARTUUID=e91c4e10-16e6-4c0e-bd0e-77becf4a3582 rootwait rw   earlycon console=ttySTM0,115200
+[    0.000000] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.000000] Fallback order for Node 0: 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 1032192
+[    0.000000] Policy zone: Normal
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] software IO TLB: area num 2.
+[    0.000000] software IO TLB: mapped [mem 0x00000000ee800000-0x00000000f2800000] (64MB)
+[    0.000000] Memory: 3724712K/4194304K available (15360K kernel code, 1680K rwdata, 6040K rodata, 3776K init, 475K bss, 338520K reserved, 131072K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=2, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for 4kB GICC access disabled
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GIC: Using split EOI/Deactivate mode
+[    0.000000] GICv2m: range[mem 0x48090000-0x48090fff], SPI[362:392]
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 40.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x939a85c40, max_idle_ns: 440795202120 ns
+[    0.000000] sched_clock: 56 bits at 40MHz, resolution 25ns, wraps every 4398046511100ns
+[    0.009077] Console: colour dummy device 80x25
+[    0.012489] Calibrating delay loop (skipped), value calculated using timer frequency.. 80.00 BogoMIPS (lpj=160000)
+[    0.022758] pid_max: default: 32768 minimum: 301
+[    0.027436] LSM: initializing lsm=capability,integrity
+[    0.032589] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.039886] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.048585] cacheinfo: Unable to detect cache hierarchy for CPU 0
+[    0.054681] RCU Tasks: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.062547] RCU Tasks Trace: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.071885] rcu: Hierarchical SRCU implementation.
+[    0.076451] rcu: 	Max phase no-delay instances is 1000.
+[    0.083946] EFI services will not be available.
+[    0.086513] smp: Bringing up secondary CPUs ...
+I/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+[    0.104190] Detected VIPT I-cache on CPU1
+[    0.104284] CPU1: Booted secondary processor 0x0000000001 [0x411fd040]
+[    0.104400] smp: Brought up 1 node, 2 CPUs
+[    0.113379] SMP: Total of 2 processors activated.
+[    0.118062] CPU features: detected: 32-bit EL0 Support
+[    0.123202] CPU features: detected: 32-bit EL1 Support
+[    0.128313] CPU features: detected: CRC32 instructions
+[    0.133494] CPU: All CPU(s) started at EL2
+[    0.137536] alternatives: applying system-wide alternatives
+[    0.145439] devtmpfs: initialized
+[    0.168701] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.172846] futex hash table entries: 512 (order: 3, 32768 bytes, linear)
+[    0.183569] pinctrl core: initialized pinctrl subsystem
+[    0.185506] DMI not present or invalid.
+[    0.189413] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.195397] DMA: preallocated 512 KiB GFP_KERNEL pool for atomic allocations
+[    0.201690] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.209481] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.217766] thermal_sys: Registered thermal governor 'step_wise'
+[    0.217773] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.223248] cpuidle: using governor menu
+[    0.233810] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.240454] ASID allocator initialised with 65536 entries
+[    0.246010] Serial: AMBA PL011 UART driver
+[    0.267166] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.273334] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.284476] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.295135] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/audio-controller@400b0000
+[    0.306854] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.317747] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.328676] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.339894] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.350026] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    0.360866] /soc@0/bus@42080000/dcmipp@48030000: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.371521] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.381565] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/display-controller@48010000
+[    0.392775] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.402941] /soc@0/clock-controller@44200000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.412842] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    0.422734] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    0.432897] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    0.443061] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    0.453244] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.463739] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.473918] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.484421] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.495002] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/tpiu@4a050000
+[    0.505592] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etr@4a040000
+[    0.516111] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    0.526633] /soc@0/bus@4a000000/stm@4a080000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.536827] /soc@0/bus@4a000000/etm@4a240000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.546973] /soc@0/bus@4a000000/etm@4a340000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.558141] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.568860] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.579993] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.590655] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/audio-controller@400b0000
+[    0.602370] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.613227] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.624176] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.635384] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.645510] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    0.656344] /soc@0/bus@42080000/dcmipp@48030000: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.666963] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.677036] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/display-controller@48010000
+[    0.688243] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.698777] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.710016] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.721526] /soc@0/bus@42080000/i2c@40130000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.730877] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.741608] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/audio-controller@400b0000
+[    0.753380] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.765484] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.775264] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.786537] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.797206] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.807312] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    0.818381] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.828344] /soc@0/bus@42080000/dcmipp@48030000: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.841002] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.849668] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.860281] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.870815] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/display-controller@48010000
+[    0.882207] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.895082] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.902732] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.913521] /soc@0/bus@42080000/i2c@40130000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.923164] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.934469] /soc@0/clock-controller@44200000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.947031] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    0.954135] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    0.964289] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    0.974462] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    0.984652] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.995166] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.005361] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    1.015881] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    1.026462] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/tpiu@4a050000
+[    1.037072] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etr@4a040000
+[    1.047594] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    1.058128] /soc@0/bus@4a000000/stm@4a080000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.068326] /soc@0/bus@4a000000/etm@4a240000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.078482] /soc@0/bus@4a000000/etm@4a340000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.089378] /ahb@1/i2c@2/typec@35/connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/usb@48300000/usb@48300000
+[    1.100200] /ahb@1/i2c@2/typec@35/connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/usb@48300000/usb@48300000
+[    1.111870] /soc@0/bus@42080000/mdf@404d0000/filter@84/mdf-dai: Fixed dependency cycle(s) with /dmic-0
+[    1.120002] /dmic-0: Fixed dependency cycle(s) with /soc@0/bus@42080000/mdf@404d0000/filter@84/mdf-dai
+[    1.129291] /soc@0/bus@42080000/mdf@404d0000/filter@104/mdf-dai: Fixed dependency cycle(s) with /dmic-1
+[    1.138684] /dmic-1: Fixed dependency cycle(s) with /soc@0/bus@42080000/mdf@404d0000/filter@104/mdf-dai
+[    1.148448] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /connector
+[    1.156717] /connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    1.165953] Modules: 25872 pages in range for non-PLT usage
+[    1.165961] Modules: 517392 pages in range for PLT usage
+[    1.171744] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    1.182912] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    1.189163] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+[    1.195935] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+[    1.202191] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    1.208968] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+[    1.215224] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+[    1.221997] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+[    1.230038] ACPI: Interpreter disabled.
+[    1.232799] iommu: Default domain type: Translated
+[    1.236875] iommu: DMA domain TLB invalidation policy: strict mode
+[    1.243337] SCSI subsystem initialized
+[    1.247203] usbcore: registered new interface driver usbfs
+[    1.252306] usbcore: registered new interface driver hub
+[    1.257587] usbcore: registered new device driver usb
+[    1.263003] pps_core: LinuxPPS API ver. 1 registered
+[    1.267550] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <<email>>
+[    1.276690] PTP clock support registered
+[    1.280768] EDAC MC: Ver: 3.0.0
+[    1.284122] CPUidle PSCI: Initialized CPU PM domain topology using OSI mode
+[    1.291348] scmi_core: SCMI protocol bus registered
+[    1.295953] FPGA manager framework
+[    1.299053] Advanced Linux Sound Architecture Driver Initialized.
+[    1.306053] vgaarb: loaded
+[    1.308031] clocksource: Switched to clocksource arch_sys_counter
+[    1.314031] VFS: Disk quotas dquot_6.6.0
+[    1.317734] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    1.324941] pnp: PnP ACPI: disabled
+[    1.336805] NET: Registered PF_INET protocol family
+[    1.337069] IP idents hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    1.348387] tcp_listen_portaddr_hash hash table entries: 2048 (order: 3, 32768 bytes, linear)
+[    1.352036] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    1.359701] TCP established hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    1.367847] TCP bind hash table entries: 32768 (order: 8, 1048576 bytes, linear)
+[    1.375928] TCP: Hash tables configured (established 32768 bind 32768)
+[    1.381669] UDP hash table entries: 2048 (order: 4, 65536 bytes, linear)
+[    1.388286] UDP-Lite hash table entries: 2048 (order: 4, 65536 bytes, linear)
+[    1.395613] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    1.401470] RPC: Registered named UNIX socket transport module.
+[    1.406905] RPC: Registered udp transport module.
+[    1.411578] RPC: Registered tcp transport module.
+[    1.416270] RPC: Registered tcp-with-tls transport module.
+[    1.421746] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    1.428191] PCI: CLS 0 bytes, default 64
+[    1.432350] Unpacking initramfs...
+[    1.432350] kvm [1]: IPA Size Limit: 40 bits
+[    1.435528] kvm [1]: vgic interrupt IRQ9
+[    1.443871] kvm [1]: Hyp mode initialized successfully
+[    1.450324] Initialise system trusted keyrings
+[    1.453512] workingset: timestamp_bits=42 max_order=20 bucket_order=0
+[    1.460173] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    1.468278] NFS: Registering the id_resolver key type
+[    1.470524] Key type id_resolver registered
+[    1.474807] Key type id_legacy registered
+[    1.478749] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    1.485571] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    1.492909] jffs2: version 2.2. (NAND)  2001-2006 Red Hat, Inc.
+[    1.499268] fuse: init (API version 7.39)
+[    1.503131] 9p: Installing v9fs 9p2000 file system support
+[    1.561163] NET: Registered PF_ALG protocol family
+[    1.561215] Key type asymmetric registered
+[    1.564486] Asymmetric key parser 'x509' registered
+[    1.569383] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 246)
+[    1.576678] io scheduler mq-deadline registered
+[    1.581187] io scheduler kyber registered
+[    1.585250] io scheduler bfq registered
+[    1.589525] /soc@0/interrupt-controller@44220000: bank0
+[    1.594235] /soc@0/interrupt-controller@44220000: bank1
+[    1.599430] /soc@0/interrupt-controller@44220000: bank2
+[    1.604984] /soc@0/interrupt-controller@46230000: bank0
+[    1.609907] /soc@0/interrupt-controller@46230000: bank1
+[    1.615069] /soc@0/interrupt-controller@46230000: bank2
+[    1.620979] Registering stm32-rifsc firewall controller
+[    1.631955] EINJ: ACPI disabled.
+[    1.641573] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    1.645387] STM32 USART driver initialized
+[    1.653210] loop: module loaded
+[    1.654330] megasas: 192.0.2.2-rc1
+[    1.660351] thunder_xcv, ver 1.0
+[    1.660436] thunder_bgx, ver 1.0
+[    1.661201] nicpf, ver 1.0
+[    1.664519] hns3: Hisilicon Ethernet Network Driver for Hip08 Family - version
+[    1.671083] hns3: Copyright (c) 2017 Huawei Corporation.
+[    1.676526] hclge is initializing
+[    1.679706] e1000: Intel(R) PRO/1000 Network Driver
+[    1.684552] e1000: Copyright (c) 1999-2006 Intel Corporation.
+[    1.690383] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.695246] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.701233] igb: Intel(R) Gigabit Ethernet Network Driver
+[    1.706541] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    1.712202] igbvf: Intel(R) Gigabit Virtual Function Network Driver
+[    1.718368] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    1.724645] sky2: driver version 1.30
+[    1.732189] VFIO - User Level meta-driver version: 0.3
+[    1.734737] usbcore: registered new interface driver usb-storage
+[    1.739449] usbcore: registered new device driver onboard-usb-hub
+[    1.748161] i2c_dev: i2c /dev entries driver
+[    1.751398] arm_smc_wdt watchdog: Watchdog registered (timeout=32 sec, nowayout=0)
+[    1.758856] sdhci: Secure Digital Host Controller Interface driver
+[    1.763204] sdhci: Copyright(c) Pierre Ossman
+[    1.768338] Synopsys Designware Multimedia Card Interface Driver
+[    1.774388] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.780770] ledtrig-cpu: registered to indicate activity on CPUs
+[    1.786273] SMCCC: SOC_ID: ID = jep106:0020:0505 Revision = 0x00000011
+[    1.792889] usbcore: registered new interface driver usbhid
+[    1.797256] usbhid: USB HID core driver
+[    1.803284] hw perfevents: enabled with armv8_cortex_a35 PMU driver, 7 counters available
+[    1.811666] optee: probing for conduit method.
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+[    1.813715] optee: revision 4.0 (2a5b1d12)
+[    1.840843] optee: Asynchronous notifications enabled
+[    1.844391] optee: dynamic shared memory is enabled
+[    1.852287] random: crng init done
+[    1.853054] optee: initialized driver
+[    1.858697] NET: Registered PF_PACKET protocol family
+[    1.864203] 9pnet: Installing 9P2000 support
+[    1.865687] Key type dns_resolver registered
+[    1.883711] registered taskstats version 1
+[    1.883971] Loading compiled-in X.509 certificates
+[    1.905489] scmi_protocol scmi_dev.1: Enabled polling mode TX channel - prot_id:16
+[    1.907631] arm-scmi firmware:scmi: SCMI Notifications - Core Enabled.
+[    1.914208] arm-scmi firmware:scmi: SCMI Protocol v2.0 'ST:ST' Firmware version 0x20d0000
+[    1.923797] cpu cpu0: EM: created perf domain
+[    1.927896] scmi-perf-domain scmi_dev.4: Initialized 2 performance domains
+[    1.934152] Freeing initrd memory: 8444K
+[    1.953670] scmi-regulator scmi_dev.7: Regulator vddio1 registered for domain [0]
+[    1.955663] scmi-regulator scmi_dev.7: Regulator vddio2 registered for domain [1]
+[    1.963207] scmi-regulator scmi_dev.7: Regulator vddio3 registered for domain [2]
+[    1.970667] scmi-regulator scmi_dev.7: Regulator vddio4 registered for domain [3]
+[    1.978117] scmi-regulator scmi_dev.7: Regulator reserved registered for domain [5]
+[    1.985768] scmi-regulator scmi_dev.7: Regulator vdda18adc registered for domain [7]
+[    1.993505] scmi-regulator scmi_dev.7: Regulator vddcore registered for domain [11]
+[    2.001160] scmi-regulator scmi_dev.7: Regulator v1v8 registered for domain [14]
+[    2.008556] scmi-regulator scmi_dev.7: Regulator v3v3 registered for domain [16]
+[    2.015962] scmi-regulator scmi_dev.7: Regulator vdd_emmc registered for domain [18]
+[    2.023685] scmi-regulator scmi_dev.7: Regulator vdd3v3_usb registered for domain [20]
+[    2.031600] scmi-regulator scmi_dev.7: Regulator v5v_hdmi registered for domain [21]
+[    2.039346] scmi-regulator scmi_dev.7: Regulator v5v_vconn registered for domain [22]
+[    2.047177] scmi-regulator scmi_dev.7: Regulator vdd_sdcard registered for domain [23]
+[    2.057334] stm32-ipcc 40490000.mailbox: ipcc rev:2.0 enabled, 16 chans, proc 0
+[    2.084754] Registering stm32mp25_rcc firewall controller
+[    2.086062] stm32-ipcc 46250000.mailbox: ipcc rev:2.0 enabled, 4 chans, proc 1
+[    2.093185] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOA bank added
+[    2.098746] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOB bank added
+[    2.105330] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOC bank added
+[    2.111917] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOD bank added
+[    2.118506] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOE bank added
+[    2.125119] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOF bank added
+[    2.131829] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOG bank added
+[    2.138418] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOH bank added
+[    2.144959] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOI bank added
+[    2.151301] stm32mp257-pinctrl soc@0:pinctrl@44240000: Pinctrl STM32 initialized
+[    2.160486] stm32mp257-pinctrl soc@0:pinctrl@46200000: GPIOZ bank added
+[    2.165284] stm32mp257-pinctrl soc@0:pinctrl@46200000: Pinctrl STM32 initialized
+[    2.173229] stm32-dma3 40400000.dma-controller: created LLI gen_pool at 0x000000000a020000, size 64KiB
+[    2.184080] stm32-dma3 40400000.dma-controller: STM32 DMA3 registered rev:1.3
+[    2.189591] stm32-dma3 40410000.dma-controller: created LLI gen_pool at 0x000000000a030000, size 56KiB
+[    2.200436] stm32-dma3 40410000.dma-controller: STM32 DMA3 registered rev:1.3
+[    2.206006] stm32-dma3 40420000.dma-controller: created LLI gen_pool at 0x000000000a03e000, size 8KiB
+[    2.215132] stm32-dma3 40420000.dma-controller: STM32 DMA3 registered rev:1.3
+[    2.224192] stm32-usart 40330000.serial: Wakeup might not be available: No autonomous clock
+[    2.230497] 40330000.serial: ttySTM2 at MMIO 0x40330000 (irq = 55, base_baud = 4000000) is a stm32-usart
+[    2.239973] serial serial0: tty port ttySTM2 registered
+[    2.246534] stm32_rtc 46000000.rtc: registered as rtc0
+[    2.250053] stm32_rtc 46000000.rtc: setting system clock to 2000-01-01T01:37:51 UTC (946690671)
+[    2.259926] stm32_rtc 46000000.rtc: Date/Time must be initialized
+[    2.264822] stm32_rtc 46000000.rtc: registered rev:3.4
+[    2.272448] stm32-usart 400e0000.serial: Wakeup might not be available: No autonomous clock
+[    2.273656] mmci-pl18x 48240000.mmc: allocated mmc-pwrseq
+[    2.278463] stm32-usart 400e0000.serial: interrupt mode for rx (no dma)
+[    2.284505] mmci-pl18x 48220000.mmc: Got CD GPIO
+[    2.290315] stm32-usart 400e0000.serial: interrupt mode for tx (no dma)
+[    2.294937] mmci-pl18x 48230000.mmc: mmc0: PL180 manf 53 rev3 at 0x48230000 irq 57,0 (pio)
+[    2.308167] mmci-pl18x 48240000.mmc: mmc1: PL180 manf 53 rev3 at 0x48240000 irq 59,0 (pio)
+[    2.309859] mmci-pl18x 48220000.mmc: mmc2: PL180 manf 53 rev3 at 0x48220000 irq 60,0 (pio)
+[    2.326331] 400e0000.serial: ttySTM0 at MMIO 0x400e0000 (irq = 58, base_baud = 4000000) is a stm32-usart
+[    2.341479] printk: console [ttySTM0] enabled
+[    2.341479] printk: console [ttySTM0] enabled
+[    2.344587] printk: bootconsole [stm32] disabled
+[    2.344587] printk: bootconsole [stm32] disabled
+[    2.359046] input: gpio-keys as /devices/platform/gpio-keys/input/input0
+[    2.362317] clk: Disabling unused clocks
+[    2.364872] ALSA device list:
+[    2.367406]   No soundcards found.
+[    2.377583] Freeing unused kernel memory: 3776K
+[    2.377692] Run /init as init process
+[    2.442568] mmc0: new HS200 MMC card at address 0001
+[    2.443190] mmc2: new ultra high speed SDR104 SDXC card at address aaaa
+[    2.449048] mmcblk0: mmc0:0001 008GB1 7.28 GiB
+[    2.455377] mmcblk2: mmc2:aaaa SN64G 59.5 GiB
+[    2.461289]  mmcblk0: p1 p2 p3 p4 p5 p6 p7 p8
+[    2.463615] mmcblk0boot0: mmc0:0001 008GB1 4.00 MiB
+[    2.469292] mmcblk0boot1: mmc0:0001 008GB1 4.00 MiB
+[    2.472487]  mmcblk2: p1 p2 p3 p4 p5 p6 p7 p8 p9 p10 p11
+[    2.477888] mmcblk0rpmb: mmc0:0001 008GB1 4.00 MiB, chardev (240:0)
+[    2.545641] mmc1: new high speed SDIO card at address 0001
+Starting systemd-udevd version 255.21^
+[    3.469242] EXT4-fs (mmcblk2p10): mounted filesystem b18b558e-7a48-4cfd-a961-3f4c0f2d10cd r/w with ordered data mode. Quota mode: none.
+[    4.078836] stm32-rproc 0.m33: wdg irq registered
+[    4.078893] stm32-rproc 0.m33: pdds sys config not defined
+[    4.084815] remoteproc remoteproc1: m0 is available
+[    4.089295] stm32-rproc 0.m33: rsc tbl syscon not supported
+[    4.094496] stm32-rproc 0.m33: mbox_request_channel_byname() could not locate channel named "detach"
+[    4.103405] remoteproc remoteproc0: cannot get detach mbox
+[    4.108947] remoteproc remoteproc0: m33 is available
+[    4.130179] usb-stm32-dwc3 42080000.bus:usb@48300000: configured in usb3 mode
+[    4.136471] /ahb@1/i2c@2/typec@35/connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/usb@48300000/usb@48300000
+[    4.143149] /soc@0/bus@42080000/usb@48300000/usb@48300000: Fixed dependency cycle(s) with /ahb@1/i2c@2/typec@35/connector
+[    4.171665] st,stm32-i2s 400b0000.audio-controller: No cache defaults, reading back from HW
+[    4.228794] ehci-platform 482f0000.usb: EHCI Host Controller
+[    4.228848] ehci-platform 482f0000.usb: new USB bus registered, assigned bus number 1
+[    4.244005] ehci-platform 482f0000.usb: irq 74, io mem 0x482f0000
+[    4.246470] stm32-cryp 42030000.crypto: will run requests pump with realtime priority
+[    4.256795] stm32-mdf 404d0000.mdf: No cache defaults, reading back from HW
+[    4.260094] ehci-platform 482f0000.usb: USB 2.0 started, EHCI 1.00
+[    4.268360] hub 1-0:1.0: USB hub found
+[    4.270382] hub 1-0:1.0: 1 port detected
+[    4.283209] mc: Linux media interface: v0.10
+[    4.305737] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    4.323062] stm32-cryp 42030000.crypto: Initialized
+[    4.332542] galcore: loading out-of-tree module taints kernel.
+[    4.352527] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    4.359870] videodev: Linux video capture interface: v2.00
+[    4.364488] stm32-crc32 404c0000.crc: Initialized
+[    4.394425] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    4.400740] Galcore version 6.4.21.1.1058597
+[    4.402457] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    4.427572] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    4.433681] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    4.456846] stm32-dwmac 482c0000.eth1: IRQ eth_lpi not found
+[    4.459481] stm32-dwmac 482c0000.eth1: User ID: 0x1a, Synopsys ID: 0x53
+[    4.468487] stm32f7-i2c 40130000.i2c: STM32F7 I2C-0 bus adapter
+[    4.470797] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    4.512860] stm32-dwmac 482c0000.eth1: 	DWMAC4/5
+[    4.512903] stm32-dwmac 482c0000.eth1: DMA HW capability register supported
+[    4.532859] stm32-dwmac 482c0000.eth1: RX Checksum Offload Engine supported
+[    4.539249] stm32-dwmac 482c0000.eth1: TX Checksum insertion supported
+[    4.541930] stm32-dwmac 482c0000.eth1: Wake-Up On Lan supported
+[    4.546929] usb 1-1: new high-speed USB device number 2 using ehci-platform
+[    4.557786] thermal cooling_device1: GPU Clock Scale to 64/64
+[    4.560967] stm32-csi 48020000.csi: Probed CSI with 2 lanes
+[    4.568178] thermal cooling_device1: GPU Clock Scale to 64/64
+[    4.571322] stm32-dwmac 482c0000.eth1: TSO supported
+[    4.581190] dcmipp 48030000.dcmipp: Probe done
+[    4.584459] Bluetooth: Core ver 2.22
+[    4.584584] NET: Registered PF_BLUETOOTH protocol family
+[    4.589628] Bluetooth: HCI device and connection manager initialized
+[    4.595946] Bluetooth: HCI socket layer initialized
+[    4.600908] Bluetooth: L2CAP socket layer initialized
+[    4.604376] stm32-dwmac 482c0000.eth1: Enable RX Mitigation via HW Watchdog Timer
+[    4.605952] Bluetooth: SCO socket layer initialized
+[    4.618951] stm32-dwmac 482c0000.eth1: Enabled L3L4 Flow TC (entries=2)
+[    4.625403] stm32-dwmac 482c0000.eth1: Enabled RFS Flow TC (entries=10)
+[    4.631855] stm32-dwmac 482c0000.eth1: TSO feature enabled
+[    4.637289] stm32-dwmac 482c0000.eth1: Using 32/32 bits DMA host/device width
+[    4.663156] Registering stm32-dbg-bus firewall controller
+[    4.668733] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    4.678760] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    4.687343] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    4.694430] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    4.706637] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    4.715606] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.729464] Bluetooth: HCI UART driver ver 2.3
+[    4.729687] Bluetooth: HCI UART protocol H4 registered
+[    4.735020] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    4.745358] Bluetooth: HCI UART protocol LL registered
+[    4.750692] Bluetooth: HCI UART protocol Broadcom registered
+[    4.756236] Bluetooth: HCI UART protocol QCA registered
+[    4.756800] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.772088] Bluetooth: HCI UART protocol Marvell registered
+[    4.793482] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.799075] hub 1-1:1.0: USB hub found
+[    4.799105] hantro-vpu 480d0000.vdec: registered st,stm32mp25-vdec-dec as /dev/video5
+[    4.802486] hub 1-1:1.0: 2 ports detected
+[    4.813234] hantro-vpu 480e0000.venc: registered st,stm32mp25-venc-enc as /dev/video6
+[    4.816336] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.836346] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.843915] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.854457] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/tpiu@4a050000
+[    4.865263] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etr@4a040000
+[    4.875815] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    4.890157] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    4.896704] /soc@0/bus@4a000000/stm@4a080000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    4.909602] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    4.917969] /soc@0/bus@4a000000/etm@4a240000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    4.930296] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    4.938350] /soc@0/bus@4a000000/etm@4a340000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    5.153591] Bluetooth: hci0: BCM: chip id 147
+[    5.154089] Bluetooth: hci0: BCM: features 0x0e
+[    5.158791] Bluetooth: hci0: CYW4343A2
+[    5.161809] Bluetooth: hci0: BCM (001.003.016) build 0000
+[    5.168213] Bluetooth: hci0: BCM 'brcm/BCM.st,<board-host>.hcd' Patch
+[    5.182504] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43439-sdio for chip BCM43439/5
+[    5.352170] imx335 0-001a: Error reading reg 0x3912: -6
+[    5.352217] imx335 0-001a: failed to find sensor: -6
+[    5.367390] stm32-mdf-adc 404d0084.filter: No cache defaults, reading back from HW
+[    5.369849] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[    5.379708] brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM43439/5 wl0: Apr 18 2024 01:55:03 version 7.95.86 (9a12fda CY) FWID 01-86edbd67
+[    5.400334] stm32-mdf-adc 404d0104.filter: No cache defaults, reading back from HW
+[    5.490214] stm32-dwmac 482c0000.eth1 end0: renamed from eth0
+[    5.493853]  cs_system_cfg: CoreSight Configuration manager initialised
+[    5.532380] [drm] Initialized stm 1.0.0 20170330 for 48010000.display-controller on minor 0
+[    5.565801] CSCFG registered etm0
+[    5.565819] coresight etm0: CPU0: etm v4.0 initialized
+[    5.580228] coresight-tmc 4a040000.etr: Detected dma mask 32bits
+[    5.595254] CSCFG registered etm1
+[    5.595271] coresight etm1: CPU1: etm v4.0 initialized
+[    5.613153] coresight cti_sys0: CTI initialized
+[    5.615393] coresight cti_sys1: CTI initialized
+[    5.622605] coresight cti_cpu0: CTI initialized
+[    5.631308] coresight cti_cpu1: CTI initialized
+[    5.633202] coresight stm0: STM500 initialized
+ln: /etc/mtab: File exists
+[    5.693369] Bluetooth: hci0: BCM: features 0x0e
+[    5.695250] Bluetooth: hci0: UART 4343A2 wlbga_BU
+[    5.697193] Bluetooth: hci0: BCM (001.003.016) build 0000
+[    6.102714] systemd[1]: System time before build time, advancing clock.
+[    6.167352] NET: Registered PF_INET6 protocol family
+[    6.208471] Segment Routing with IPv6
+[    6.208561] In-situ OAM (IOAM) with IPv6
+[    6.252097] systemd[1]: systemd 255.21^ running in system mode (+PAM -AUDIT -SELINUX -APPARMOR +IMA -SMACK -SECCOMP -GCRYPT -GNUTLS -OPENSSL -ACL +BLKID -CURL -ELFUTILS -FIDO2 -IDN2 -IDN +IPTC +KMOD -LIBCRYPTSETUP +LIBFDISK -PCRE2 -PWQUALITY -P11KIT -QRENCODE -TPM2 -BZIP2 -LZ4 -XZ -ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified)
+[    6.278759] systemd[1]: Detected architecture arm64.
+
+Welcome to \x1b[1mST OpenSTLinux - Weston - (A Yocto Project Based Distro) 5.0.17-openstlinux-6.6-yocto-scarthgap-mpu-v26.06.10 (scarthgap)\x1b[0m!
+
+[    6.309361] systemd[1]: Hostname set to <<board-hostname>>.
+[    6.367130] systemd[1]: Using hardware watchdog 'arm_smc_wdt', version 0, device /dev/watchdog0
+[    6.370636] systemd[1]: Watchdog running with a hardware timeout of 32s.
+[    6.880679] systemd[1]: Queued start job for default target Multi-User System.
+[    6.907157] systemd[1]: Created slice Slice /system/getty.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mSlice /system/getty\x1b[0m.
+[    6.930657] systemd[1]: Created slice Slice /system/modprobe.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mSlice /system/modprobe\x1b[0m.
+[    6.950397] systemd[1]: Created slice Slice /system/serial-getty.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mSlice /system/serial-getty\x1b[0m.
+[    6.969687] systemd[1]: Created slice User and Session Slice.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mUser and Session Slice\x1b[0m.
+[    6.988661] systemd[1]: Started Dispatch Password Requests to Console Directory Watch.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mDispatch Password Requests to Console Directory Watch\x1b[0m.
+[    7.008600] systemd[1]: Started Forward Password Requests to Wall Directory Watch.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mForward Password Requests to Wall Directory Watch\x1b[0m.
+[    7.028423] systemd[1]: Expecting device /dev/dri/card0...
+         Expecting device \x1b[0;1;39m/dev/dri/card0\x1b[0m...
+[    7.044428] systemd[1]: Expecting device /dev/hwrng...
+         Expecting device \x1b[0;1;39m/dev/hwrng\x1b[0m...
+[    7.060397] systemd[1]: Expecting device /dev/tee0...
+         Expecting device \x1b[0;1;39m/dev/tee0\x1b[0m...
+[    7.076540] systemd[1]: Reached target Path Units.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mPath Units\x1b[0m.
+[    7.092450] systemd[1]: Reached target Remote File Systems.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mRemote File Systems\x1b[0m.
+[    7.112392] systemd[1]: Reached target Slice Units.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSlice Units\x1b[0m.
+[    7.128479] systemd[1]: Reached target Swaps.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSwaps\x1b[0m.
+[    7.199185] systemd[1]: Listening on RPCbind Server Activation Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mRPCbind Server Activation Socket\x1b[0m.
+[    7.220697] systemd[1]: Reached target RPC Port Mapper.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mRPC Port Mapper\x1b[0m.
+[    7.237263] systemd[1]: Listening on Syslog Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mSyslog Socket\x1b[0m.
+[    7.260636] systemd[1]: Listening on Process Core Dump Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mProcess Core Dump Socket\x1b[0m.
+[    7.280778] systemd[1]: Listening on initctl Compatibility Named Pipe.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39minitctl Compatibility Named Pipe\x1b[0m.
+[    7.307993] systemd[1]: Journal Audit Socket was skipped because of an unmet condition check (ConditionSecurity=audit).
+[    7.314196] systemd[1]: Listening on Journal Socket (/dev/log).
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mJournal Socket (/dev/log)\x1b[0m.
+[    7.337259] systemd[1]: Listening on Journal Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mJournal Socket\x1b[0m.
+[    7.353356] systemd[1]: Listening on Network Service Netlink Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mNetwork Service Netlink Socket\x1b[0m.
+[    7.373244] systemd[1]: Listening on udev Control Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mudev Control Socket\x1b[0m.
+[    7.389028] systemd[1]: Listening on udev Kernel Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mudev Kernel Socket\x1b[0m.
+[    7.424678] systemd[1]: Mounting Huge Pages File System...
+         Mounting \x1b[0;1;39mHuge Pages File System\x1b[0m...
+[    7.449139] systemd[1]: Mounting POSIX Message Queue File System...
+         Mounting \x1b[0;1;39mPOSIX Message Queue File System\x1b[0m...
+[    7.472499] systemd[1]: Mounting Kernel Debug File System...
+         Mounting \x1b[0;1;39mKernel Debug File System\x1b[0m...
+[    7.493353] systemd[1]: Kernel Trace File System was skipped because of an unmet condition check (ConditionPathExists=/sys/kernel/tracing).
+[    7.506348] systemd[1]: Mounting Temporary Directory /tmp...
+         Mounting \x1b[0;1;39mTemporary Directory /tmp\x1b[0m...
+[    7.540884] systemd[1]: Starting Create List of Static Device Nodes...
+         Starting \x1b[0;1;39mCreate List of Static Device Nodes\x1b[0m...
+[    7.584711] systemd[1]: Starting Load Kernel Module configfs...
+         Starting \x1b[0;1;39mLoad Kernel Module configfs\x1b[0m...
+[    7.605351] systemd[1]: Starting Load Kernel Module drm...
+         Starting \x1b[0;1;39mLoad Kernel Module drm\x1b[0m...
+[    7.628932] systemd[1]: Starting Load Kernel Module fuse...
+         Starting \x1b[0;1;39mLoad Kernel Module fuse\x1b[0m...
+[    7.657294] systemd[1]: Starting Mount partitions...
+         Starting \x1b[0;1;39mMount partitions\x1b[0m...
+[    7.679085] systemd[1]: Starting RPC Bind...
+         Starting \x1b[0;1;39mRPC Bind\x1b[0m...
+[    7.693169] systemd[1]: File System Check on Root Device was skipped because of an unmet condition check (ConditionPathIsReadWrite=!/).
+[    7.707420] systemd[1]: Starting Journal Service...
+         Starting \x1b[0;1;39mJournal Service\x1b[0m...
+[    7.738932] systemd[1]: Starting Load Kernel Modules...
+         Starting \x1b[0;1;39mLoad Kernel Modules\x1b[0m...
+[    7.766707] systemd[1]: Starting Generate network units from Kernel command line...
+         Starting \x1b[0;1;39mGenerate network units from Kernel command line\x1b[0m...
+[    7.786495] systemd-journald[329]: Collecting audit messages is disabled.
+[    7.819964] tun: Universal TUN/TAP device driver, 1.6
+[    7.834242] systemd[1]: Starting Remount Root and Kernel File Systems...
+         Starting \x1b[0;1;39mRemount Root and Kernel File Systems\x1b[0m...
+[    7.886270] systemd[1]: Starting Coldplug All udev Devices...
+         Starting \x1b[0;1;39mColdplug All udev Devices\x1b[0m...
+[    7.958299] systemd[1]: Started RPC Bind.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mRPC Bind\x1b[0m.
+[    7.975665] EXT4-fs (mmcblk2p10): re-mounted b18b558e-7a48-4cfd-a961-3f4c0f2d10cd.
+[    7.990500] systemd[1]: Started Journal Service.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mJournal Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mHuge Pages File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mPOSIX Message Queue File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mKernel Debug File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mTemporary Directory /tmp\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate List of Static Device Nodes\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Module configfs\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Module drm\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Module fuse\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Modules\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mGenerate network units from Kernel command line\x1b[0m.
+[    8.170989] EXT4-fs (mmcblk2p8): mounted filesystem 56a0347e-dc14-4f33-b71a-39cba4d394b7 r/w with ordered data mode. Quota mode: none.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mRemount Root and Kernel File Systems\x1b[0m.
+         Mounting \x1b[0;1;39mFUSE Control File System\x1b[0m...
+         Mounting \x1b[0;1;39mKernel Configuration File System\x1b[0m...
+         Starting \x1b[0;1;39mFlush Journal to Persistent Storage\x1b[0m...
+         Starting \x1b[0;1;39mApply Kernel Variables\x1b[0m...
+         Starting \x1b[0;1;39mCreate Static Device Nodes in /dev gracefully\x1b[0m...
+[    8.499404] systemd-journald[329]: Received client request to flush runtime journal.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mFUSE Control File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mKernel Configuration File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mFlush Journal to Persistent[    8.569352] EXT4-fs (mmcblk2p9): mounted filesystem 5583d621-d71b-4fee-a421-2f9fe7de4d4c r/w with ordered data mode. Quota mode: none.
+ Storage\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mApply Kernel Variables\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate Static Device Nodes in /dev gracefully\x1b[0m.
+         Starting \x1b[0;1;39mCreate Static Device Nodes in /dev\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate Static Device Nodes in /dev\x1b[0m.
+[    8.781616] EXT4-fs (mmcblk2p11): mounted filesystem b87251a7-26c4-4a20-a129-4744138a6dd8 r/w with ordered data mode. Quota mode: none.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mMount partitions\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mPreparation for Local File Systems\x1b[0m.
+         Starting \x1b[0;1;39mRule-based Manager for Device Events and Files\x1b[0m...
+         Mounting \x1b[0;1;39m/var/volatile\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mRule-based Manager for Device Events and Files\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39m/var/volatile\x1b[0m.
+         Starting \x1b[0;1;39mLoad/Save OS Random Seed\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mLocal File Systems\x1b[0m.
+         Starting \x1b[0;1;39mAutomatic Boot Loader Update\x1b[0m...
+         Starting \x1b[0;1;39mCreate System Files and Directories\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad/Save OS Random Seed\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mAutomatic Boot Loader Update\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mColdplug All udev Devices\x1b[0m.
+         Starting \x1b[0;1;39mWait for udev To Complete Device Initialization\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate System Files and Directories\x1b[0m.
+         Starting \x1b[0;1;39mNetwork Name Resolution\x1b[0m...
+         Starting \x1b[0;1;39mNetwork Time Synchronization\x1b[0m...
+         Starting \x1b[0;1;39mRecord System Boot/Shutdown in UTMP\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mRecord System Boot/Shutdown in UTMP\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mNetwork Time Synchronization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mNetwork Name Resolution\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mHost and Network Name Lookups\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSystem Time Set\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Found device \x1b[0;1;39m/dev/dri/card0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mStarts Psplash Boot screen\x1b[0m.
+[   11.673323] configfs-gadget.g1 gadget.0: HOST MAC <mac>
+[   11.673977] configfs-gadget.g1 gadget.0: MAC <mac>
+[\x1b[0;32m  OK  \x1b[0m] Found device \x1b[0;1;39m/dev/hwrng\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Found device \x1b[0;1;39m/dev/tee0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mLoad/Save RF Kill Switch Status /dev/rfkill Watch\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mHardware RNG Entropy Gatherer Daemon\x1b[0m.
+         Starting \x1b[0;1;39mLoad/Save RF Kill Switch Status\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mLoad/Save RF Kill Switch Status\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mHardware activated USB gadget\x1b[0m.
+         Starting \x1b[0;1;39mVirtual Console Setup\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mVirtual Console Setup\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mWait for udev To Complete Device Initialization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSystem Initialization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mServes stm32mp clocks calibration.\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mDaily Cleanup of Temporary Directories\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mTimer Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mAvahi mDNS/DNS-SD Stack Activation Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mD-Bus System Message Bus Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mdropbear.socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSocket Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mBasic System\x1b[0m.
+         Starting \x1b[0;1;39mST set alsa state configuration\x1b[0m...
+         Starting \x1b[0;1;39mAvahi mDNS/DNS-SD Stack\x1b[0m...
+         Starting \x1b[0;1;39mBluetooth service\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mKernel Logging Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSystem Logging Service\x1b[0m.
+         Starting \x1b[0;1;39mD-Bus System Message Bus\x1b[0m...
+         Starting \x1b[0;1;39mIPv6 Packet Filtering Framework\x1b[0m...
+         Starting \x1b[0;1;39mIPv4 Packet Filtering Framework\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSeat for Weston user\x1b[0m.
+         Starting \x1b[0;1;39mST Load M33 firmware via remoteproc\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mCalibrates HSI/CSI clocks\x1b[0m.
+[   12.968609] Bluetooth: MGMT ver 1.22
+         Starting \x1b[0;1;39mResets System Activity Logs\x1b[0m...
+         Starting \x1b[0;1;39mUser Login Management\x1b[0m...
+         Starting \x1b[0;1;39mTEE Supplicant\x1b[0m...
+         Starting \x1b[0;1;39mCheck if the gpu are presthe correct weston configuration\x1b[0m...
+[   13.143092] Default copro already stopped
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mD-Bus System Message Bus\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mIPv6 Packet Filtering Framework\x1b[0m.
+[   13.254383] remoteproc remoteproc0: powering up m33
+[   13.259735] remoteproc remoteproc0: Booting fw image USBPD_DRP_UCSI_CM33_NonSecure_stripped.elf, size 148256
+[   13.270518] rproc-virtio rproc-virtio.2.auto: assigned reserved memory node vdev0buffer@812fa000
+[   13.302448] rproc-virtio rproc-virtio.2.auto: registered virtio0 (type 7)
+[   13.302465] remoteproc remoteproc0: remote processor m33 is now up
+[   13.305118] Booting fw image for <board-host>
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mIPv4 Pack[   13.327696] virtio_rpmsg_bus virtio0: rpmsg host is online
+et Filtering Framework\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mUser Login Management\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mST Load M33 firmware via remoteproc\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mResets System Activity Logs\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mST set alsa state configuration\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mBluetooth service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mAvahi mDNS/DNS-SD Stack\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mTEE Supplicant\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mBluetooth Support\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mPreparation for Network\x1b[0m.
+         Starting \x1b[0;1;39mSave/Restore Sound Card State\x1b[0m...
+         Starting \x1b[0;1;39mBluetooth brcmfmac reboot hook\x1b[0m...
+         Starting \x1b[0;1;39mHostname Service\x1b[0m...
+         Starting \x1b[0;1;39mNetwork Configuration\x1b[0m...
+         Starting \x1b[0;1;39mTailscale node agent\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCheck if the gpu are prest the correct weston configuration\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mSave/Restore Sound Card State\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mBluetooth brcmfmac reboot hook\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSound Card\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mHostname Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mNetwork Configuration\x1b[0m.
+[   14.031652] stm32-dwmac 482c0000.eth1 end0: Register MEM_TYPE_PAGE_POOL RxQ-0
+[   14.033967] stm32-dwmac 482c0000.eth1 end0: Register MEM_TYPE_PAGE_POOL RxQ-1
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mNetwork\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mIIO Daemon\x1b[0m.
+         Starting \x1b[0;1;39mReal time performance monitoring\x1b[0m...
+         Starting \x1b[0;1;39mST hostname\x1b[0m...
+         Starting \x1b[0;1;39mPermit User Sessions\x1b[0m...
+         Starting \x1b[0;1;39mTarget Communication Framework agent\x1b[0m...
+[   14.224126] stm32-dwmac 482c0000.eth1 end0: PHY [stmmac-0:01] driver [RTL8211F Gigabit Ethernet] (irq=POLL)
+[   14.233626] virtio_rpmsg_bus virtio0: creating channel rpmsg-intc addr 0x400
+[   14.236773] dwmac4: Master AXI performs any burst length
+[   14.242465] stm32-dwmac 482c0000.eth1 end0: No Safety Features support found
+[   14.244124] virtio_rpmsg_bus virtio0: creating channel rpmsg_i2c addr 0x401
+[   14.248819] stm32-dwmac 482c0000.eth1 end0: IEEE 1588-2008 Advanced Timestamp supported
+[   14.255322] rpmsg_i2c virtio0.rpmsg_i2c.-1.1025: new channel: 0x401 -> 0x401!
+[   14.278685] stm32-dwmac 482c0000.eth1 end0: registered PTP clock
+[   14.303494] stm32-dwmac 482c0000.eth1 end0: FPE workqueue start
+[   14.303850] stm32-dwmac 482c0000.eth1 end0: configuring for phy/rgmii-id link mode
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mPermit User Sessions\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mTarget Communication Framework agent\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mReal time performance monitoring\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mST hostname\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mGetty on tty1\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSerial Getty on ttySTM0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mLogin Prompts\x1b[0m.
+         Starting \x1b[0;1;39mWeston graphical session\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mUser Slice of UID 1000\x1b[0m.
+         Starting \x1b[0;1;39mUser Runtime Directory /run/user/1000\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mUser Runtime Directory /run/user/1000\x1b[0m.
+         Starting \x1b[0;1;39mUser Manager for UID 1000\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mTailscale node agent\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mUser Manager for UID 1000\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSession c1 of User weston\x1b[0m.
+[   18.447842] stm32-dwmac 482c0000.eth1 end0: Link is Up - 1Gbps/Full - flow control rx/tx
+         Starting \x1b[0;1;39mAuthorization Manager\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mAuthorization Manager\x1b[0m.
+
+ST OpenSTLinux - Weston - (A Yocto Project Based Distro) 5.0.17-openstlinux-6.6-yocto-scarthgap-mpu-v26.06.10 <board-hostname> ttySTM0
+
+<board-hostname> login: root (automatic login)
+
+\x1b7\x1b[r\x1b[999;999H\x1b[6n[   23.412795] weston[1430]: memfd_create() called without MFD_EXEC or MFD_NOEXEC_SEAL set
+root@<board-hostname>:~# [   34.412300] vddio3: disabling
+[   34.412372] vddio4: disabling
+[   34.412750] v5v_vconn: disabling

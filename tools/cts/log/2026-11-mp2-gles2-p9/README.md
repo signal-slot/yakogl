@@ -161,3 +161,29 @@ included (`back_after` 45 to 73 s).
   the exception at 159.5 s, 26.6 %. The 46 runs sum to 527.3 s of image time.
   Each run's `back_after` is 45 to 207 s. The 12,500 ms budget therefore
   leaves at least 73 % of the lifetime free in every shard run so far.
+
+## Slice 6 (shards 115..137, 2026-11-28)
+
+Image: a rebuild of origin/main `66fcaa3a` on another host (stage 1 VK-GL-CTS
+`93bca01861b0`, `-O2`; stage 2 `board-stage.sh stm32mp257f-dk deqp`): the same
+10,808,384 bytes and footprint `0xa0000000..0xabee1000`, sha256
+`7c5cd67f5453b1d7af9622684aecb3193b98f2932b64d498f7cea53664592e28`. Shard plan,
+lifetime and `RUN_BOUND` as above; the hook was installed before shard 115 and
+uninstalled after shard 137 (`install absent`).
+
+The serial tool returns each shard's capture whole (saved to a file when it is
+large), and the logs are that capture: the runner's output, then `console.txt`
+from `judge` over the capture from the Linux `reboot` line to the end of the
+read, with the redactions of step 4 and with non-ASCII bytes and CRs dropped.
+Every `deqp:` line is as the console printed it; nothing is written from totals.
+In shard 132 the serial line lost the `reboot: Restarting system` line and a few
+bytes after it; the capture there starts at `systemd-shutdown: Rebooting.`.
+
+- **2,769 cases, 2,769 with a result: 2,292 Pass, 447 Fail, 0 NotSupported, 30 QualityWarning.**
+  All Fail and QualityWarning are `functional.texture.*`.
+- `mp2-p9-diff.py --report-only --exclude tools/cts/mp2-deqp-gles2-exclude.txt s*/shard-*.log`:
+  `mp2-p9-diff: shared 12, new 1348, fixed 5, missing 0, excluded 21`, 0 accepted
+  names that changed state, 0 mustpass names missing: all 17,144 cases have a result
+  (15,717 Pass, 1,360 Fail, 34 NotSupported, 33 QualityWarning).
+- Times: image time 2.7 to 45.1 s except shard 117 at 413.3 s (68.9 % of the
+  lifetime, back_after 474 s). `times.tsv` has the 23 rows.

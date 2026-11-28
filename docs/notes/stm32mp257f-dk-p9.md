@@ -508,9 +508,24 @@ replaces it.
   time, shard 92). Shard 92 gave 49 Fail in its run, not compared with
   another run.
 
-`mp2-p9-diff: shared 0, new 913, fixed 3, missing 0, excluded 21`
+- Slice 6 (shards 115..137, 2,769 cases, 2026-11-28): 2,292 Pass, 447 Fail,
+  0 NotSupported, 30 QualityWarning, 0 without a result; every shard returned
+  with all its cases (`deqp: summary` `... with a result, 0 without`,
+  `yakogl: draws refused 0` in all 23): no hang, no refusal and no run cut by
+  the lifetime. All 447 Fail and 30 QualityWarning are `functional.texture.*`
+  (filtering 248, mipmap 78 Fail + 30 QualityWarning, size 74, format 32,
+  wrap 15): the colour-texture class (b). Image time 2.7 to 45.1 s, except
+  shard 117 (125 `texture.filtering.2d` cases, 125 of 125 Fail) at 413.3 s, 68.9 % of the 600 s lifetime and
+  the longest shard of the sweep so far; its return took 474 s (the other
+  shards 46 to 97 s). Image time per shard is the layer's `PSCI SYSTEM_RESET
+  at <n> ms`, and `times.tsv` has the rows. Each shard's per-case lines were
+  read from the serial console (the farm's serial tool saves the capture
+  whole; the logs are that capture, redacted, with the runner's output on top).
 
-This line covers slices 1-5 (shards 0-114, image `66fcaa3a`) and is replaced as later slices land.
+`mp2-p9-diff: shared 12, new 1348, fixed 5, missing 0, excluded 21`
+
+This line covers slices 1-6 (shards 0-137, all 17,144 cases, image `66fcaa3a`;
+slice 6 ran a rebuild with sha256 `7c5cd67f...`, the same size and footprint).
 (The same tool over s5 alone reads `new 378, missing 14269`: slice 5's logs are
 console excerpts with no `deqp: case filter` line, so the run's scope cannot be
 narrowed to its cases. It is a scope artifact, not cases without a result: every
