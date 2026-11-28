@@ -698,5 +698,9 @@ out=$(plan tests/msaa_hw_gc_api.rs)
 expect "msaa: msaa_hw_gc_api reaches its row" '^plan  test    host-test,gpu-vivante \(tests/msaa_hw_gc_api.rs\)$' "$out"
 out=$(plan tests/pvr_msaa_rb.rs)
 expect "msaa: pvr_msaa_rb reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/pvr_msaa_rb.rs\)$' "$out"
+out=$(plan tests/es3_pvr_3d_rt.rs)
+expect "rt: es3_pvr_3d_rt reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/es3_pvr_3d_rt.rs\)$' "$out"
+out=$(plan tests/pvr_array_rt.rs)
+expect "rt: pvr_array_rt reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/pvr_array_rt.rs\)$' "$out"
 echo "check_scope_selftest: $checks checks run (planned $checks), $fails failed"
 [ "$fails" -eq 0 ]

@@ -2526,6 +2526,11 @@ step "test    host-test,gpu-vivante (tests/msaa_hw_gc_api.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante --test msaa_hw_gc_api
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_msaa_rb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_msaa_rb
+# A volume or 2D array rendered into in the open frame is sampled from the image that was drawn.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d_rt.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d_rt
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_array_rt.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_array_rt
 # The graphicsfuzz bubblesort_flag shaders through the PowerVR online chain and the USC byte model.
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_metamorph_bubblesort.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_metamorph_bubblesort
