@@ -95,8 +95,10 @@ pull request (step 1 above).
   tests. `tools/cts/deps-env.sh --check` says which entries the dependency
   layout has, `export $(tools/cts/deps-env.sh)` sets them, and
   `tools/cts/deps-env.sh --build <NAME>...` builds the ones it lacks
-  (`MALI_CSFFW`, `DEQP_GLES3_TEST_DIR`, `PCO_SPM_LOAD_CAPTURE`,
-  `HAL_NXP_DIR`, `LZ4`, `MP2_QEMU`); run one build at a time. Then, after
+  (`MALI_CSFFW`, `DEQP_GLES3_TEST_DIR`, `DEQP_GLES2_TEST_DIR`,
+  `DEQP_ES2_PROGRAMS`, `PCO_SPM_LOAD_CAPTURE`, `HAL_NXP_DIR`, `LZ4`,
+  `MP2_QEMU`; the two dEQP-GLES2 entries feed the V3D 7.1 corpus rows, a
+  gap without them); run one build at a time. Then, after
   the export and the PowerVR header copy (below),
   `tools/setup-gate-host.sh --check` says whether the host has every tool
   and file the gate needs (`--install` installs the packages).

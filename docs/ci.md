@@ -637,8 +637,9 @@ through `ZEPHYR_SDK_INSTALL_DIR`) and `GLMARK2_SRC` as `missing` on a host
 whose inputs are prepared: false misses. The other inputs `deps-env.sh
 --present` prints (`ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`,
 `PCO_SPM_LOAD_CAPTURE`, `MESA_PAN_TREE`, `DEQP_GLES3_TEST_DIR`, `LZ4`,
-`MALI_CSFFW`) are read the same way; treat a `missing` for any of them from a
-bare shell as unconfirmed until it is repeated after the exports.
+`MALI_CSFFW`, `DEQP_GLES2_TEST_DIR`, `DEQP_ES2_PROGRAMS`) are read the same
+way; treat a `missing` for any of them from a bare shell as unconfirmed until
+it is repeated after the exports.
 
 ### 3.9 What a test may share with another row, and what it may pin (2026-11-27)
 
