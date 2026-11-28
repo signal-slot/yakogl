@@ -296,7 +296,12 @@
 #                      from the jump on (proof-NN.jpg, screen-SSS.jpg,
 #                      screen.log in the run directory)
 #   T6_HAND            nanopc-t6: the name of the person at the power switch for
-#                      this run (nanopc-t6.sh --go refuses without it)
+#                      this run (nanopc-t6.sh --go refuses without it, unless
+#                      T6_UNATTENDED=1)
+#   T6_UNATTENDED      nanopc-t6: 1: an unattended run, no T6_HAND (the runner
+#                      records a board that does not come back as incomplete;
+#                      the tree stops at it, rc 5, as before). The whole-tree
+#                      wrapper is tools/cts/t6-deqp-images.sh --run
 #   T6_CRASH           nanopc-t6: 1: the runner's crash route (--go --crash: no
 #                      device_shutdown, so the display and the GPU stay as
 #                      Linux left them; the runner refuses it without a
@@ -2476,14 +2481,14 @@ kexec_t6() {
     local go=(--go)
     [ "${T6_CRASH:-0}" != 1 ] || go+=(--crash)
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=${BOARD_UART:+<BOARD_UART>} T6_SCREEN=${BOARD_SCREEN:+<BOARD_SCREEN>} T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG ${go[*]} 2>&1 | tee <rundir>/kexec.log"
+        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=${BOARD_UART:+<BOARD_UART>} T6_SCREEN=${BOARD_SCREEN:+<BOARD_SCREEN>} T6_HAND=${T6_HAND:-$([ "${T6_UNATTENDED:-}" = 1 ] && echo "<unset> T6_UNATTENDED=1" || echo "<unset: the runner refuses>")} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG ${go[*]} 2>&1 | tee <rundir>/kexec.log"
         [ -n "${BOARD_UART:-}${BOARD_SCREEN:-}" ] || echo "DRY host\$   # neither BOARD_UART nor BOARD_SCREEN is set: the runner refuses"
         echo "DRY host\$   # the runner: its board checks, board_lock.sh (LOCK_WAIT ${LOCK_WAIT}: refused while held), the board again under the lock, the record <rundir>/<date>-t6/, the jump, Armbian back (a new boot_id) within the image's bound + 180 s"
         echo "DRY host\$ move <rundir>/<date>-t6/* (uart.log, record.txt, linux-before.dmesg-w, linux-after.dmesg; with BOARD_SCREEN proof-NN.jpg, screen-SSS.jpg, screen.log) into <rundir>; console.txt = uart.log"
         exit 0
     fi
     trap 'lease_release; rm -rf "$TMP"' EXIT
-    BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_SCREEN=${BOARD_SCREEN:-} T6_HAND=${T6_HAND:-} T6_RECORD_DIR=$RD \
+    BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_SCREEN=${BOARD_SCREEN:-} T6_HAND=${T6_HAND:-} T6_UNATTENDED=${T6_UNATTENDED:-} T6_RECORD_DIR=$RD \
         bash "$runner" "$IMG" "${go[@]}" < /dev/null 2>&1 | tee "$RD/kexec.log"
     rc=${PIPESTATUS[0]}
     meta runner_rc "$rc"

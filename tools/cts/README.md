@@ -41,6 +41,8 @@ tools/cts/
   deqp-tree-images.sh          stage 2 for a labelled tree table, one image per row (Pi 4, NanoPC-T6, Verdin iMX95)
   pi4-deqp-images.sh           stage 2, Pi 4 (deqp-tree-images.sh rpi_4b)
   t6-deqp-images.sh            stage 2, NanoPC-T6 Zephyr (deqp-tree-images.sh nanopc_t6, mali-gles2-tree.txt)
+                               --run: the tree on the board (console from the lease or T6_CONSOLE_CMD, --unattended)
+  t6-console-pty.py            T6_CONSOLE_CMD's bytes as a read-only pty for the T6 runner
   imx95-deqp-images.sh         stage 2, Verdin iMX95 Zephyr (deqp-tree-images.sh verdin_imx95/mimx9596/a55, mali-gles2-tree.txt)
   pi4-full-tree.txt            the whole GLES2 tree for the Pi 4, 29 images
   pi4-gles3-tree.txt           the whole GLES3 tree for the Pi 4, 91 images
@@ -1207,6 +1209,33 @@ export DEQP_WORK=<stage 1: cts-build-zephyr.sh with BOARD=nanopc_t6>
 tools/cts/t6-deqp-images.sh tools/cts/mali-gles2-tree.txt build/t6-img
 TREE_IMAGE_DIR=build/t6-img tools/board.sh nanopc-t6 tree tools/cts/mali-gles2-tree.txt records/nanopc-t6/<tree>
 ```
+
+On the farm the same tree runs through `t6-deqp-images.sh --run`, which
+takes the board and the console from the leases (`target:nanopc-t6`,
+`target:nanopc-t6-console`) by variable name and needs no person at the
+power switch with `--unattended` (`t6-deqp-images.sh --help` lists every
+variable; no value is printed or written):
+
+```sh
+# the board: BOARD_HOST, else RESOURCE_NANOPC_T6_SSH. The console, the first set of:
+#   T6_CONSOLE_CMD='<a command printing the console bytes>'  (one session for the tree, a read-only pty)
+#   T6_UART / BOARD_UART=<tty> or rfc2217://...              (the adapter, opened per row)
+#   RESOURCE_NANOPC_T6_CONSOLE_HOST/_PORT (or RESOURCE_SERIAL_NANOPC_T6_HOST/_PORT): rfc2217://
+tools/cts/t6-deqp-images.sh --run --unattended tools/cts/mali-gles2-tree.txt build/t6-img <outside-the-checkout>/<tree>
+```
+
+The record directory must lie outside the checkout (the runner's rule).
+Attended runs set `T6_HAND=<name>` instead of `--unattended`, as before. An
+unattended row that does not come back into Armbian is recorded as
+incomplete (hang or reset) by `nanopc-t6.sh` (`T6_UNATTENDED=1`), the tree
+stops there (rc 5), and `<tree>/INCOMPLETE.txt` names the row, the reason,
+the rows left and the command that resumes (the same command: finished rows
+are skipped; the incomplete row too, until its run directory is moved out).
+A refused row (rc 3) stops it the same way; a console whose adapter answers
+"busy" (its one client slot held, e.g. by the farm's own serial console
+server of the lease) is named there. Self-test without a board:
+`tools/cts/t6-deqp-run-selftest.sh` (a fake console through
+`t6-console-pty.py`, a fake `board.sh`; `cts-selftest.sh` check 20c).
 
 The Verdin iMX95's (Mali-G310) tree is the T6's rows, `mali-gles2-tree.txt`
 as it is, built by the same builder (`imx95-deqp-images.sh` is

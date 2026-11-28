@@ -9,6 +9,8 @@
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=<tty> \
 #     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go [--no-linux-wdt] [--crash]  # the jump
 #   ... T6_UART=rfc2217://<host>:<port> ... --go          # the UART on a network serial adapter
+#   BOARD_HOST=root@<t6> T6_UNATTENDED=1 T6_RECORD_DIR=<dir> T6_UART=<tty> \
+#     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go  # an agent's run: nobody at the switch
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_SCREEN=<unit> \
 #     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go --crash  # seen through the HDMI capture
 #
@@ -129,7 +131,21 @@
 #   T6_HAND         --go only, required: the name of the person at the T6's
 #                   power switch for this run (if PSCI and WDT0 both fail, the
 #                   board stays in Zephyr until the power is cut). It goes
-#                   into the record.
+#                   into the record. Without it, T6_UNATTENDED=1 (below).
+#   T6_UNATTENDED   --go: 1 runs without T6_HAND, for an agent's run with
+#                   nobody at the switch (the board has no remote power
+#                   control). Every check stays; the record says "hand at the
+#                   power switch: nobody (T6_UNATTENDED=1)", and a board that
+#                   is not back in Armbian by the bound is recorded as "no
+#                   Armbian N s after the jump: unattended run, nobody at the
+#                   power switch: incomplete (hang or reset)", exit 1, as
+#                   before: the board stays where the image left it until its
+#                   power is cut. T6_HAND set wins (an attended run). Unset,
+#                   empty or 0: T6_HAND is required. Any other value: exit 2.
+#   T6_UART_VIA     what gives T6_UART when it is a pty of a bridge other than
+#                   t6-uart-rfc2217.py (tools/cts/t6-console-pty.py sets
+#                   "T6_CONSOLE_CMD"): only how the messages and the record
+#                   name the UART.
 #   T6_RECORD_DIR   --go only, required: an existing directory, outside any
 #                   checkout, in which the run's record directory is made.
 #   T6_UART         --go: the host's tty on the T6's debug UART
@@ -287,6 +303,20 @@ if [ "$CRASH" = 1 ] && [ "$LINUX_WDT" = 0 ]; then
 fi
 ROUTE=normal
 [ "$CRASH" = 0 ] || ROUTE=crash
+case "${T6_UNATTENDED:-}" in
+'' | 0) UNATTENDED=0 ;;
+1) UNATTENDED=1 ;;
+*) die "T6_UNATTENDED='$T6_UNATTENDED': 1 (an unattended run, no T6_HAND) or 0/unset" ;;
+esac
+# HAND: who is at the power switch, as the record says it
+if [ -n "${T6_HAND:-}" ]; then
+	HAND=$T6_HAND
+	UNATTENDED=0
+elif [ "$UNATTENDED" = 1 ]; then
+	HAND="nobody (T6_UNATTENDED=1: an unattended run; a hang is recorded as incomplete)"
+else
+	HAND=
+fi
 : "${BOARD_HOST:?set BOARD_HOST=root@<the NanoPC-T6>}"
 # shellcheck disable=SC2206  # options are words
 SSH_OPTS=(${BOARD_SSH_OPTS:-})
@@ -302,6 +332,8 @@ if [[ ${T6_UART:-} == rfc2217://* ]]; then
 	UART_SHOWN="T6_UART's RFC 2217 address"
 elif [ -n "${T6_UART_RFC2217:-}" ]; then
 	UART_SHOWN="the debug UART over RFC 2217 (t6-uart-rfc2217.py's pty $T6_UART)"
+elif [ -n "${T6_UART_VIA:-}" ]; then
+	UART_SHOWN="the debug UART through $T6_UART_VIA (a pty, $T6_UART)"
 else
 	UART_SHOWN=${T6_UART:-}
 fi
@@ -652,7 +684,8 @@ cat <<EOF
 plan (--go):
   1. take the board lock (driver/tools/kexec-zephyr/board_lock.sh, per BOARD_HOST);
      read $reread, the GPU users, the remote sessions and boot_id again under
-     it and decide on those values; refuse without T6_HAND and T6_RECORD_DIR,
+     it and decide on those values; refuse without T6_HAND (or
+     T6_UNATTENDED=1: $([ -n "$HAND" ] && echo "here: $HAND" || echo "neither is set here")) and T6_RECORD_DIR,
      and without both T6_UART and T6_SCREEN; with T6_UART, prove the UART
      path: the board writes one marker line to its console, and it must be
      read back from T6_UART within $UART_PROOF_S s
@@ -680,7 +713,7 @@ if [ "$GO" = 0 ]; then
 fi
 
 # ---- 4. the jump ------------------------------------------------------------
-[ -n "${T6_HAND:-}" ] || refuse "--go needs T6_HAND=<the name of the person at the T6's power switch for this run>"
+[ -n "$HAND" ] || refuse "--go needs T6_HAND=<the name of the person at the T6's power switch for this run>, or T6_UNATTENDED=1 for a run with nobody at the switch (a hang is then recorded as incomplete)"
 { [ -n "${T6_RECORD_DIR:-}" ] && [ -d "$T6_RECORD_DIR" ]; } ||
 	refuse "--go needs T6_RECORD_DIR=<an existing directory outside the checkout> for the run's record"
 [ -n "${T6_UART:-}${T6_SCREEN:-}" ] ||
@@ -921,7 +954,7 @@ rec "build $(git -C "$HERE" describe --always --dirty 2>/dev/null || echo unknow
 # The paths out of the board this run has: the UART's proof is above, the
 # screen's comes in the mode step, before the load ("screen: proven ...").
 if [ -n "${T6_UART:-}" ]; then
-	paths="UART${T6_UART_RFC2217:+ (the debug UART over RFC 2217)} (proven before anything was copied, below)"
+	paths="UART${T6_UART_RFC2217:+ (the debug UART over RFC 2217)}${T6_UART_VIA:+ (the debug UART through $T6_UART_VIA)} (proven before anything was copied, below)"
 else
 	paths="no UART (T6_UART not set: no uart.log)"
 fi
@@ -931,7 +964,7 @@ else
 	paths+="; no screen (T6_SCREEN not set)"
 fi
 rec "paths: $paths"
-rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $T6_HAND; linux_wdt $LINUX_WDT; route $([ "$CRASH" = 1 ] && echo "crash (reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e"))" || echo normal)"
+rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $HAND; linux_wdt $LINUX_WDT; route $([ "$CRASH" = 1 ] && echo "crash (reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e"))" || echo normal)"
 rec "image $IMG, sha256 $(sha256sum "$IMG" | cut -d' ' -f1): $markers"
 rec "bound: back in reset by $bound_s s after the jump at the latest"
 if [ -n "${T6_UART:-}" ]; then
@@ -1333,6 +1366,10 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
 		exit 1
 	fi
 done
-rec "no Armbian $((deadline - t0)) s after the jump: the board needs $T6_HAND at its power switch" >&2
+if [ "$UNATTENDED" = 1 ]; then
+	rec "no Armbian $((deadline - t0)) s after the jump: unattended run, nobody at the power switch: incomplete (hang or reset); the board stays where the image left it until its power is cut" >&2
+else
+	rec "no Armbian $((deadline - t0)) s after the jump: the board needs $T6_HAND at its power switch" >&2
+fi
 finish
 exit 1
