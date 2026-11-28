@@ -1284,12 +1284,12 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
          * its constant lanes (gm2_arithconst_3) */
         (VS, "attribute vec4 p; attribute vec4 a; attribute vec4 b; varying vec2 v; varying vec2 w; void main(){ gl_Position = p; if (p.x > 0.0) { v = a.xy; w = a.xy; } else { v = b.xy; w = b.xy; } }", MaliError::VaryingDuplicate),
         (FS, "precision mediump float; varying float f; varying vec4 v; void main(){ gl_FragColor = f + v; }", MaliError::FsOperandForm),
-        /* `&&` of a 16-bit compare's mask and a 32-bit integer compare's
-         * (`Fs::mask_op`'s mix: no reference; `!=` of two run-time
-         * integers is lowered, intval-rest M1) */
+        /* `||` of a 16-bit compare's mask and a 32-bit integer compare's
+         * (`Fs::mask_op`'s mix: no reference; the `&&` of the two is
+         * lowered, deqp_intval5_mask1632) */
         (
             FS,
-            "precision mediump float; varying vec4 v; void main(){ gl_FragColor = vec4(float((v.x > 0.0) && (int(v.y) < 1))); }",
+            "precision mediump float; varying vec4 v; void main(){ gl_FragColor = vec4(float((v.x > 0.0) || (int(v.y) < 1))); }",
             MaliError::IntValue,
         ),
         /* a lowp sampler's texels read by a mediump `max`: fp16 in Mesa,

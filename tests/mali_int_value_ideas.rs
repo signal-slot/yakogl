@@ -26,7 +26,6 @@ use yakogl::shaderc::online::mali::isa;
 
 const FS_OPERAND: &str = "a fragment shader operand of a form or in a place no reference draws";
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
-const INT_VALUE: &str = "an integer or boolean value is not lowered yet";
 
 /// ideas c565 (gm2_ideas_2) and the early returns alone (gm2_cf_earlyret_fs)
 /// are past INT_VALUE and refused at the operand form of the flattened
@@ -88,8 +87,9 @@ fn and_of_two_fp16_equalities_is_one_16_bit_iand() {
 }
 
 /// The `||` of two fp16 masks (deqp_intval4_logical_or_fs, Mesa's `fmax`
-/// rewrite) is not this step's: still INT_VALUE.
+/// rewrite) was not this step's; plan #377's report-draft-2 lowered it
+/// (`nir_fs.rs` `logic_masks`): byte-equal.
 #[test]
-fn or_of_two_fp16_compares_stays_int_value() {
-    mali_ref::assert_refused_ref("deqp_intval4_logical_or_fs", INT_VALUE);
+fn or_of_two_fp16_compares_matches_its_reference() {
+    mali_ref::assert_matches("deqp_intval4_logical_or_fs");
 }
