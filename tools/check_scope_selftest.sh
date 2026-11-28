@@ -143,6 +143,28 @@ want tests/mali_fragment_random_es2.rs "mali treekey"
 want tests/mali_draw_oom_es2.rs "mali treekey"
 want tests/mali_rgb565_stencil_es2.rs "mali treekey"
 want tests/mali_draw_inval_es2.rs "mali treekey"
+# plan #367's glmark2 compile pins, its GL-level draws and its corpus verdicts
+want tests/mali_const_fold.rs "mali treekey"
+want tests/mali_bool_and.rs "mali treekey"
+want tests/mali_fragcoord16.rs "mali treekey"
+want tests/mali_ideas.rs "mali treekey"
+want tests/mali_mploop.rs "mali treekey"
+want tests/mali_fs_operand.rs "mali treekey"
+want tests/mali_locals.rs "mali treekey"
+want tests/mali_effect2d_tex.rs "mali treekey"
+want tests/mali_tex_multi.rs "mali treekey"
+want tests/mali_tex_vertex.rs "mali treekey"
+want tests/mali_vs_arith.rs "mali treekey"
+want tests/mali_texcoord_lane.rs "mali treekey"
+want tests/mali_vs_fma.rs "mali treekey"
+want tests/mali_int_loops.rs "mali treekey"
+want tests/mali_nonfinite_const.rs "mali treekey"
+want tests/mali_texcoord_425b.rs "mali treekey"
+want tests/mali_glmark2_scene_draw.rs "mali treekey"
+want tests/mali_depthonly_gl.rs "mali treekey"
+want tests/mali_depthtex_gl.rs "mali treekey"
+want tests/mali_npot_mip_gl.rs "mali treekey"
+want tests/mali_glmark2_corpus.rs "mali treekey"
 # plan #377's dEQP byte-compare tests, their shared module, and the
 # deqp_<family>_* references they read
 want tests/mali_deqp_intval.rs "mali treekey"
@@ -609,6 +631,8 @@ done
 expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/fixtures/v3d_texref.txt)"
 # the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
 expect "tests: glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/glmark2_corpus.rs)"
+expect "tests: mali_glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/mali_glmark2_corpus.rs)"
+expect "tests: mali_depthonly_gl selects the plan-#367 Mali row" '^plan  test    .*tests/mali_\{arith_const,\.\.\.,npot_mip_gl\}\.rs' "$(plan tests/mali_depthonly_gl.rs)"
 expect "tests: gc_kick_diff selects its knob row" '^plan  test    .*tests/gc_kick_diff.rs' "$(plan tests/gc_kick_diff.rs)"
 # The tree key row (scope treekey): every .rs file the scan reads reaches it,
 # a test file with a GPU's scope too, and so does the scan itself; a document
