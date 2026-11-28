@@ -4091,6 +4091,9 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # scope_of_path); a docs-only change that breaks it fails here, not on the
   # next pull request that reaches `tools`. Host only, under a second.
   step "tools   one-commit-rehearsal-selftest.sh (one-commit docs edit on synthetic records)" no_board_env bash tools/cts/one-commit-rehearsal-selftest.sh
+  # The six one-commit glmark2 acceptance checks on fake trees (testdata/
+  # glmark2-one-commit-acceptance/), one case per check. Host only.
+  step "tools   glmark2-one-commit-acceptance-selftest.sh (the six one-commit checks on fake trees)" no_board_env bash tools/cts/glmark2-one-commit-acceptance-selftest.sh
   scope tools
   # tools/cts/imx8mp-gles3-*-selftest.sh that tools/cts/cts-selftest.sh's gl3check
   # rows do not run. Host only, no board; an edit of any tools/cts file reaches them.
