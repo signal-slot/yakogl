@@ -276,12 +276,16 @@ west build -p always -b rpi_5 -d build/rpi5_gl_test yakogl/driver/samples/zephyr
 ```
 
 Expected results of the six cases (the first board run never reached them,
-see "On the board" below): 5 of 6 pass (5, 58, 66, 67, 102); case 59
+see "On the board" below), as the host tests pin them: case 59
 is refused by name, with the 4.2 string ("the draw reads stencil an earlier
 job wrote, and the target has no depth/stencil buffer to keep it in",
-`tests/v3d71_refuse.rs`). Case 67 is drawn with no refusal: the 7.1 job loads
-alpha as 1 and clears mask bit 3 for a target with no alpha
-(`docs/notes/v3d71-gl-table.md`, section 5; `tests/v3d71_refuse67.rs`). Any
+`tests/v3d71_refuse.rs`, `tests/v3d71_case59_67_refusal.rs`). Case 67 draws
+(the 7.1 job loads alpha as 1 and clears mask bit 3 for a target with no
+alpha, `tests/v3d71_refuse67.rs`, `tests/v3d71_glue.rs`) through frames 1 to
+7 and stops at frame 8, where the table refuses the stencil-testing draw
+with the same string (`tests/v3d71_case59_67_refusal.rs`,
+`docs/notes/v3d71-gl-table.md`, section 5). A board run (board71b) is still
+to come and will confirm this. Any
 further refusal must carry a name too.
 
 The PM watchdog is armed for the run: `YAKOGL_RPI5_WDOG_HOLD_S` takes
@@ -315,7 +319,7 @@ GL error 0x502, and cases 59 and 67 never reached their own refusals. The
 run printed `v3d_gl_test: 0 of 6 cases passed (205 ms)` and ended
 `v3d_gl_test RECORD end, build 85afd0cf`; the watchdog brought Linux back
 374 s after the reboot. The run replays in `tools/board_selftest.sh` (its
-console excerpt is in `tools/testdata/`). The 5-of-6 expectation above
+console excerpt is in `tools/testdata/`). The expectation above
 awaits an image whose 7.1 back end is built for the product.
 
 ## NanoPC-T6 (Mali-G610)
