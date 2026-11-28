@@ -30,6 +30,21 @@ Cause families:
   When the input has a family column and --depth is not given, the markdown
   groups by family (with each family's count) instead of by dEQP path.
 
+Stale rules (--stale RULES, default tools/cts/am62p-gles3-stale.txt, used when
+it exists; --no-stale turns the class off): a row recorded before a merged fix
+is reported as "stale: expected flip on rerun (<commit>)", not as an open
+family. RULES lines, tab separated:
+  <family-id> TAB <case globs> TAB <message regex or -> TAB <commit> [TAB <note>]
+A row matches when its case glob and message regex (re.search) match. The row's
+build comes from the NOTPASS header lines "# rows A-B: build <sha>, run <date>"
+(row ranges of the tree, --tree, default tools/cts/am62p-gles3-tree.txt, counted
+from 0). The row is stale when its build is older than the commit: both resolve
+in git and the build is a proper ancestor of the commit, or (a sha git does not
+know) the header's last run date is before the commit's date. A commit written
+'pending:<item>' is a fix not on main yet: the rule never makes a row stale. A
+row built at or after the commit stays open. The report prints stale and open
+totals, and per group when it holds stale rows.
+
 A group is the case's dEQP path under "dEQP-GLES3." cut at --depth levels
 (default 4, e.g. functional.texture.filtering.2d).
 
@@ -49,7 +64,9 @@ non-comment lines) whose comma-separated glob filters match it, shown as eNN.
 import argparse
 import collections
 import fnmatch
+import os
 import re
+import subprocess
 import sys
 
 PREFIX = "dEQP-GLES3."
@@ -145,6 +162,97 @@ def check(rows):
     return 0
 
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+DEFAULT_STALE = os.path.join(HERE, "am62p-gles3-stale.txt")
+DEFAULT_TREE = os.path.join(HERE, "am62p-gles3-tree.txt")
+BUILD_RE = re.compile(r"^#\s*rows\s+(\d+)(?:-(\d+))?:\s*build\s+([0-9a-fA-F]{7,40})"
+                      r"(?:,\s*run\s+([0-9/-]+))?")
+
+
+def parse_stale(path):
+    """[(family, [globs], regex or None, commit)] in file order."""
+    rules = []
+    with open(path, encoding="utf-8") as f:
+        for n, raw in enumerate(f, 1):
+            line = raw.rstrip("\n")
+            if not line.strip() or line.startswith("#"):
+                continue
+            p = line.split("\t")
+            if len(p) < 4 or not all(x.strip() for x in p[:4]):
+                sys.exit(f"{path}:{n}: need <family>TAB<globs>TAB<regex or ->TAB<commit>")
+            rx = None if p[2].strip() == "-" else re.compile(p[2])
+            rules.append((p[0].strip(), [g.strip() for g in p[1].split(",") if g.strip()],
+                          rx, p[3].strip()))
+    return rules
+
+
+def parse_builds(path):
+    """[(first, last, build sha, run date or '')] from the header lines."""
+    out = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            if not raw.startswith("#"):
+                continue
+            m = BUILD_RE.match(raw)
+            if m:
+                a = int(m.group(1))
+                run = m.group(4) or ""
+                if "/" in run:  # 2026-10-13/14 -> 2026-10-14
+                    head, tail = run.split("/", 1)[0], run.split("/")[-1]
+                    run = head[:len(head) - len(tail)] + tail
+                out.append((a, int(m.group(2) or a), m.group(3), run))
+    return out
+
+
+def _git(*args):
+    try:
+        r = subprocess.run(["git", "-C", ROOT, *args], capture_output=True, text=True)
+    except OSError:
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _resolve(sha):
+    return _git("rev-parse", "--verify", "--quiet", sha + "^{commit}")
+
+
+def older_than(build, run, commit):
+    """True when `build` (run on `run`) predates `commit`; False when unknown or pending."""
+    if commit.startswith("pending:"):
+        return False
+    c = _resolve(commit)
+    if c is None:
+        return False
+    b = _resolve(build)
+    if b is not None:
+        if b == c:
+            return False
+        r = subprocess.run(["git", "-C", ROOT, "merge-base", "--is-ancestor", b, c])
+        return r.returncode == 0
+    cd = _git("show", "-s", "--format=%cs", c)
+    return bool(cd and run and run < cd)
+
+
+def stale_of(rules, builds, ents, case, msg):
+    """(family-id, commit) when a stale rule covers the row, else None."""
+    if not rules or not builds or ents is None:
+        return None
+    e = find_entry(ents, case)
+    if e is None:
+        return None
+    for a, b, sha, run in builds:
+        if a <= e <= b:
+            break
+    else:
+        return None
+    for fam, globs, rx, commit in rules:
+        if any(fnmatch.fnmatchcase(case, g) for g in globs) and (rx is None or rx.search(msg)) \
+                and older_than(sha, run, commit):
+            return fam, commit
+    return None
+
+
 def parse_host(path, gpu):
     """group -> (pass, fail, notsupported, crash, other) for one gpu."""
     out = {}
@@ -218,6 +326,9 @@ def main():
     ap.add_argument("--families", help="family rule file (am62p-gles3-families.txt)")
     ap.add_argument("--apply", metavar="OUT.tsv", help="with --families: write the 4-column copy")
     ap.add_argument("--check", action="store_true", help="every row has an outcome and a family")
+    ap.add_argument("--stale", help="stale rule file (default tools/cts/am62p-gles3-stale.txt)")
+    ap.add_argument("--no-stale", action="store_true", help="do not mark rows stale")
+    ap.add_argument("--tree", help="tree file for the row->build map (default am62p-gles3-tree.txt)")
     ap.add_argument("--examples", type=int, default=5)
     a = ap.parse_args()
     if a.depth is not None and a.depth < 1:
@@ -237,15 +348,30 @@ def main():
     host = parse_host(a.host, a.gpu) if a.host else None
     ents = parse_table(a.table) if a.table else None
 
+    srules = builds = tree = None
+    spath = a.stale or (DEFAULT_STALE if os.path.exists(DEFAULT_STALE) else None)
+    if not a.no_stale and spath:
+        srules = parse_stale(spath)
+        builds = parse_builds(a.notpass)
+        tpath = a.tree or DEFAULT_TREE
+        tree = parse_table(tpath) if os.path.exists(tpath) else None
+        if not builds or tree is None:
+            srules = None
+    nstale = collections.Counter()
+
     groups = collections.OrderedDict()
     for outcome, case, msg, fam in rows:
         rel = case[len(PREFIX):] if case.startswith(PREFIX) else case
         key = (fam or "unassigned") if by_family else ".".join(rel.split(".")[:a.depth])
-        g = groups.setdefault(key, {"cases": [], "out": collections.Counter(),
+        g = groups.setdefault(key, {"stale": collections.Counter(), "cases": [], "out": collections.Counter(),
                                     "ent": collections.Counter(),
                                     "host": collections.Counter(),
                                     "msg": collections.Counter()})
         g["cases"].append(case)
+        st = stale_of(srules, builds, tree, case, msg)
+        if st:
+            g["stale"][st] += 1
+            nstale[st] += 1
         g["out"][outcome] += 1
         if msg and msg != outcome:
             g["msg"][msg[:100]] += 1
@@ -260,6 +386,14 @@ def main():
           f"({'by family' if by_family else 'depth %d' % a.depth})\n")
     print(f"Input: `{a.notpass}`" + (f"; host: `{a.host}` (gpu {a.gpu})" if host else "")
           + (f"; table: `{a.table}`" if ents is not None else "") + "\n")
+    if srules is not None:
+        ns = sum(nstale.values())
+        print(f"Stale (a merged fix is newer than the row's build; expected to flip on rerun): "
+              f"{ns}; open: {len(rows) - ns}; total: {len(rows)}\n")
+        for (fam, commit), c in sorted(nstale.items(), key=lambda kv: (-kv[1], kv[0])):
+            print(f"- stale {fam}: {c} (expected flip on rerun, {commit})")
+        if nstale:
+            print()
     for k in order:
         g = groups[k]
         n = len(g["cases"])
@@ -270,6 +404,11 @@ def main():
         if by_family:
             print(f"- family: {k} ({n})")
         print(f"- verdicts: {mix}")
+        if g["stale"]:
+            ns = sum(g["stale"].values())
+            print(f"- stale: {ns}, open: {n - ns}")
+            for (fam, commit), c in sorted(g["stale"].items()):
+                print(f"  - stale: expected flip on rerun ({commit}): {fam} {c}")
         if ents is not None:
             print("- table entries: " + ", ".join(f"{e} ({c})" for e, c in sorted(g["ent"].items())))
         if host is not None:

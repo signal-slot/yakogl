@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Stale rules for gles3-triage.py (see its header): a row of the AM62P not-pass
+# list recorded by a build older than <commit> belongs to a family that commit
+# fixed, so it is expected to flip on the board rerun. Tab separated:
+#   <family-id> TAB <case globs> TAB <message regex, or -> TAB <commit>
+# 'pending:<item>' = fix not on main yet; such a rule never marks a row stale.
+# The first matching rule whose commit is newer than the row's build wins.
+stale-2d-array-stacked	dEQP-GLES3.functional.texture.filtering.2d_array.*,dEQP-GLES3.functional.texture.shadow.2d_array.*	Image verification failed|Image comparison failed	02c5c9af
+stale-swizzle	dEQP-GLES3.functional.texture.swizzle.*	-	2df189df
+stale-vertex-2d-array	dEQP-GLES3.functional.texture.vertex.2d_array.*	-	2df189df
+stale-texformat-compile	dEQP-GLES3.functional.texture.format.*	glsTextureTestUtil\.cpp	eef6e35c
+stale-units-compile	dEQP-GLES3.functional.texture.units.*	sglrGLContext\.cpp	eef6e35c
+stale-draw-random	dEQP-GLES3.functional.draw.random.*	-	381b0f09
+stale-attribute-location	dEQP-GLES3.functional.attribute_location.*	-	381b0f09
+stale-vertex-arrays	dEQP-GLES3.functional.vertex_arrays.*	-	381b0f09
+stale-3d-default	dEQP-GLES3.functional.texture.filtering.3d.*,dEQP-GLES3.functional.texture.vertex.3d.*,dEQP-GLES3.functional.texture.specification.*3d*	-	pending:fix-3d-default
