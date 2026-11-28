@@ -3999,6 +3999,8 @@ if command -v python3 >/dev/null 2>&1; then
   # mip3-ab-verdict.py, mip3-deqp-diff.py: the three-levels board A/B verdict and dEQP mipmap diff, synthetic records.
   step "tools   mip3-ab-verdict on synthetic records" bash tools/cts/mip3-ab-verdict-selftest.sh
   step "tools   mip3-deqp-diff on synthetic logs" bash tools/cts/mip3-deqp-diff-selftest.sh
+  # console-scan.sh: per tree row HWR, fence-timeout and watchdog counts of a whole-tree record, synthetic slice.
+  step "tools   console-scan.sh on a synthetic slice (clean, HWR and watchdog rows)" no_board_env bash tools/cts/console-scan-selftest.sh
   # The common set's tally: board.sh's verdict per row and what it does not
   # say (glmark2 score and scenes, slint probes, gl_test passed of run and the
   # failing cases), on synthetic runs through board.sh's own tally.
