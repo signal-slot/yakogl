@@ -10555,6 +10555,15 @@ enum Leaf {
         ibase: u16,
         icomp: u8,
     },
+    /// Word `comp` of an int uniform's load at word `base`, converted
+    /// (`i2f32`) and narrowed alone, in both halves of a colour word:
+    /// deqp_unifmp_interaction_88's `vec4(a, 0, b, a).gbar` of a `uniform
+    /// mediump int a`, `S32_TO_F32 r0, u2.w0`, `FADD.f32 r0.h0, r0^,
+    /// 0x0.neg`, ATEST reading `r0.h0`, then `IADD.v2u16 r1, r0^.h00, 0x0`.
+    IntSplat {
+        base: u16,
+        comp: u8,
+    },
     /// Word `comp` of that load in an fp32 operation with constants,
     /// highp as its operand is, narrowed alone at the colour's store
     /// ([`Fs::wide32`]): deqp_unitype_depthrange_fs's `diff * 0.5 + 0.5`,
@@ -10620,7 +10629,13 @@ impl Pairs {
             P::Leaf(Leaf::Half { swz: Swz::H10, .. }) => Form::HalfSwapped,
             P::Leaf(Leaf::Half { .. }) => Form::Half,
             P::Leaf(Leaf::Splat { .. }) => Form::Splat,
-            P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. } | Leaf::MkInt { .. } | Leaf::WideInt { .. }) => Form::Mk,
+            P::Leaf(
+                Leaf::Mk { .. }
+                | Leaf::Lanes { .. }
+                | Leaf::MkInt { .. }
+                | Leaf::WideInt { .. }
+                | Leaf::IntSplat { .. },
+            ) => Form::Mk,
             P::Leaf(Leaf::Uniform { .. }) => Form::Uniform,
             P::Leaf(Leaf::Tex(..) | Leaf::TexLane(..) | Leaf::TexSwapped(..)) => Form::Tex,
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_) | Leaf::UboWord(..)) => Form::Ubo,
@@ -10939,6 +10954,12 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                 return Err(MaliError::Defect(Defect::IrIndex));
             };
             let w = ubo.word(d).ok_or(MaliError::FsUniform)?;
+            /* one int uniform's float in both lanes of a colour word
+             * ([`Leaf::IntSplat`]) */
+            if d == e && f.colour.is_some_and(|c| (a, b) == (c[2], c[3])) {
+                let (base, _) = ubo.load_of(w).ok_or(MaliError::FsUniform)?;
+                return pr.push(P::Leaf(Leaf::IntSplat { base, comp: (w - base) as u8 }), place);
+            }
             if ubo.word(e) != Some(w + 1) {
                 return Err(MaliError::FsUniform);
             }
@@ -13512,7 +13533,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * converted and narrowed in place, after the store's conversions */
     let mut int_lane = [None::<Src>; 2];
     for (j, r) in roots.iter().enumerate() {
-        if let P::Leaf(Leaf::MkInt { base, comp, .. }) = pr.nodes[*r as usize] {
+        if let P::Leaf(Leaf::MkInt { base, comp, .. } | Leaf::IntSplat { base, comp }) = pr.nodes[*r as usize] {
             let s = [Src::of(Idx::Ubo { base, comp })];
             let i = Src::ssa(row(p, &mut rows, Row { op: Alu::I2f, bits: 32, width: 1 }, &s)?);
             let n = row(p, &mut rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &[i])?;
@@ -13541,7 +13562,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
          * (deqp_colourpair_rnd_fs_ck_dup's `ATEST .. r0.h0`, then
          * `MKVEC.v2i16` and `IADD.v2u16 r2, r0^.h00`) */
         (None, P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, first: true, .. })) => conv_lane(&lv, k, c)?,
-        (None, P::Leaf(Leaf::MkInt { .. } | Leaf::WideInt { .. })) => {
+        (None, P::Leaf(Leaf::MkInt { .. } | Leaf::WideInt { .. } | Leaf::IntSplat { .. })) => {
             int_lane[1].ok_or(MaliError::Defect(Defect::IrIndex))?
         }
         (None, P::Leaf(Leaf::Uniform { base, comp, swz })) => {
@@ -13621,6 +13642,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             }
             P::Leaf(Leaf::Const(c)) => Src::of(Idx::Const(c)),
             P::Leaf(Leaf::WideInt { .. }) => val[roots[k] as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
+            /* `MKVEC.v2i16 x.h0, x.h0` of the int's half, which opt.rs
+             * `lower_mkvec_swz` makes `IADD.v2u16 r1, r0.h00, 0x0` */
+            P::Leaf(Leaf::IntSplat { .. }) => {
+                let n = int_lane[k].ok_or(MaliError::Defect(Defect::IrIndex))?;
+                Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &[n, n])?)
+            }
             /* the look-up's word swapped: `MKVEC.v2i16 w.h1, w.h0`, which
              * opt.rs `lower_mkvec_swz` makes `IADD.v2u16 r0, r0^.h10, 0x0`
              * (gm2_texswz_3) */
@@ -17144,7 +17171,8 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             | Leaf::Pack { .. }
             | Leaf::Wide { .. }
             | Leaf::IntWide { .. }
-            | Leaf::WideInt { .. },
+            | Leaf::WideInt { .. }
+            | Leaf::IntSplat { .. },
         )
         | P::Op(..) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
         P::Leaf(Leaf::WideLane { .. } | Leaf::Wide32 { .. }) => {
