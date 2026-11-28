@@ -38,10 +38,13 @@ need it. If the customer id is read later and differs, recheck the outcome
 on that board. A second board session (the (b) arms, knobs 3 and 4) is also
 on the X2. Where a section below says "board session", it means the X2's.
 
-**Status 2026-11-27:** the verdict is recorded: the second `dtpu` session
-measured on the Armadillo-X2 reached the page and gave code 3 (see "The X2
-verdict" below and `gc-depth-sample.md`, "The X2 session of 2026-11-27,
-second run").
+**Verdict (2026-11-27):** recorded, measured on the Armadillo-X2 in place of
+the Verdin iMX8MP (same SoC and GPU), not on the Verdin. The second `dtpu`
+session reached the page with check 3 passing and gave verdict code 3, which
+selects outcome (a) plus a texture-cache flush: knob `gc_debug_set_depth_tpu`
+mode 4, now the default. The commit, the record directory and the page words
+are in `gc-depth-sample.md`, "The X2 session of 2026-11-27, second run"; the
+code is under "The X2 verdict" below.
 
 ## The three outcomes, read from case `dtpu`
 
