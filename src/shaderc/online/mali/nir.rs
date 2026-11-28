@@ -1128,6 +1128,16 @@ pub fn registration_order(m: &Module<'_>) -> [u16; MAX_LOCALS] {
 /// Mesa's packed block (one dword per component, `PackedDriverUniformStorage`):
 /// the types the back end takes.
 pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl<'m>, u16), MaliError> {
+    uniform_of_stage(m, dword, false)
+}
+
+/// [`uniform_of`] for the vertex stage (`vertex`), which also takes a
+/// square matrix array, each column a load of its own ([`matrix_array`]).
+pub fn uniform_of_stage<'m>(
+    m: &Module<'m>,
+    dword: u16,
+    vertex: bool,
+) -> Result<(&'m ir::UniformDecl<'m>, u16), MaliError> {
     let u = m
         .uniforms
         .iter()
@@ -1141,7 +1151,7 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
         /* a float, vec2, vec3 or vec4 array, read element by element
          * ([`array_element`]; gl_test cases 149 and 150's shape,
          * uniarray_vsconst, deqp_uniarray_*_const_vs) */
-        if array_element(u).is_some() {
+        if array_element(u).is_some() || (vertex && matrix_array(u).is_some()) {
             return Ok((u, u.dwords));
         }
         return Err(MaliError::UniformArray);
@@ -1226,6 +1236,26 @@ pub(super) fn matrix_cols(gl_type: u16) -> Option<(u16, u16, u16)> {
     }
 }
 
+/// A square float matrix array's (columns, rows, front-end column stride,
+/// front-end element stride): the front end lays an element's columns as a
+/// matrix's ([`matrix_cols`]) and the elements one after another, the last
+/// one cut after its last row (reflect.rs `type_layout`). Mesa's block
+/// holds a plain mediump one as fp16 halves, a column from a word of its
+/// own (a mat2 element two words, a mat3 six, a mat4 eight:
+/// deqp_vsuarr_init_mat4's 24 words, FAU 11 to 34), each column its own
+/// load (the element's offset is no constant to
+/// `nir_lower_uniforms_to_ubo`). None: not such an array.
+pub(super) fn matrix_array(u: &ir::UniformDecl<'_>) -> Option<(u16, u16, u16, u16)> {
+    if u.array_len <= 1 {
+        return None;
+    }
+    let (cols, rows, stride) = matrix_cols(u.gl_type)?;
+    let elem = cols * stride;
+    let n = u16::from(u.array_len);
+    (u.dwords == elem * n || u.dwords == elem * (n - 1) + (cols - 1) * stride + rows)
+        .then_some((cols, rows, stride, elem))
+}
+
 /// Uniform `u` of a vertex shader is an fp16 uniform: a float, vec2, vec3,
 /// vec4 or mat4 that is no array, declared mediump or lowp (`fp16` names
 /// those). `lower_variables_visitor::visit(ir_variable)`
@@ -1243,7 +1273,7 @@ pub(super) fn fp16_uniform(u: &ir::UniformDecl<'_>, fp16: &dyn Fn(&str) -> bool)
     );
     /* a float, vec2, vec3 or vec4 array too: each element fp16 from a word
      * of its own (deqp_uniarray_*_const_vs, [`array_element`]) */
-    float && (u.array_len <= 1 || array_element(u).is_some()) && fp16(u.name)
+    float && (u.array_len <= 1 || array_element(u).is_some() || matrix_array(u).is_some()) && fp16(u.name)
 }
 
 /// `gl_type` is an integer uniform's (`int`, `ivec2/3/4`): one raw 32-bit
@@ -4598,41 +4628,124 @@ enum Mask {
 /// The most factors of one product [`MaskChain`] holds.
 const MAX_MASK_CHAIN: usize = 32;
 
-/// The product the walk is in ([`vs_chain_step`]): the local that carries
-/// it, the block, the value it has so far and each factor's condition in
-/// statement order.
+/// The products the walk holds at once ([`vs_chain_step`]): a statement
+/// chain, `compare_mat4`'s product and the `compare_vec4` product under
+/// it, and what a struct's compares nest beside them.
+const MAX_MASK_CHAINS: usize = 8;
+
+/// A product of compare results the walk is in ([`vs_chain_step`]): what
+/// names it (the local a statement chain `v *= ..` carries it in, or the IR
+/// value of an expression product's last `fmul`), the value it has so far
+/// and each factor's condition in order.
 #[derive(Clone, Copy)]
 struct MaskChain {
-    local: u32,
+    live: bool,
+    stmt: bool,
+    key: u32,
     block: u8,
     root: Val,
     n: usize,
     leaf: [Mask; MAX_MASK_CHAIN],
-    /// A factor [`vs_mask_tree`]'s model does not hold (see
-    /// [`vs_chain_step`]): up to three factors keep the pairwise rules,
-    /// more are refused.
-    poisoned: bool,
-    /// The nodes that made `root` the float of its condition
-    /// ([`vs_mask_value`]): Mesa has them once, after the last factor, so
-    /// the next statement takes them out of the order again.
-    prov: [u16; 4],
-    nprov: usize,
+    /// Bit k: factor k is a compare's own select (`a == b ? 1.0 : 0.0`),
+    /// a `b2f` when Mesa's first nir_opt_algebraic run visits the product.
+    simple: u32,
+    /// Bit k: factor k is itself a product (another chain's value), which
+    /// is a `b2f` only some runs later.
+    nested: u32,
+    /// A factor [`vs_mask_tree`]'s models do not hold: a scalar `bool ==
+    /// false`, or a factor of neither kind.
+    odd: bool,
     /// A factor is a vector's `==`.
     vector: bool,
+    /// `root` is not [`vs_mask_tree`]'s (the pairwise arms made it).
+    pairwise: bool,
+    /// The nodes that made `root` the float of its condition
+    /// ([`vs_mask_value`]), and of an expression's product the nodes of its
+    /// joins too: Mesa has them once, after the last factor (a function's
+    /// calls all stand before the product of their results), so the next
+    /// reader of the chain takes them out of the order again.
+    prov: [u16; MAX_CHAIN_NODES],
+    nprov: usize,
+    /// How many of `prov`, from its end, are the value's own nodes: all
+    /// that goes when the chain is read as one factor of another product
+    /// (its joins are that factor's condition).
+    nvalue: usize,
+    /// Per factor of a statement chain, the node that stood last when its
+    /// statement was reached.
+    anchor: [u16; MAX_MASK_CHAIN],
 }
+
+/// The nodes [`MaskChain::prov`] holds: the three of a value and the joins
+/// of four factors (two `fabs` and an `fmax` each).
+const MAX_CHAIN_NODES: usize = 16;
 
 impl MaskChain {
     const NONE: MaskChain = MaskChain {
-        local: u32::MAX,
+        live: false,
+        stmt: false,
+        key: 0,
         block: 0,
         root: Val::Undef,
         n: 0,
         leaf: [Mask::Pos(Val::Undef); MAX_MASK_CHAIN],
-        poisoned: false,
-        prov: [0; 4],
-        nprov: 0,
+        simple: 0,
+        nested: 0,
+        odd: false,
         vector: false,
+        pairwise: false,
+        prov: [0; MAX_CHAIN_NODES],
+        nprov: 0,
+        nvalue: 0,
+        anchor: [u16::MAX; MAX_MASK_CHAIN],
     };
+
+    fn push(&mut self, vs: &Nir<'_>, k: Mask, f: Factor) -> Result<(), MaliError> {
+        if self.n == MAX_MASK_CHAIN {
+            return Err(MaliError::IntValue);
+        }
+        self.leaf[self.n] = k;
+        self.anchor[self.n] = if vs.len == 0 { u16::MAX } else { vs.order[vs.len - 1] };
+        self.simple |= u32::from(f.simple) << self.n;
+        self.nested |= u32::from(f.nested) << self.n;
+        self.odd |= f.odd;
+        self.vector |= f.vector;
+        self.n += 1;
+        Ok(())
+    }
+
+    /// The chain is read as one factor: only its value's nodes are left
+    /// to drop.
+    fn as_factor(&mut self) {
+        let keep = self.nprov - self.nvalue;
+        self.prov.copy_within(keep..self.nprov, 0);
+        self.nprov = self.nvalue;
+    }
+
+    /// The nodes of `prov` no other node reads leave the order.
+    fn drop_prov(&mut self, vs: &mut Nir<'_>) {
+        let prov = self.prov;
+        let np = self.nprov;
+        self.nprov = 0;
+        self.nvalue = 0;
+        if prov[..np].iter().any(|&id| vs.uses(id).any(|(u, _)| !prov[..np].contains(&u))) {
+            return;
+        }
+        for &id in &prov[..np] {
+            if let Some(at) = vs.order[..vs.len].iter().position(|&x| x == id) {
+                vs.order.copy_within(at + 1..vs.len, at);
+                vs.len -= 1;
+            }
+        }
+    }
+}
+
+/// What a factor of a product is to [`MaskChain`].
+#[derive(Clone, Copy, Default)]
+struct Factor {
+    simple: bool,
+    nested: bool,
+    odd: bool,
+    vector: bool,
 }
 
 /// The condition of a lane `v` that is the float of a compare, or None:
@@ -4668,14 +4781,81 @@ fn vs_mask32(vs: &mut Nir<'_>, k: Mask) -> Result<Val, MaliError> {
     }
 }
 
+/// `nir_opt_vectorize` (bifrost_nir.c, `bi_vectorize_filter`: two lanes at
+/// 16 bits) on the two fp16 values `x` and `y` of a join: two scalar
+/// `fadd`s of the two halves of one fp16 uniform word, each with a
+/// constant (dEQP's `abs(a.x - b.x)` and `abs(a.y - b.y)` of an assigned
+/// value), are one two-lane `fadd` of the word and the constants' pair,
+/// which stands where the later of the two stood (deqp_vsuniarr_mat4:
+/// `FADD_IMM.v2f16 r0, u5.w1, #0x467B3E8F` then `FMAX.v2f16 r0,
+/// r0^.abs.h00, r0^.abs.h11`). Any other pair is returned as it is.
+fn vs_vectorize16(vs: &mut Nir<'_>, x: Val, y: Val) -> Result<(Val, Val), MaliError> {
+    let u = Val::Undef;
+    let part = |vs: &Nir<'_>, v: Val| match v {
+        Val::Lane(id, 0) => match vs.nodes[id as usize] {
+            NirNode { kind: Kind::Alu(Alu::Fadd), src: [Val::Lane(n, c), Val::Const(k), _], bits: 16, width: 1 }
+                if matches!(vs.nodes[n as usize], NirNode { kind: Kind::Uniform { .. }, bits: 16, .. })
+                    && k <= 0xffff =>
+            {
+                Some((id, n, c, k))
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let (Some((ix, n, a, ka)), Some((iy, m, b, kb))) = (part(vs, x), part(vs, y)) else { return Ok((x, y)) };
+    if n != m || a / 2 != b / 2 || a == b {
+        return Ok((x, y));
+    }
+    let lo = a & !1;
+    let n0 = vs.n;
+    let word = vs_pair16(vs, Val::Lane(n, lo), Val::Lane(n, lo + 1))?;
+    /* the word's own load, when this made it: beside the uniform's (a
+     * load moves to its first reader, [`opt_move`]) */
+    if let Val::Lane(w, _) | Val::Pair(w, _) = word {
+        if usize::from(w) >= n0 && vs.order[vs.len - 1] == w {
+            if let Some(pn) = vs.order[..vs.len].iter().position(|&o| o == n) {
+                vs.order[pn + 1..vs.len].rotate_right(1);
+            }
+        }
+    }
+    let (klo, khi) = if a < b { (ka, kb) } else { (kb, ka) };
+    let nd = NirNode { kind: Kind::Alu(Alu::Fadd), src: [word, Val::Const(klo | (khi << 16)), u], bits: 16, width: 2 };
+    let at = |vs: &Nir<'_>, id: u16| vs.order[..vs.len].iter().position(|&o| o == id);
+    let v = match vs.order[..vs.len].iter().copied().find(|&o| vs.nodes[o as usize] == nd) {
+        Some(v) => v,
+        None => {
+            let (Some(px), Some(py)) = (at(vs, ix), at(vs, iy)) else {
+                return Err(MaliError::Defect(Defect::IrIndex));
+            };
+            let k = px.max(py) + 1;
+            if k < vs.len {
+                vs.insert_before(k, nd)?
+            } else {
+                vs.push_node(nd)?
+            }
+        }
+    };
+    Ok((Val::Lane(v, a - lo), Val::Lane(v, b - lo)))
+}
+
 /// `iand(outer, inner)` of two conditions as nir_opt_algebraic.py leaves
 /// it: two 16-bit `flt`s of one constant are `flt(fmax(a, b), c)` (:1159),
 /// two zero tests `ieq(umax(a, b), 0)` (:1381), two negations the `inot`
 /// of their `ior` (De Morgan), anything else the `iand` of the two 32-bit
-/// booleans. The nodes it makes stand after the last value they read
-/// (Mesa makes the `iand` where the outer factor's select stood).
-fn vs_mask_join(vs: &mut Nir<'_>, outer: Mask, inner: Mask) -> Result<Mask, MaliError> {
+/// booleans. Mesa makes the `iand` where the outer factor's product
+/// stood: `floor` is the node that stood last before it (the nodes made
+/// here go after it and after the last value they read), or None for the
+/// end of the order.
+fn vs_mask_join(vs: &mut Nir<'_>, outer: Mask, inner: Mask, floor: Option<u16>) -> Result<Mask, MaliError> {
     let u = Val::Undef;
+    let (outer, inner) = match (outer, inner) {
+        (Mask::Cmp16(x, true, c), Mask::Cmp16(y, true, d)) if c == d => {
+            let (x, y) = vs_vectorize16(vs, x, y)?;
+            (Mask::Cmp16(x, true, c), Mask::Cmp16(y, true, d))
+        }
+        k => k,
+    };
     let len0 = vs.len;
     let joined = match (outer, inner) {
         (Mask::Cmp16(x, xl, c), Mask::Cmp16(y, yl, d)) if c == d => {
@@ -4691,11 +4871,11 @@ fn vs_mask_join(vs: &mut Nir<'_>, outer: Mask, inner: Mask) -> Result<Mask, Mali
             Mask::Pos(vs.alu(Alu::Iand, a, b, u)?)
         }
     };
-    /* the new nodes, after the last node they read */
     let new = vs.len - len0;
+    let Some(floor) = floor else { return Ok(joined) };
     if new != 0 {
         let fresh = |vs: &Nir<'_>, id: u16| vs.order[len0..vs.len].contains(&id);
-        let mut last = None;
+        let mut last = vs.order[..len0].iter().position(|&x| x == floor);
         for k in len0..vs.len {
             for v in vs.nodes[vs.order[k] as usize].src {
                 if let Val::Lane(id, _) | Val::Pair(id, _) = v {
@@ -4741,147 +4921,256 @@ fn vs_mask_value(vs: &mut Nir<'_>, k: Mask) -> Result<Val, MaliError> {
 /// it to go. Measured on Mesa 26.2.1's drm-shim with `NIR_DEBUG=print`
 /// (deqp_vsuarr_init_multi, nine factors: `iand(iand(iand(c9, c8),
 /// iand(c7, c6)), iand(iand(c5, c4), iand(c3, iand(c2, c1))))`).
-fn vs_mask_tree(vs: &mut Nir<'_>, leaf: &[Mask]) -> Result<Mask, MaliError> {
+///
+/// `natural`: the first two factors are both a `b2f` when the product is
+/// first visited (an expression `a * b * ..`, whose first `fmul(b2f(a),
+/// b2f(b))` is `b2f(iand(a, b))` in the factors' order, where a statement
+/// chain's first value stands under the `fcanonicalize` that `1.0 * a`
+/// left and joins as a select, the later factor first):
+/// deqp_vsuarr_init_mat4's `compare_vec4`, `fmax(fmax(w, z), fmax(x, y))`,
+/// and `compare_mat4`, `fmax(fmax(c3, c2), fmax(c0, c1))`.
+fn vs_mask_tree(vs: &mut Nir<'_>, leaf: &[Mask], natural: bool, anchor: Option<&[u16]>) -> Result<Mask, MaliError> {
     let n = leaf.len();
-    if n == 0 || n > MAX_MASK_CHAIN {
+    if n == 0 || n > MAX_MASK_CHAIN || anchor.is_some_and(|a| a.len() != n) {
         return Err(MaliError::Defect(Defect::IrIndex));
     }
     if n == 1 {
         return Ok(leaf[0]);
     }
-    /* the groups, innermost first */
-    let mut g = [leaf[0]; MAX_MASK_CHAIN];
+    /* where the product of factor `h` (the highest of a join) stood */
+    let at = |h: usize| anchor.map(|a| a[h]);
+    /* the groups, innermost first, each with its highest factor */
+    let mut g = [(leaf[0], 0usize); MAX_MASK_CHAIN];
     let mut ng = 0;
-    let first = vs_mask_join(vs, leaf[1], leaf[0])?;
+    let first =
+        if natural { vs_mask_join(vs, leaf[0], leaf[1], at(1))? } else { vs_mask_join(vs, leaf[1], leaf[0], at(1))? };
     let mut k = if n % 2 == 1 {
-        g[0] = vs_mask_join(vs, leaf[2], first)?;
+        g[0] = (vs_mask_join(vs, leaf[2], first, at(2))?, 2);
         3
     } else {
-        g[0] = first;
+        g[0] = (first, 1);
         2
     };
     ng += 1;
     while k + 1 < n {
-        g[ng] = vs_mask_join(vs, leaf[k + 1], leaf[k])?;
+        g[ng] = (vs_mask_join(vs, leaf[k + 1], leaf[k], at(k + 1))?, k + 1);
         ng += 1;
         k += 2;
     }
     while ng > 1 {
-        let mut h = [leaf[0]; MAX_MASK_CHAIN];
-        let mut nh = 0;
-        let mut i = ng;
-        /* from the outermost; an odd one out is the innermost */
-        let mut pairs = [(0usize, 0usize); MAX_MASK_CHAIN];
-        let mut np = 0;
-        while i >= 2 {
-            pairs[np] = (i - 1, i - 2);
-            np += 1;
-            i -= 2;
+        /* pairs from the outermost; an odd one out is the innermost */
+        let mut h = [(leaf[0], 0usize); MAX_MASK_CHAIN];
+        let odd = ng % 2;
+        if odd == 1 {
+            h[0] = g[0];
         }
-        if i == 1 {
-            h[nh] = g[0];
-            nh += 1;
-        }
-        let mut made = [leaf[0]; MAX_MASK_CHAIN];
-        for (j, &(o, inn)) in pairs[..np].iter().enumerate() {
-            made[j] = vs_mask_join(vs, g[o], g[inn])?;
-        }
-        for j in (0..np).rev() {
-            h[nh] = made[j];
-            nh += 1;
+        let np = ng / 2;
+        for j in 0..np {
+            let (o, i) = (g[ng - 1 - 2 * j], g[ng - 2 - 2 * j]);
+            h[odd + np - 1 - j] = (vs_mask_join(vs, o.0, i.0, at(o.1))?, o.1);
         }
         g = h;
-        ng = nh;
+        ng = odd + np;
     }
-    Ok(g[0])
+    Ok(g[0].0)
 }
 
-/// A product statement `v = v * f` of the walk, `f` the float of a compare
-/// (dEQP's `v_vtxOut *= compare_ivec4(..)`): the chain it continues, and
-/// the product's value by [`vs_mask_tree`], or None for the walk's other
-/// product arms. The chain starts at `1.0 * f`. A factor the model does
-/// not hold poisons it: a `bool == false` (its `inot` is there before the
-/// product is a select, and `bcsel(inot(a), b, c)` swaps the arms, which
-/// joins in another order: deqp_vsuarr_init_bool) and a factor that is
-/// itself a product (a `compare_vec3`'s, which Mesa makes one condition in
-/// a later run). A poisoned chain of up to three factors keeps the
-/// pairwise arms; a longer one has no reference and is refused.
+/// A product `p * f` of the walk whose operands are the floats of compare
+/// results (dEQP's `v_vtxOut *= compare_ivec4(..)`, and `compare_vec4`'s
+/// `compare_float(a.x, b.x) * compare_float(a.y, b.y) * ..`): the chain it
+/// continues or starts, and the product's value by [`vs_mask_tree`], or
+/// None for the walk's other product arms.
+///
+/// A statement chain starts at `1.0 * f` and is named by its local; an
+/// expression's product is named by its last `fmul`. A factor that is a
+/// compare's own select joins the chain of the product on its left; a
+/// factor that is itself a product is one condition (Mesa's first run sees
+/// no `b2f` there and leaves the `fmul` until both sides are one), so it
+/// starts a chain of two unless the left side is a chain of such factors.
+///
+/// The models held, each measured on Mesa 26.2.1's drm-shim:
+/// * a statement chain of compares' own selects, any length
+///   (deqp_vsuarr_init_multi, deqp_vsuniarr_multi);
+/// * an expression or a statement chain of up to four factors, all
+///   compares' own selects or all products, the first two in their order
+///   (deqp_vsuarr_init_mat4; deqp_vs16ref_uapi_struct_int_ivec4's
+///   `compare_ivec4`);
+/// * two factors, the second a product (deqp_vs16ref_uapi_struct_int_ivec4's
+///   `compare_int(..)` then `compare_ivec4(..)`: `umax(a, ..)` last).
+///
+/// Any other chain is poisoned: a scalar `bool == false` among the factors
+/// (its `inot` is there before the product is a select, and
+/// `bcsel(inot(a), b, c)` swaps the arms, which joins in another order:
+/// deqp_vsuarr_init_bool), a mix of the two kinds, a longer chain of
+/// products. A poisoned chain of up to three factors keeps the pairwise
+/// arms; a longer one, or one with a vector's `==`, has no reference and
+/// is refused.
 fn vs_chain_step(
     vs: &mut Nir<'_>,
     m: &Module<'_>,
-    chain: &mut MaskChain,
+    chains: &mut [MaskChain; MAX_MASK_CHAINS],
+    id: u32,
     s: &[ir::Src; 3],
     x0: Val,
     x1: Val,
 ) -> Result<Option<Val>, MaliError> {
-    let Some(&IrOp::LoadLocal { local, index: None, .. }) = m.def(s[0].val) else {
-        return Ok(None);
+    let cur = vs.cur;
+    let expr_at = |chains: &[MaskChain; MAX_MASK_CHAINS], v: ir::ValueId, x: Val| {
+        chains.iter().position(|c| c.live && !c.stmt && c.block == cur && c.key == v.0 && (c.pairwise || c.root == x))
     };
-    let Some(k) = vs_mask_of(vs, m, x1) else {
-        if chain.local == local.0 {
-            *chain = MaskChain::NONE;
+    /* a place for a new chain: a free one, or that of the expression
+     * product made longest ago (one nothing multiplied again: its value
+     * went to a sum or a store) */
+    let place = |chains: &[MaskChain; MAX_MASK_CHAINS]| {
+        chains
+            .iter()
+            .position(|c| !c.live)
+            .or_else(|| (0..MAX_MASK_CHAINS).filter(|&i| !chains[i].stmt).min_by_key(|&i| chains[i].key))
+    };
+    let word = |vs: &Nir<'_>, v: Val| matches!(v, Val::Lane(n, _) if matches!(vs.nodes[n as usize].kind, Kind::Uniform { .. }));
+    /* what an operand is as a factor */
+    let factor = |vs: &Nir<'_>, chains: &[MaskChain; MAX_MASK_CHAINS], src: ir::Src, x: Val, k: Mask| {
+        let simple = matches!(m.def(src.val), Some(IrOp::Alu(AluOp::Bcsel, _)));
+        let nested = expr_at(chains, src.val, x).is_some();
+        let vector = matches!(m.def(src.val), Some(IrOp::Alu(AluOp::Bcsel, c))
+            if matches!(m.def(c[0].val), Some(IrOp::Alu(AluOp::Ball | AluOp::Bany, _))));
+        let odd = !(simple || nested) || matches!(k, Mask::Neg(a) if word(vs, a));
+        Factor { simple, nested, odd, vector }
+    };
+    let statement = match m.def(s[0].val) {
+        Some(&IrOp::LoadLocal { local, index: None, .. }) => Some(local.0),
+        _ => None,
+    };
+    let Some(k1) = vs_mask_of(vs, m, x1) else {
+        if let Some(l) = statement {
+            chains.iter_mut().filter(|c| c.stmt && c.key == l).for_each(|c| c.live = false);
         }
         return Ok(None);
     };
-    /* a factor that is a compare's own select; a scalar `bool == false` */
-    let simple = matches!(m.def(s[1].val), Some(IrOp::Alu(AluOp::Bcsel, _)));
-    /* the factor is a vector's `==` ([`vs_reduce`]) */
-    let vector = matches!(m.def(s[1].val), Some(IrOp::Alu(AluOp::Bcsel, c))
-        if matches!(m.def(c[0].val), Some(IrOp::Alu(AluOp::Ball | AluOp::Bany, _))));
-    let word = |v: Val| matches!(v, Val::Lane(n, _) if matches!(vs.nodes[n as usize].kind, Kind::Uniform { .. }));
-    let odd = !simple || matches!(k, Mask::Neg(a) if word(a));
-    if x0 == Val::Const(F32_ONE) {
-        *chain = MaskChain { local: local.0, block: vs.cur, root: x1, n: 1, poisoned: odd, vector, ..MaskChain::NONE };
-        chain.leaf[0] = k;
-        return Ok(None);
-    }
-    if chain.local != local.0 || chain.block != vs.cur || (!chain.poisoned && chain.root != x0) {
-        if chain.local == local.0 {
-            *chain = MaskChain::NONE;
+    let f1 = factor(vs, chains, s[1], x1, k1);
+    /* the chain the product continues, or the one it starts */
+    let at = if let Some(l) = statement {
+        if x0 == Val::Const(F32_ONE) {
+            chains.iter_mut().filter(|c| c.stmt && c.key == l).for_each(|c| c.live = false);
+            let Some(free) = place(chains) else { return Err(MaliError::IntValue) };
+            /* the product on the right, before its place can be taken */
+            let right = expr_at(chains, s[1].val, x1).map(|c| {
+                chains[c].as_factor();
+                chains[c].live = false;
+                chains[c]
+            });
+            chains[free] = MaskChain { live: true, stmt: true, key: l, block: vs.cur, root: x1, ..MaskChain::NONE };
+            chains[free].push(vs, k1, f1)?;
+            /* a product's own value nodes are this chain's now */
+            if let Some(r) = right {
+                chains[free].prov = r.prov;
+                chains[free].nprov = r.nprov;
+                chains[free].nvalue = r.nvalue;
+            }
+            return Ok(None);
         }
-        return Ok(None);
+        let Some(c) = chains.iter().position(|c| c.live && c.stmt && c.key == l) else { return Ok(None) };
+        if chains[c].block != vs.cur || (!chains[c].pairwise && chains[c].root != x0) {
+            chains[c].live = false;
+            return Ok(None);
+        }
+        c
+    } else {
+        let Some(k0) = vs_mask_of(vs, m, x0) else { return Ok(None) };
+        let left = expr_at(chains, s[0].val, x0);
+        /* a product on the right is one factor beside the whole left
+         * side, unless the left side is a chain of products */
+        let extend = left.filter(|&c| !f1.nested || chains[c].nested == (1u32 << chains[c].n) - 1);
+        match extend {
+            Some(c) => c,
+            None => {
+                let f0 = factor(vs, chains, s[0], x0, k0);
+                let mut c = MaskChain { live: true, key: id, block: vs.cur, root: x0, ..MaskChain::NONE };
+                c.push(vs, k0, f0)?;
+                if let Some(l) = left {
+                    chains[l].as_factor();
+                    c.prov = chains[l].prov;
+                    c.nprov = chains[l].nprov;
+                    c.nvalue = chains[l].nvalue;
+                    chains[l].live = false;
+                }
+                /* not the place of the product on the right, which is read
+                 * below */
+                let right = expr_at(chains, s[1].val, x1);
+                let free = chains.iter().position(|c| !c.live).or_else(|| {
+                    (0..MAX_MASK_CHAINS).filter(|&i| !chains[i].stmt && Some(i) != right).min_by_key(|&i| chains[i].key)
+                });
+                let Some(free) = free else { return Err(MaliError::IntValue) };
+                chains[free] = c;
+                free
+            }
+        }
+    };
+    /* the right side's own value nodes go with it */
+    if let Some(r) = expr_at(chains, s[1].val, x1) {
+        let mut right = chains[r];
+        chains[r].live = false;
+        right.as_factor();
+        right.drop_prov(vs);
     }
-    if chain.n == MAX_MASK_CHAIN {
-        return Err(MaliError::IntValue);
+    let mut c = chains[at];
+    /* the chain's last value is read here alone */
+    c.drop_prov(vs);
+    c.push(vs, k1, f1)?;
+    if !c.stmt {
+        c.key = id;
     }
-    chain.leaf[chain.n] = k;
-    chain.n += 1;
-    chain.poisoned |= odd;
-    chain.vector |= vector;
-    if chain.poisoned {
+    let n = c.n;
+    let all = (1u32 << n) - 1;
+    let (simple, nested) = (c.simple == all, c.nested == all);
+    let second_nested = n == 2 && c.nested & 2 != 0;
+    let model = match (c.odd, c.stmt) {
+        (true, _) => None,
+        (false, true) if simple => Some(false),
+        (false, _) if (simple || nested) && n <= 4 => Some(true),
+        (false, _) if second_nested => Some(true),
+        _ => None,
+    };
+    let Some(natural) = model else {
         /* beside a vector's `==` the pairwise arms have no reference
          * either (deqp_vsuniarr2_bvec3_part's `compare_vec3` and two
          * `compare_bvec3`) */
-        return if chain.n > 3 || chain.vector { Err(MaliError::IntValue) } else { Ok(None) };
+        c.pairwise = true;
+        c.nprov = 0;
+        c.nvalue = 0;
+        chains[at] = c;
+        return if n > 3 || c.vector { Err(MaliError::IntValue) } else { Ok(None) };
+    };
+    if c.pairwise {
+        chains[at].live = false;
+        return Err(MaliError::IntValue);
     }
-    /* the last statement's value is read here alone */
-    for k in (0..chain.nprov).rev() {
-        let id = chain.prov[k];
-        if vs.uses(id).any(|(u, _)| !chain.prov[..chain.nprov].contains(&u)) {
+    let (leaf, anchor) = (c.leaf, c.anchor);
+    let n0 = vs.n;
+    let t = vs_mask_tree(vs, &leaf[..n], natural, c.stmt.then_some(&anchor[..n]))?;
+    /* a statement chain's joins stay where they are; its value's nodes
+     * and all of an expression's go when the chain is read again (not a
+     * word's load or the two-lane `fadd` of [`vs_vectorize16`], which
+     * stand with the factors) */
+    let keep = if c.stmt { vs.n } else { n0 };
+    let value0 = vs.n;
+    let v = vs_mask_value(vs, t)?;
+    c.nvalue = vs.n - value0;
+    for id in keep..vs.n {
+        let nd = vs.nodes[id];
+        let factor = matches!(nd, NirNode { kind: Kind::Uniform { .. }, .. })
+            || matches!(nd, NirNode { kind: Kind::Alu(Alu::Fadd), bits: 16, width: 2, .. });
+        if factor {
+            continue;
+        }
+        if c.nprov == c.prov.len() {
             return Err(MaliError::IntValue);
         }
+        c.prov[c.nprov] = id as u16;
+        c.nprov += 1;
     }
-    for k in 0..chain.nprov {
-        let id = chain.prov[k];
-        if let Some(at) = vs.order[..vs.len].iter().position(|&x| x == id) {
-            vs.order.copy_within(at + 1..vs.len, at);
-            vs.len -= 1;
-        }
-    }
-    chain.nprov = 0;
-    let n = chain.n;
-    let leaf = chain.leaf;
-    let t = vs_mask_tree(vs, &leaf[..n])?;
-    let len0 = vs.len;
-    let v = vs_mask_value(vs, t)?;
-    if vs.len - len0 > chain.prov.len() {
-        return Err(MaliError::Defect(Defect::IrIndex));
-    }
-    for k in len0..vs.len {
-        chain.prov[chain.nprov] = vs.order[k];
-        chain.nprov += 1;
-    }
-    chain.root = v;
+    c.root = v;
+    chains[at] = c;
     Ok(Some(v))
 }
 
@@ -6422,7 +6711,7 @@ fn walk<'s>(
     let mut nouter = 0;
     let mut kept_loop: Option<KeptLoop> = None;
     /* the product of compare results the walk is in ([`vs_chain_step`]) */
-    let mut mask_chain = MaskChain::NONE;
+    let mut mask_chains = [MaskChain::NONE; MAX_MASK_CHAINS];
     let steps = vs_steps(m, scratch)?;
     vs_ir_dead(m, steps, scratch, vs.ir_dead)?;
     let exact_values = invariant_values(m, scratch)?;
@@ -6672,7 +6961,12 @@ fn walk<'s>(
             }
             IrOp::LoadInput { .. } => return Err(MaliError::SpecialInput),
             IrOp::LoadUniform { dword_off, comps } => {
-                let (u, total) = uniform_of(m, dword_off)?;
+                let (u, total) = uniform_of_stage(m, dword_off, true)?;
+                /* a matrix array that is not fp16 (a struct's member, a
+                 * highp one) has no lowering yet */
+                if matrix_array(u).is_some() && !fp16_uniform(u, fp16) {
+                    return Err(MaliError::UniformArray);
+                }
                 /* the load Mesa makes: the whole vector, or one column, or
                  * one element of a vec4 array */
                 let (base, size) = if let Some((_, rows, stride)) = matrix_cols(u.gl_type) {
@@ -7001,7 +7295,7 @@ fn walk<'s>(
                     }
                     /* a statement of a product of compare results */
                     if a == AluOp::Fmul && l == 0 && width <= 1 {
-                        if let Some(v) = vs_chain_step(&mut vs, m, &mut mask_chain, &s, x(0), x(1))? {
+                        if let Some(v) = vs_chain_step(&mut vs, m, &mut mask_chains, id.0, &s, x(0), x(1))? {
                             *o = v;
                             continue;
                         }
@@ -8830,7 +9124,7 @@ fn shrink(vs: &mut Nir<'_>, m: &Module<'_>) -> Result<(), MaliError> {
                 vs.prods |= 1 << Prod::AttrLane as u32;
             }
             Kind::Uniform { dword, comps } => {
-                let (u, total) = uniform_of(m, dword)?;
+                let (u, total) = uniform_of_stage(m, dword, true)?;
                 let p = match total {
                     _ if matrix_cols(u.gl_type).is_some() => Prod::UniformMat4Column,
                     _ if u.array_len > 1 => Prod::UniformVec4,

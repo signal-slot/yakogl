@@ -56,6 +56,9 @@ const LOWERED: &[&str] = &[
     "d1_conv_bvec4_to_ivec2_fs",
     "d1_conv_vec2_bvec2_to_ivec4_fs",
     "l1_matrix_sub_uniform_mediump_mat3_vs",
+    /* plan #387 mali-train-3b: `compare_vec4`'s and `compare_mat4`'s
+     * products as Mesa's selects join them (nir.rs `vs_chain_step`) */
+    "m1_uniform_initial_mat4_vs",
 ];
 
 /// The references the compiler refuses, with the text of the refusal: a
@@ -88,7 +91,6 @@ const DIFFERS: &[&str] = &[
     "l1_op_greaterthan_mediump_ivec2_fs",
     "m1_cexpr_greaterthan_ivec2_vs",
     "m1_matrix_mul_uniform_highp_mat2_vs",
-    "m1_uniform_initial_mat4_vs",
     "o_fragdata_valid_dynamic_index",
     "r1_idx_vec2_static_loop_write_component_read_fs",
     "r1_swz_mediump_vec4_qpts_vs",
@@ -199,7 +201,6 @@ fn v1_uniform_info_float_both() {
 /// `dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.basic.mat4_vertex` (cause M1/V1): the mat4 form of the fp16 uniform compare.
 /// Rebuilt from es2fUniformApiTests.cpp `generateVertexSource`/`generateFragmentSource` (the uniform's value is a fixed literal, see the header).
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn m1_uniform_initial_mat4_vs() {
     mali_ref::assert_matches("deqp_audit_m1_uniform_initial_mat4_vs");
 }

@@ -54,15 +54,16 @@ const FRAG_LANE: &str = "a gl_FragColor lane other than the varying's own lane o
 /// no model of that order).
 const INT_VALUE: &str = "an integer or boolean value is not lowered yet";
 
-/// The references the compiler makes byte-equal. None yet.
-const MATCHED: &[&str] = &[];
+/// The references the compiler makes byte-equal: `mat3_part`, plan #387
+/// mali-train-3b step VA2 (a plain mediump matrix array, nir.rs
+/// `matrix_array`).
+const MATCHED: &[&str] = &["mat3_part"];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("mat3_part", UNIFORM_ARRAY),
     ("struct_mat4_arr", UNIFORM_ARRAY),
-    ("mat2_struct", UNIFORM_ARRAY),
-    ("mat4_mixed", UNIFORM_ARRAY),
+    ("mat2_struct", INT_VALUE),
+    ("mat4_mixed", INT_VALUE),
     ("struct_vec3_mat2", UNIFORM_ARRAY),
     ("ivec3_part", FRAG_LANE),
     ("bvec3_part", INT_VALUE),
@@ -93,7 +94,6 @@ fn refusals_pinned() {
 
 /// `uniform mediump mat3 u_var0[5]`: only `u_var0[2]` is read.
 #[test]
-#[ignore = "refused: a uniform array (uniform mat3 u_var0[5])"]
 fn mat3_part() {
     mali_ref::assert_matches("deqp_vsuniarr2_mat3_part");
 }
@@ -107,14 +107,14 @@ fn struct_mat4_arr() {
 
 /// `uniform mediump mat2 u_var0[4]`: elements 0 and 2 are read.
 #[test]
-#[ignore = "refused: a uniform array (uniform mat2 u_var0[4])"]
+#[ignore = "refused: an integer or boolean value (compare_mat2 products beside other compares in one product chain; the mat2 array loads)"]
 fn mat2_struct() {
     mali_ref::assert_matches("deqp_vsuniarr2_mat2_struct");
 }
 
 /// `uniform mediump mat4 u_var0[3]`, every element compared, beside scalars.
 #[test]
-#[ignore = "refused: a uniform array (uniform mat4 u_var0[3])"]
+#[ignore = "refused: an integer or boolean value (compare_mat4 products beside int and bool compares in one product chain; the mat4 array loads)"]
 fn mat4_mixed() {
     mali_ref::assert_matches("deqp_vsuniarr2_mat4_mixed");
 }

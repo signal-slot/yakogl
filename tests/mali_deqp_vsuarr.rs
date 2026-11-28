@@ -45,16 +45,16 @@ const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
 /// lower-uniform-rest3; `init_bvec4`, `init_ivec4` and `init_multi`, plan
 /// #387 mali-train-3b step VA1 (a vector's `==` cut last lane first, nir.rs
 /// `vs_reduce`, and the product's conditions joined as Mesa's selects are,
-/// `vs_mask_tree`).
-const MATCHED: &[&str] = &["init_bool", "init_bvec4", "init_int", "init_ivec4", "init_multi"];
+/// `vs_mask_tree`); `init_mat4`, step VA2 (a plain mediump matrix array,
+/// nir.rs `matrix_array`, and `compare_mat4`'s products of products).
+const MATCHED: &[&str] = &["init_bool", "init_bvec4", "init_int", "init_ivec4", "init_mat4", "init_multi"];
 
 /// The references that compile now and still differ from Mesa's words.
 /// None.
 const DIFFERS: &[&str] = &[];
 
 /// Every refused reference with its refusal.
-const REFUSED: &[(&str, &str)] =
-    &[("init_mat4", UNIFORM_ARRAY), ("init_struct_mat", UNIFORM_ARRAY), ("init_nested_mat", UNIFORM_ARRAY)];
+const REFUSED: &[(&str, &str)] = &[("init_struct_mat", UNIFORM_ARRAY), ("init_nested_mat", UNIFORM_ARRAY)];
 
 fn on_disk() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
@@ -157,7 +157,6 @@ fn init_ivec4() {
 /// to 34); no `FADD_IMM`: an `FMAX.v2f16` tree of the 48 lanes' `abs`, one
 /// `FCMP_OR.v2f16.lt.m1` with 0.05 (`2a662a66`, FAU 35), `S16_TO_S32`.
 #[test]
-#[ignore = "refused: a uniform array (uniform mediump mat4 u_var[3])"]
 fn init_mat4() {
     mali_ref::assert_matches("deqp_vsuarr_init_mat4");
 }

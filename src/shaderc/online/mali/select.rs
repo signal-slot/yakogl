@@ -386,6 +386,18 @@ impl UboLayout {
         comps: u16,
         halves: bool,
     ) -> Result<(), MaliError> {
+        /* a matrix array: one row a column of each element, in order
+         * (nir.rs `matrix_array`; fp16, each column from a word of its
+         * own: deqp_vsuarr_init_mat4's 24 words) */
+        if let Some((cols, rows, stride, elem)) = nir::matrix_array(u) {
+            for e in 0..u16::from(u.array_len) {
+                for c in 0..cols {
+                    self.push(u.dword_off + e * elem + c * stride, rows, halves)?;
+                    self.split_last();
+                }
+            }
+            return Ok(());
+        }
         match (nir::matrix_cols(u.gl_type), nir::array_element(u)) {
             (Some((cols, rows, stride)), _) if stride != rows => {
                 for c in 0..cols {
@@ -428,7 +440,7 @@ impl UboLayout {
             /* a float array read at a run-time index: one fp32 word an
              * element (uniarray_vs: `ui_two` at word 0, `u_arr` from word 1,
              * the varying program's `IADD_IMM.i32 #0x4`) */
-            let (_, comps) = super::nir_fs::uniform_extent(m, u.dword_off)?;
+            let (_, comps) = nir::uniform_of_stage(m, u.dword_off, true)?;
             /* an fp16 uniform (nir.rs `fp16_uniform`): two components a
              * word, the low first, a mat4 its columns in order with no
              * padding (vsfp16_19_hello: `transformationMatrix` in words
