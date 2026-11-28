@@ -81,9 +81,10 @@ pvr-grow-scene = ["pvr"]
 vivante = ["imx8mp"]
 
 # The host tests only: the Zephyr Mali OSAL's test (board::nanopc_t6_osal)
-# draws the L2 triangle through the GL stack and its `gpu-mali` backend over
-# the OSAL's logic and the Z4 MCU model. The image configuration of the Mali
-# build, as tools/mali/panthor takes it: no OSAL feature (the test installs
-# its ops), the in-process compiler, no table.
+# draws the L2 triangle through the GL stack and its `gpu-mali` backend (the
+# crate's Mali frame builder, backend and Valhall code generator,
+# src/mali/) over the OSAL's logic and the Z4 MCU model. The image
+# configuration of the Mali build, as tools/mali/panthor takes it: no OSAL
+# feature (the test installs its ops), the in-process compiler, no table.
 [dev-dependencies]
 yakogl = { path = "../..", default-features = false, features = ["gpu-mali", "shaderc-online", "no-shader-table"] }

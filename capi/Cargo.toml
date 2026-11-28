@@ -46,12 +46,16 @@ gpu-v3d = ["yakogl/gpu-v3d"]
 # `gpu-v3d`): the 7.1 table as `g_backend`. It goes with the same
 # `shaderc-online` and `no-shader-table` as `gpu-v3d`.
 gpu-v3d71 = ["yakogl/gpu-v3d71"]
-# The NanoPC-T6's Mali-G610 (the yakogl crate's `gpu-mali`, a skeleton that
-# refuses every draw): like the V3D it goes with `shaderc-online` and
-# `no-shader-table`.
+# The NanoPC-T6's Mali-G610 (the yakogl crate's `gpu-mali`: the frame
+# builder, the backend and the Valhall code generator; what they do not
+# build yet is refused by name): like the V3D it goes with `shaderc-online`
+# and `no-shader-table`.
 gpu-mali = ["yakogl/gpu-mali"]
-# The in-process compiler: no_std, it needs no table, and it is the only back
-# end a Zephyr image can take.
+# The in-process compiler: no_std, it needs no table. It is the default arm
+# of a Zephyr image's `YAKOGL_SHADERC` choice (the Mesa reference table,
+# measurement only, and the precompiled-only image are the others), and the
+# only back end a `gpu-v3d` or `gpu-mali` build can take (the yakogl crate's
+# src/lib.rs).
 shaderc-online = ["yakogl/shaderc-online"]
 # The precompiled tier in front of the compiler (the yakogl crate's own
 # feature; capi/yakogl_capi.cmake's PRECOMPILED generates the table and
