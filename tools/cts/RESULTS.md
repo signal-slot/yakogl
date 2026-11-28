@@ -586,10 +586,9 @@ nothing in the boot partitions was changed. The images are those of
 (`v0.1.0-3407-gbd6cd44938a7`) with the pinned `MALI_CSFFW`. All five runs
 ended by themselves and the board came back to its Linux login each time.
 The first five rows do not use the display (the 10.1" LVDS panel on X12). The
-next three rows are the display session of 2026-11-27: the probe from main
+last three rows are the display session of 2026-11-27: the probe from main
 `472630df`, the triangle and gl_test rerun from main `a6418449`, started
-through the U-Boot prompt route of `docs/standalone-boot.md` as above. The
-last row is the one-shot of 2026-11-28 (main `92344e4d`).
+through the U-Boot prompt route of `docs/standalone-boot.md` as above.
 
 | Step | Image | Result | Image sha256 | Run | Record |
 |---|---|---|---|---|---|
@@ -601,19 +600,18 @@ last row is the one-shot of 2026-11-28 (main `92344e4d`).
 | The X12 LVDS path at reset (read only, DISPLAY on and off) | `imx95_lvds_ids` | **PASS**: `imx95_lvds_ids: PASS lvds csr 0x00000000 0x00000000 0x00000000 0x00000000, dpu id 0x21260400 (the dump's), LDB PLL and TPM5 permitted`; clocks 37/38/80/154 permissions 0xe0000000, 75 none; DISPLAY off at entry; display CSR +0x14/+0x18 reset values, +0x1C 0 (Linux writes 0x33); burst words 0x7fe00204 at reset; U2 (display clocks), U23, U26, U27 answered; U19 not used on X12 | `079c50c9ba66c113` | 2026-11-27 18:01 JST | `records/verdin-imx95/20261127-1801-imx95_lvds_ids-472630df` |
 | The first triangle on the X12 LVDS panel (1024x600 window copied to the 1280x800 panel), rerun | `examples/triangle` | **PASS**: `triangle: check PASS (every pixel read back)`, `triangle: PASS`; 0 of 614,400 pixels wrong, 0 of 23 glReadPixels points differ; `display up: 1280x800 XRGB8888 …, FrameGen0 in sync after 49800 us, LDB 0x00000014 0x00082221 0x00001075 0x00000000, backlight 119/255`; the camera shows the triangle at the panel's top-left. The stop still fails after 7790a11e: `display down: -5` (`NotStopped`, `fgenable 0, fgensts 1, fgchstat 257`), the defect stays open; the PSCI reset (`run over … 61349 ms`) follows and Linux boots. Built from main `a6418449` | `cbdcddd105520170` | 2026-11-27 20:56 JST | `records/verdin-imx95/20261127-2056-triangle-cbdcddd1` |
 | gl_test with the panel on (`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`, read-back, then 30 s of colour bars), rerun | `gl_test` | **50 of 50 cases pass**: `gl_test: all: 0 of 50 cases failed (…); precompiled hits 0, compiler runs 529`, `gl_test: OK (rc=0)`, `display up: 1280x800 …`, `gl_test: panel: board_show = 0 (1280x800 colour bars)`, `gl_test: PASS`, `yk-record: 594b0201 00000001 00000000 00000000`; 166 kicks, 0 restarts; the camera saw the panel lit with three bars (red, green, blue turned the right way up; the red looks orange through glare); `display down: -5` (`NotStopped`, as the triangle); `run over … 45933 ms`. Built from main `a6418449` (contains 7835bd46) | `90b71ea18a0cb7c6` | 2026-11-27 20:58 JST | `records/verdin-imx95/20261127-2058-gl_test-90b71ea1` |
-| gl_test, one-shot from the eMMC root file system (read-back; `tools/board.sh imx95` refused, so typed by hand at the U-Boot prompt through the installed hook: `setenv yako_file /var/yakogl/<f>; run yako_mmc`, mmc 0:2, no saveenv), then the BBM record read back by a Zephyr reader image | `gl_test` (main `92344e4d`) | **50 of 50 cases pass**, `yk-record: 594b0201 00000001 00000000 00000000`, `run over: PSCI SYSTEM_RESET at 15513 ms`. The BBM GPR4..7 were cleared to 0 first (`imx95_bbm_clear: PASS`); after gl_test's PSCI reset `imx95_bbm_read: PASS record 594b0201 00000001 00000000 00000000`, equal to the console line (`yakogl-tools record --line`: `class=verdict kind=2 name=APP status=pass resets=absent`); the zeros also survived a Linux boot and reboot. The WDOG3 reset was not measured. `imx95_lvds_ids` after the one-shots: PASS. `tools/board.sh imx95 run` (`BOARD_BOOT=uboot-mmc`) refused with rc 3 before any change (`does not answer (ssh key login and sudo -n)`: the image has root and no sudo). bootcmd, `fw_printenv` sha256 and both boot partitions' sha256 unchanged before and after | `b7e059e9…bcf` | 2026-11-28 00:15 JST | `records/verdin-imx95/20261128-0015-oneshot-92344e4d` |
 
 What these runs do not show:
 
-- The WDOG3 reset's effect on the BBM record is not measured (the PSCI reset
-  and a Linux reboot are, in the last row). Linux cannot read the record (no
-  SCMI raw interface); the reader is a Zephyr image typed the same way.
-- `tools/board.sh imx95` has not run an image: it refused (rc 3, no sudo on
-  this image). U-Boot has run an image only by the hook's `yako_mmc` typed at
-  the prompt, not from its boot command; the direct route has not been tried.
+- The record in the BBM GPRs was not read back there (the stock kernel's SCMI
+  raw interface is absent). The verdicts above are the console's.
+- `tools/board.sh imx95` has not run, nor has U-Boot started an image from
+  its boot command; the direct route has not been tried.
 - `display down` returns -5 in both display images (FrameGen0 still enabled
   after FGENABLE=0, even with the stop ordered before the LDB gates, 7790a11e);
-  open. The gl_test panel defect is closed (7835bd46).
+  open. The later change that waits for SeqComplete0 in the display interrupt
+  block (152eebf4c) has no board measurement recorded here, so the down is
+  not claimed to work. The gl_test panel defect is closed (7835bd46).
 
 The module's own Linux and U-Boot, read the same night (read only): the
 stock Linux drives the G310 with `mali_kbase` r50p0 (`arch 10.12.7 r0p0`)
