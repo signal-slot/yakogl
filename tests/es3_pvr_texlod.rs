@@ -525,4 +525,61 @@ mod gl {
             });
         }
     }
+
+    /// GL_TEXTURE_MAX_LEVEL has no field of its own: the GL core stops the
+    /// bind's `mip_levels` at it (ES 3.0.6 3.8.13: levels base..q, q =
+    /// min(p, max_level)), and the descriptor the draw's bind builds counts
+    /// the levels from the base. Base 1, max level 3 of the five-level 2D
+    /// texture: the linear image states levels 1..3 (STRIDE num_mip_levels
+    /// 3), maxlod two levels past the base; MAX_LOD 1.5 clamps inside that.
+    /// The native cube names baselevel 1 and the same two-level maxlod.
+    #[test]
+    fn max_level_reaches_the_descriptor() {
+        for (target, sampler) in [(GL_TEXTURE_2D, "sampler2D"), (GL_TEXTURE_CUBE_MAP, "samplerCube")] {
+            on_powervr(|| {
+                texture(target);
+                program(sampler);
+                let d0 = super::texture_descriptor(&draw());
+                assert_eq!(super::lods(&d0), (0, 4 * 64), "{sampler}: GL's defaults, five levels");
+                // SAFETY: plain GL calls.
+                unsafe {
+                    glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 1);
+                    glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, 3);
+                }
+                let t = draw();
+                assert_eq!((t.base_level, t.mip_levels), (1, 4), "{sampler}: levels 0..max level");
+                let d = super::texture_descriptor(&t);
+                assert_eq!(super::lods(&d), (0, 2 * 64), "{sampler}: levels 1..3");
+                if target == GL_TEXTURE_2D {
+                    assert_eq!(super::bits(super::word(&d, 2), 60, 63), 3, "STRIDE num_mip_levels");
+                } else {
+                    assert_eq!(super::twiddled_levels(&d).0, 1, "IMAGE_WORD1.baselevel");
+                }
+                // SAFETY: a plain GL call.
+                unsafe { glTexParameterf(target, GL_TEXTURE_MAX_LOD, 1.5) };
+                assert_eq!(super::lods(&super::texture_descriptor(&draw())), (0, 96), "{sampler}: MAX_LOD 1.5");
+            });
+        }
+    }
+
+    /// MAX_LOD 0 on a texture sampled at one level whose min and mag filters
+    /// differ: lambda is clamped to 0, so every pixel magnifies (ES 3.0.6
+    /// 3.8.11 chooses on the clamped lambda): maxlod 0, not the 1.0 the
+    /// builder gives such a sampler so that it can minify.
+    #[test]
+    fn max_lod_zero_magnifies() {
+        on_powervr(|| {
+            texture(GL_TEXTURE_2D);
+            // SAFETY: plain GL calls.
+            unsafe {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            }
+            program("sampler2D");
+            assert_eq!(super::lods(&super::texture_descriptor(&draw())), (0, 64), "min != mag");
+            // SAFETY: a plain GL call.
+            unsafe { glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, 0.0) };
+            assert_eq!(super::lods(&super::texture_descriptor(&draw())), (0, 0), "MAX_LOD 0 magnifies");
+        });
+    }
 }
