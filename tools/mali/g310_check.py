@@ -42,6 +42,9 @@ OPTION_SETS = [
     [],
     ["--prim", "points", "--uniform-values"],
     ["--prim", "points"],
+    # added for the references drawn with matN attributes (fclane mat_*)
+    ["--uniform-values", "--mat-columns"],
+    ["--mat-columns"],
 ]
 FIELDS = ("words", "fau", "work_reg_count", "preload", "va")
 STATUSES = ("IDENTICAL", "DIFFERS", "NO-OPTION-SET")
@@ -52,14 +55,31 @@ def strip(ref):
     return {k: v for k, v in ref.items() if k != "trace"}
 
 
-def pick_option_set(extract_for, committed):
+def bind_option_sets(ref):
+    """Option sets for a reference with a `.bind` file (glBindAttribLocation
+    lines `name location`); [] when it has none."""
+    path = ref[:-len(".expect.json")] + ".bind"
+    if not os.path.isfile(path):
+        return []
+    pairs = []
+    for line in open(path):
+        line = line.split("#")[0].split()
+        if len(line) == 2:
+            pairs.append("%s=%s" % tuple(line))
+    if not pairs:
+        return []
+    b = ",".join(pairs)
+    return [["--uniform-values", "--attrib-bindings", b], ["--attrib-bindings", b]]
+
+
+def pick_option_set(extract_for, committed, extra=()):
     """The first option set whose extract equals the committed reference.
 
     extract_for(opts) returns the extract (dict) or None when the draw or the
     extract failed. Returns the option list, or None when no set matches.
     """
     want = strip(committed)
-    for opts in OPTION_SETS:
+    for opts in OPTION_SETS + list(extra):
         got = extract_for(opts)
         if got is not None and strip(got) == want:
             return opts
@@ -225,7 +245,7 @@ def check_one(work, ref, tmp):
         t = draw(work, pair[0], pair[1], os.path.join(tmp, "d%d" % count[0]), gpu, opts)
         return extract(t, attrs) if t else None
 
-    opts = pick_option_set(extract_for, committed)
+    opts = pick_option_set(extract_for, committed, bind_option_sets(ref))
     if opts is None:
         return "NO-OPTION-SET", "no option set reproduces the G610 reference"
     a = extract_for(opts)
