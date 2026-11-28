@@ -1995,6 +1995,22 @@ step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs, every declare
 tests_row gc_scene_kicks_depth_tpu
 step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_depth_tpu.rs, every declared test)" \
   knobs_file_tests gc_scene_kicks_depth_tpu "$KNOBS_ES2_CONFIG"
+# The D24S8 depth view behind `gc_debug_set_depth_tpu` (plan #417,
+# docs/notes/gc-depth-sample-wire.md). These files are cfg'd on test-knobs,
+# or have tests that are, so no CONFIGS row runs them (or runs them all);
+# the clippy row above lints them. Every #[test] of each must pass.
+for t in gc_depth_view_tiled_rt gc_depth_view_flushes gc_depth_view_flush_mode \
+  gc_depth_view_golden gc_depth_copy_knob gc_depth_flush_scenes \
+  gc_depth_sample_default gc_resolve_bytes_counter; do
+  tests_row "$t"
+  step "test    $KNOBS_CONFIG (tests/$t.rs, every declared test)" knobs_file_tests "$t"
+done
+# These two hold an #[ignore]d test each (a defect named at it), which
+# tests_as_declared refuses: a plain test row, the ignored ones reported.
+step "test    $KNOBS_CONFIG (tests/gc_depth_exact_readers.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_depth_exact_readers
+step "test    $KNOBS_CONFIG (tests/gc_depth_sample_lifetime.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_depth_sample_lifetime
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
