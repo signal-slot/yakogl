@@ -545,6 +545,14 @@ struct Sel<'a> {
     /// the end of each arm, and after such a loop, where the load has not
     /// run on the other path.
     cached: AVec<'a, u32>,
+    /// The reciprocal square roots made since the last control-flow point,
+    /// (operand, result): a second `rsqrt` of the same operand reads the
+    /// first one's result instead of issuing the SFU again (terrain.frag's
+    /// `length(lVector)`, `fsqrt` = `frcp(frsq)`, and `normalize(lVector)`
+    /// on one dot product). Forgotten at every branch, label, loop head or
+    /// back edge, and when an op writes the operand or the result again
+    /// ([`Sel::push`]), so a reuse reads the value the same `rsqrt` would.
+    rsqrts: AVec<'a, (Operand, V)>,
 }
 
 /// One open counted loop (select.rs [`Sel::body`], SOp::LoopHead).
@@ -635,8 +643,10 @@ impl<'a> Sel<'a> {
         match op {
             VOp::Flags { .. } if self.last_push == Some(op) => return Ok(()),
             VOp::Flags { .. } => self.last_push = Some(op),
-            VOp::Thrsw | VOp::LoopHead | VOp::BackEdge { .. } | VOp::FwdBranch { .. } | VOp::Label(_) => {
-                self.last_push = None
+            VOp::Thrsw => self.last_push = None,
+            VOp::LoopHead | VOp::BackEdge { .. } | VOp::FwdBranch { .. } | VOp::Label(_) => {
+                self.last_push = None;
+                while self.rsqrts.pop().is_some() {}
             }
             _ => {
                 /* a write to a pushed operand: the flags no longer say what
@@ -645,6 +655,12 @@ impl<'a> Sel<'a> {
                     VOp::CondMov { dst, .. } | VOp::Copy { dst, .. } => Some(dst),
                     _ => op.def(),
                 };
+                /* a write to a remembered rsqrt's operand or result */
+                if let Some(d) = wrote {
+                    if self.rsqrts.as_slice().iter().any(|&(x, r)| x.vreg() == Some(d) || r == d) {
+                        while self.rsqrts.pop().is_some() {}
+                    }
+                }
                 if let (Some(d), Some(VOp::Flags { a: x, b: y, .. })) = (wrote, self.last_push) {
                     if x.vreg() == Some(d) || y.vreg() == Some(d) {
                         self.last_push = None;
@@ -871,6 +887,18 @@ impl<'a> Sel<'a> {
         let d = self.v();
         self.push(a, VOp::Add { op, dst: Dst::V(d), a: x, b: y })?;
         Ok(Operand::V(d))
+    }
+    /// `rsqrt(x)`: the result of an earlier `rsqrt` of the same operand
+    /// when [`Sel::rsqrts`] still holds it, else a new one (remembered).
+    fn rsqrt(&mut self, a: &Arena<'a>, x: Operand) -> Result<Operand, SelectError> {
+        if let Some(&(_, r)) = self.rsqrts.as_slice().iter().find(|e| e.0 == x) {
+            return Ok(Operand::V(r));
+        }
+        let r = self.add(a, AddOp::Rsqrt, x, Operand::None)?;
+        if let Operand::V(v) = r {
+            self.rsqrts.push(a, (x, v))?;
+        }
+        Ok(r)
     }
     /// The arithmetic and constants of `p`, in its order. The loads are
     /// selected already (their operands are in `of`).
@@ -1578,13 +1606,13 @@ impl<'a> Sel<'a> {
                         }
                         /* nir_to_vir.c:1742-1753 */
                         AluOp::Frcp => self.add(a, AddOp::Recip, x, Operand::None)?,
-                        AluOp::Frsq => self.add(a, AddOp::Rsqrt, x, Operand::None)?,
+                        AluOp::Frsq => self.rsqrt(a, x)?,
                         AluOp::Fexp2 => self.add(a, AddOp::Exp, x, Operand::None)?,
                         AluOp::Flog2 => self.add(a, AddOp::Log, x, Operand::None)?,
                         /* lower_fsqrt (v3d_screen.c:585): fsqrt(a) is
                          * frcp(frsq(a)) (nir_opt_algebraic.py:1908) */
                         AluOp::Fsqrt => {
-                            let r = self.add(a, AddOp::Rsqrt, x, Operand::None)?;
+                            let r = self.rsqrt(a, x)?;
                             self.add(a, AddOp::Recip, r, Operand::None)?
                         }
                         AluOp::Fsin => self.sincos(a, x, false, small_imms)?,
@@ -2293,6 +2321,7 @@ pub fn select_fragment_keyed<'a>(
         ifs: AVec::new(),
         merges: AVec::new(),
         cached: AVec::new(),
+        rsqrts: AVec::new(),
     };
     /* gl_PointCoord: the two implicit point varyings come before every
      * declared one (Mesa nir_to_vir.c:4869-4873, before ntq_setup_fs_inputs
@@ -2584,6 +2613,7 @@ pub fn select_vertex_keyed<'a>(
         ifs: AVec::new(),
         merges: AVec::new(),
         cached: AVec::new(),
+        rsqrts: AVec::new(),
     };
     if pressure >= Pressure::LazyAttributes {
         s.attr_rows = attr_rows;

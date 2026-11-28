@@ -179,4 +179,11 @@ fn terrain_sched_words() {
 const NOISE_FS: Stage = (1090, 2, 872, 830);
 const TERRAIN_VS: Stage = (156, 2, 109, 98);
 const TERRAIN_CS: Stage = (87, 4, 60, 54);
-const TERRAIN_FS: Stage = (146, 4, 89, 119);
+// The terrain FS: 146 words (add 89) until plan #419's item fs-rsqrt-cse,
+// which made `length(lVector)` and `normalize(lVector)` share one `rsqrt`
+// (`select.rs` `Sel::rsqrts`): one SFU operation fewer, and one word more,
+// the list order's tie at the top of the program (the two texture
+// coordinates' lanes in swapped registers, so `tmut` and `tmus` take a word
+// each), a change of the allocation and the list order, not of the
+// rsqrt's own stretch.
+const TERRAIN_FS: Stage = (147, 4, 88, 119);
