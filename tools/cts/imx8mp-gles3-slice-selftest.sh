@@ -282,5 +282,23 @@ run --commit $full --rows 53-54 --date 2026-11-16 --lines "$tmp/f2.txt" > "$tmp/
 grep -q '^- WDOG1 e52: ' "$tmp/f2.md" && ! grep -q 'last case' "$tmp/f2.md" && ok "fault: verdict alone gives the WDOG1 line" || bad "fault: verdict-only line"
 grep -q '^## Resets and hangs' "$tmp/x/slice/README.md" && bad "a clean slice has the fault section" || ok "a clean slice has no fault section"
 
+# 7. meta.txt: an entry's record directory meta.txt is copied as eNN.meta.txt, redacted (a login and a host name are
+# scrubbed), and imx8mp-gles3-times.py can read it. e53 has none: no file.
+mkdir -p "$tmp/m/runs/20261128-0102-e52-89abcdef" "$tmp/m/runs/20261128-0109-e53-89abcdef"
+printf '%s\n' 'jump=refused' 'refused_rc=3' 'refused=ssh root@armadillo.local failed' 'lost=95' 'back=1' 't_reboot=100' \
+	't_back=190' 'timeline=ping n/a; ssh back 90s' 'rc_cycle=0' 'ended=2026-11-28 01:10:00' 'extra=1.2.3.4' \
+	> "$tmp/m/runs/20261128-0102-e52-89abcdef/meta.txt"
+run --commit $full --rows 53-54 --date 2026-11-16 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+	--records "$tmp/m/runs" --out "$tmp/m/slice" > "$tmp/m.log" 2>&1 && ok "meta: slice written" || bad "meta: refused: $(cat "$tmp/m.log")"
+mf=$tmp/m/slice/e52.meta.txt
+[ -f "$mf" ] && ok "meta: e52.meta.txt copied" || bad "meta: no e52.meta.txt"
+[ ! -e "$tmp/m/slice/e53.meta.txt" ] && ok "meta: no file for an entry without meta.txt" || bad "meta: e53.meta.txt exists"
+for k in jump refused_rc refused lost back t_reboot t_back timeline rc_cycle; do
+	grep -q "^$k=" "$mf" || bad "meta: key $k missing"
+done
+grep -q '^t_back=190$' "$mf" && grep -q '^timeline=ping n/a; ssh back 90s$' "$mf" && ok "meta: reader keys kept" || bad "meta: keys wrong"
+grep -q 'root@armadillo\|1\.2\.3\.4' "$mf" && bad "meta: not redacted" || ok "meta: login and address redacted"
+python3 -I "$redact" --check "$mf" > "$tmp/mr.txt" 2>&1 && ok "meta: redact --check passes" || bad "meta: redact: $(cat "$tmp/mr.txt")"
+
 echo "slice-selftest: $nok ok, $nfail failed"
 [ "$nfail" = 0 ]

@@ -47,6 +47,11 @@ captured, recoveries not observed"); without all three the output is exactly as 
 Without --out the README goes to stdout; with --out it is DIR/README.md. Before it is written or printed,
 imx8mp-gles3-redact.py --check must find nothing in it (exit 1 on a hit, nothing written). The check's scratch
 file is under --out, else $TMPDIR, else the current directory; never /tmp or /var/tmp.
+With --out and --records, each entry's record directory (DIR/<stamp>-eNN-<sha8>, the last by name when an entry
+has several) that has a meta.txt gets it copied as eNN.meta.txt beside the README (the optional file that
+imx8mp-gles3-times.py reads when a verdict line has back_after=?s). The text goes through the redact tool's
+--fix; if --check still finds a hit, only the lines whose key a reader uses (META_KEYS) are kept, and if that
+is still not clean the slice is refused.
 """
 import argparse, os, re, subprocess, sys, tempfile
 
@@ -149,6 +154,46 @@ def run_dirs(records):
                 if m:
                     seen.add(int(m.group(1)))
     return seen
+
+
+META_KEYS = ('jump', 'refused_rc', 'refused', 'lost', 'back', 'back_after', 't_reboot', 't_back', 'rc_cycle',
+             'timeline')  # timeline: imx8mp-gles3-times.py reads 'ssh back <n>s' from it
+
+
+def meta_files(records):
+    """{entry: path of the meta.txt of its record directory}, the last directory by name winning."""
+    found = {}
+    for r in records:
+        for root, dirs, files in os.walk(r):
+            dirs.sort()
+            m = RUN_DIR.search(os.path.basename(os.path.normpath(root)))
+            if m and 'meta.txt' in files:
+                e = int(m.group(1))
+                q = os.path.join(root, 'meta.txt')
+                if e not in found or os.path.basename(root) >= os.path.basename(os.path.dirname(found[e])):
+                    found[e] = q
+    return found
+
+
+def redact_run(mode, p):
+    return subprocess.run([sys.executable, '-I', os.path.join(HERE, 'imx8mp-gles3-redact.py'), mode, p],
+                          capture_output=True, text=True)
+
+
+def redacted_meta(src, scratch):
+    """the redacted text of a meta.txt, or None when not even its reader keys can be made clean"""
+    with open(src, errors='replace') as f:
+        raw = f.read()
+    keys = lambda t: ''.join(l + '\n' for l in t.splitlines() if l.partition('=')[0] in META_KEYS)
+    for text in (raw, keys(raw)):
+        p = os.path.join(scratch, 'meta.txt')
+        with open(p, 'w') as f:
+            f.write(text)
+        redact_run('--fix', p)
+        if redact_run('--check', p).returncode == 0:
+            with open(p) as f:
+                return f.read()
+    return None
 
 
 def read_results(path):
@@ -404,6 +449,22 @@ def main():
     if not ok:
         print('slice: the README fails the redact check, nothing written:\n%s' % msg, file=sys.stderr)
         return 1
+    if a.out and a.records:
+        try:
+            lo, hi = parse_rows(a.rows)
+            out = {}
+            with tempfile.TemporaryDirectory(prefix='.slice-meta.', dir=a.out) as t:
+                for e, src in sorted(meta_files(a.records).items()):
+                    if lo - 1 <= e < hi:
+                        out[e] = redacted_meta(src, t)
+                        if out[e] is None:
+                            raise Refuse('e%02d meta.txt cannot be made clean for the redact check' % e)
+            for e, txt in out.items():
+                with open(os.path.join(a.out, 'e%02d.meta.txt' % e), 'w') as f:
+                    f.write(txt)
+        except (Refuse, OSError) as ex:
+            print('slice: refused: %s' % ex, file=sys.stderr)
+            return 2
     if a.out:
         p = os.path.join(a.out, 'README.md')
         with open(p + '.part', 'w') as f:
