@@ -16,6 +16,13 @@
 //! src/mesa/main/blit.c (`compatible_resolve_formats`) is the reference for
 //! the format rule (sRGB folded into linear).
 //!
+//! The second half of the file (`sample queries per format`) pins the sample
+//! queries and refusals for every format of ES 3.0 table 3.13: the counts
+//! `glGetInternalformativ` lists (6.1.15), the integer-format refusal and the
+//! error classes of `glRenderbufferStorageMultisample` (4.4.2.1), with the
+//! capability on (`max_samples` 4) and off (0). Feature set of the whole
+//! file: `host-test,gpu-v3d,shaderc-online,no-shader-table`.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_msaa_gl_formats
 //! ```
@@ -736,5 +743,192 @@ fn depth_stencil_sub_rectangle() {
         for x in &w {
             assert_eq!((x.2, x.3, x.4, x.5), (2, 1, 4, 4), "{name}: only the rectangle: {x:?}");
         }
+    }
+}
+
+/* ---- sample queries per format (ES 3.0.6 6.1.15, 4.4.2.1) --------------- */
+
+/// Table 3.13's colour-renderable formats that have multisample storage.
+const Q_COLOUR: [GLenum; 9] =
+    [GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGB10_A2, GL_RGB8, GL_RGB565, GL_RGBA4, GL_RGB5_A1, GL_R8, GL_RG8];
+/// Depth and stencil formats of table 3.13.
+const Q_DS: [GLenum; 6] = [
+    GL_DEPTH_COMPONENT16,
+    GL_DEPTH_COMPONENT24,
+    GL_DEPTH_COMPONENT32F,
+    GL_DEPTH24_STENCIL8,
+    GL_DEPTH32F_STENCIL8,
+    GL_STENCIL_INDEX8,
+];
+/// Signed and unsigned integer colour formats: no multisample storage.
+const Q_INT: [GLenum; 19] = [
+    GL_R8I,
+    GL_R8UI,
+    GL_R16I,
+    GL_R16UI,
+    GL_R32I,
+    GL_R32UI,
+    GL_RG8I,
+    GL_RG8UI,
+    GL_RG16I,
+    GL_RG16UI,
+    GL_RG32I,
+    GL_RG32UI,
+    GL_RGBA8I,
+    GL_RGBA8UI,
+    GL_RGBA16I,
+    GL_RGBA16UI,
+    GL_RGBA32I,
+    GL_RGBA32UI,
+    GL_RGB10_A2UI,
+];
+/// Sized formats that are not colour-, depth- or stencil-renderable in ES 3.0
+/// core (table 3.13 lacks the renderable mark): GL_INVALID_ENUM.
+const Q_NOT_RENDERABLE: [GLenum; 8] =
+    [GL_R8_SNORM, GL_RGBA8_SNORM, GL_RGB9_E5, GL_R11F_G11F_B10F, GL_RGB8_SNORM, GL_RGB8I, GL_RGB8UI, GL_RGB16UI];
+
+/// The error of one `glRenderbufferStorageMultisample`; the renderbuffer is
+/// deleted again (the context has few names and little memory to give out).
+fn store_err(samples: GLsizei, format: GLenum) -> GLenum {
+    let (e, rb) = storage(samples, format);
+    // SAFETY: a renderbuffer this function made.
+    unsafe { glDeleteRenderbuffers(1, &rb) };
+    e
+}
+
+fn q_counts(f: GLenum) -> Vec<GLint> {
+    let (n, e) = internalformat(f, GL_NUM_SAMPLE_COUNTS, 1);
+    assert_eq!(e, GL_NO_ERROR, "{f:#x}: NUM_SAMPLE_COUNTS");
+    let n = n[0];
+    assert!(n >= 0, "{f:#x}: count {n}");
+    if n == 0 {
+        return vec![];
+    }
+    let (v, e) = internalformat(f, GL_SAMPLES, n as usize);
+    assert_eq!(e, GL_NO_ERROR, "{f:#x}: SAMPLES");
+    v
+}
+
+/// (a) ES 3.0.6 6.1.15: the counts are listed in descending order, the
+/// largest is GL_MAX_SAMPLES (4.4.2.1 / table 6.x), for every colour, depth
+/// and stencil format.
+#[test]
+fn counts_descend_and_largest_is_max_samples() {
+    let _g = context_ms4();
+    let max = geti(GL_MAX_SAMPLES);
+    assert_eq!(max, 4, "ES 3.0 requires MAX_SAMPLES >= 4");
+    for f in Q_COLOUR.iter().chain(Q_DS.iter()) {
+        let v = q_counts(*f);
+        assert!(!v.is_empty(), "{f:#x}: no counts");
+        assert!(v.windows(2).all(|w| w[0] > w[1]), "{f:#x}: not descending: {v:?}");
+        assert_eq!(v[0], max, "{f:#x}: largest {v:?} != MAX_SAMPLES");
+        assert!(v.iter().all(|c| *c >= 1), "{f:#x}: {v:?}");
+    }
+}
+
+/// (b) ES 3.0.6 6.1.15: integer formats list no sample count; 4.4.2.1:
+/// glRenderbufferStorageMultisample with samples > 0 on one is
+/// GL_INVALID_OPERATION, samples 0 stores.
+#[test]
+fn integer_formats_refuse_samples() {
+    for table in [&BACKEND, &BACKEND_MS4] {
+        let _g = context_on(table);
+        for f in Q_INT {
+            assert!(q_counts(f).is_empty(), "{f:#x}: NUM_SAMPLE_COUNTS must be 0");
+            let (v, e) = internalformat(f, GL_SAMPLES, 4);
+            assert_eq!((e, v), (GL_NO_ERROR, vec![-777; 4]), "{f:#x}: SAMPLES writes none");
+            for samples in [1, 2, 4] {
+                assert_eq!(store_err(samples, f), GL_INVALID_OPERATION, "{f:#x} x{samples}");
+            }
+            let (e, rb) = storage(0, f);
+            assert_eq!(e, GL_NO_ERROR, "{f:#x} x0");
+            assert_eq!(rb_samples(rb), 0);
+            // SAFETY: a renderbuffer this test made.
+            unsafe { glDeleteRenderbuffers(1, &rb) };
+        }
+    }
+}
+
+/// (c) samples above GL_MAX_SAMPLES. ES 3.0.6 4.4.2.1 gives
+/// GL_INVALID_OPERATION ("samples is greater than the maximum number of
+/// samples supported for internalformat"); the 3.0.0 text said
+/// GL_INVALID_VALUE, which 3.0.1 and later replaced (Mesa: INVALID_OPERATION
+/// on ES 3). A negative count is GL_INVALID_VALUE.
+#[test]
+fn samples_past_max_samples() {
+    let _g = context_ms4();
+    let max = geti(GL_MAX_SAMPLES);
+    for f in Q_COLOUR.iter().chain(Q_DS.iter()) {
+        assert_eq!(store_err(max, *f), GL_NO_ERROR, "{f:#x} x{max}");
+        for samples in [max + 1, 16, i32::MAX] {
+            assert_eq!(store_err(samples, *f), GL_INVALID_OPERATION, "{f:#x} x{samples}");
+        }
+        assert_eq!(store_err(-1, *f), GL_INVALID_VALUE, "{f:#x} x-1");
+    }
+}
+
+/// (d) 4.4.2.1: a target other than GL_RENDERBUFFER is GL_INVALID_ENUM, a
+/// format that cannot be rendered to is GL_INVALID_ENUM, negative sizes are
+/// GL_INVALID_VALUE, no renderbuffer bound is GL_INVALID_OPERATION; 6.1.15
+/// gives GL_INVALID_ENUM for the same formats and targets.
+#[test]
+fn non_renderable_formats_and_bad_targets() {
+    for table in [&BACKEND, &BACKEND_MS4] {
+        let _g = context_on(table);
+        for f in Q_NOT_RENDERABLE {
+            for samples in [0, 1, 4] {
+                assert_eq!(store_err(samples, f), GL_INVALID_ENUM, "{f:#x} x{samples}");
+            }
+            for pname in [GL_NUM_SAMPLE_COUNTS, GL_SAMPLES] {
+                assert_eq!(internalformat(f, pname, 1).1, GL_INVALID_ENUM, "{f:#x} {pname:#x}");
+            }
+        }
+        for f in [0, GL_RGBA, GL_DEPTH_COMPONENT, GL_LUMINANCE, 0xdead] {
+            assert_eq!(store_err(0, f), GL_INVALID_ENUM, "{f:#x}");
+        }
+        let (_, rb) = storage(0, GL_RGBA8);
+        // SAFETY: plain GL calls.
+        unsafe {
+            for t in [GL_FRAMEBUFFER, GL_TEXTURE_2D, GL_NONE, GL_RENDERBUFFER_SAMPLES] {
+                glRenderbufferStorageMultisample(t, 0, GL_RGBA8, 4, 4);
+                assert_eq!(err(), GL_INVALID_ENUM, "target {t:#x}");
+            }
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_RGBA8, -1, 4);
+            assert_eq!(err(), GL_INVALID_VALUE, "width");
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_RGBA8, 4, -1);
+            assert_eq!(err(), GL_INVALID_VALUE, "height");
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_RGBA8, 4, 4);
+            assert_eq!(err(), GL_INVALID_OPERATION, "no renderbuffer bound");
+            glDeleteRenderbuffers(1, &rb);
+        }
+    }
+}
+
+/// (e) With the capability off GL_MAX_SAMPLES is 1: every format lists
+/// either no count or the one count 1 (the largest equals MAX_SAMPLES),
+/// integer formats list none, 1 sample stores and 2 or more are
+/// GL_INVALID_OPERATION.
+#[test]
+fn capability_off_reports_what_max_samples_1_allows() {
+    let _g = context();
+    let max = geti(GL_MAX_SAMPLES);
+    assert_eq!(max, 1);
+    for f in Q_COLOUR.iter().chain(Q_DS.iter()) {
+        let v = q_counts(*f);
+        assert!(v.is_empty() || v == [max], "{f:#x}: {v:?}");
+        assert!(v.windows(2).all(|w| w[0] > w[1]));
+        assert_eq!(store_err(0, *f), GL_NO_ERROR, "{f:#x} x0");
+        assert_eq!(store_err(1, *f), GL_NO_ERROR, "{f:#x} x1");
+        for samples in [2, 4, 8] {
+            assert_eq!(store_err(samples, *f), GL_INVALID_OPERATION, "{f:#x} x{samples}");
+        }
+    }
+    for f in Q_INT {
+        assert!(q_counts(f).is_empty(), "{f:#x}");
+        assert_eq!(store_err(1, f), GL_INVALID_OPERATION, "{f:#x} x1");
+    }
+    for f in Q_NOT_RENDERABLE {
+        assert_eq!(store_err(1, f), GL_INVALID_ENUM, "{f:#x}");
     }
 }
