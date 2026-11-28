@@ -428,7 +428,7 @@ mod es3 {
         let _g = context();
         let (fb, rbs) = framebuffer(4);
         let all = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3];
-        assert_eq!(draw_buffer_state(), all, "the initial mapping: output i to attachment i");
+        assert_eq!(draw_buffer_state(), [all[0], GL_NONE, GL_NONE, GL_NONE], "the initial state (ES 3.0 4.2.1)");
         assert_eq!(draw_buffers(&[all[0], GL_NONE, all[2], GL_NONE]), GL_NO_ERROR);
         let kept = [all[0], GL_NONE, all[2], GL_NONE];
         assert_eq!(draw_buffer_state(), kept);
