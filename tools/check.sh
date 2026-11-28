@@ -1992,6 +1992,10 @@ step "test    $KNOBS_CONFIG (tests/gc_scene_kicks_tiled.rs, every declared test)
 tests_row gc_ts_resolve_interp
 step "test    host-test,gpu-vivante (tests/gc_ts_resolve_interp.rs, every declared test)" \
   knobs_file_tests gc_ts_resolve_interp "host-test,gpu-vivante"
+# W12b's TS-aware D24S8 read against the full read (tests/gc_depth_format_ts.rs, no knob)
+tests_row gc_depth_format_ts
+step "test    host-test,gpu-vivante (tests/gc_depth_format_ts.rs, every declared test)" \
+  knobs_file_tests gc_depth_format_ts "host-test,gpu-vivante"
 # glmark2's terrain, shadow and refract with `gc_tiled_rt` off and on
 # (tests/gc_scene_kicks_tiled_rt.rs, plan #355): the scene harness needs
 # report-es2, so no other row compiles the file. Linted and run here; every
