@@ -1203,3 +1203,104 @@ rerun of the command above gives the per-case rows, in
 | light_amount.16omni | 1 | UboFallback 1 |
 | shaders.misc | 1 | Arithmetic 1 |
 | state_query.shader | 1 | TexHighp 1 |
+
+## 20. Ranked refusal texts after train 3a at `9dd0be67` (HOST-ONLY)
+
+Plan #387 item `families-sec20`. Section 19's method rerun at the integration
+tip `9dd0be67accaa7a2200d9efacd5f57c47703fcee`, which contains train 3a
+(`mali-train-3a`: fragment uniform U1-U3/FM1-FM3 and operand form O1-O3).
+HOST-ONLY: compile and link outcomes of `deqp-gles2` against the Mali C pair
+on the Linux OSAL; the board status quoted is the NanoPC-T6's at `37305608`,
+never the host's. No compiler change.
+
+- Cases: the 10,597 of the slices `2026-11-15-t6-gles2-S{1..4}-37305608`
+  (all in `tools/cts/gles2-mustpass.txt`), CTS `93bca01861b0e3ef3c387027a9791e6d065f900c`
+  fetched at that commit alone, `external/fetch_sources.py` run, then
+  `tools/cts/cts-yakogl-target.patch` applied with `git apply`.
+- Command (4 cores): `tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS"
+  --out "$PWD/build/measure" --jobs 3 --chunk 100`, then
+  `python3 -I tools/mali/host-rank.py build/measure` (exit 1: texts at or above 100).
+- 106 chunk processes exited 1 (dEQP's "not every case passed"); **none
+  crashed**. **4,693 cases meet a compile or link refusal** (1,600 vertex,
+  3,093 fragment/link; 4,147 Fail, 546 NotSupported by the board's status), against 4,716 in section 19: 23 fewer. 5,904 other
+  cases have no host refusal (not passes: the host reads black).
+- `host-rank.py` prints each text in the measure script's short form and
+  cuts it, so two rows of one `MaliError` variant appear apart (for example
+  `FsOperandForm` 189 + 6). The table below merges them by variant, the names
+  of section 19, so it compares row for row. Both give 4,693. The tool's own
+  output is not directly comparable to `refusal-rank.py`'s.
+
+### 20.1 Every refusal text produced, ranked
+
+`Sec. 19` is the count of the same variant in 19.1; `Change` is this count
+minus it. "At the line" is the plan's criterion c2 (100 or more). `Owner and
+status` names the plan item or step that works on the text, with the item's
+state at this tip: *done* has merged; *review* is built and not yet merged
+(its design note is **not in this tree**: `texcoord`, `vsconstprod`,
+`irdefect`, `fsintres`, `arithres`, `fclres`, `vsloop` and the other residue
+notes land with those items, so their step names are not quoted here);
+*running* is being built; *ready* and *todo* have not started. Steps are those
+of `docs/notes/mali-lowering-schedule.md` 5.4 (train 3) and 5.5a (train 4).
+43 texts; counts sum to 4,693.
+
+| # | Refusal text (`MaliError`) | vs / fs | Cases | Fail | NS | dEQP groups (top 3) | Sec. 19 | Change | At the line | Owner and status |
+|--:|---|---|--:|--:|--:|---|--:|--:|---|---|
+| 1 | `Arithmetic` | 743 / 663 | 1406 | 1317 | 89 | shaders.random 448, uniform_api.value 266, shaders.operator 251 | 1410 | -4 | **at or above** | arithres-refs (review): fragment and vertex residue after 3a; schedule 2.3 A5-A7 (no item), A4b done in 3a (O1-O3); train 4 step 7 (pair trees) |
+| 2 | `ColourForm` | 0 / 955 | 955 | 950 | 5 | uniform_api.value 353, shaders.operator 287, shaders.random 112 | 926 | +29 | **at or above** | fclres-refs (review; 946 G310 lines): fclane F2C/F2E (fclane-lower-2/3 prototypes) beyond what `fclane-lower-1` landed; no train 3 step |
+| 3 | `ArithConstant` | 249 / 105 | 354 | 282 | 72 | shaders.random 175, shaders.indexing 106, shaders.constant_expressions 16 | 350 | +4 | **at or above** | constres-refs (running: CF-B/C/D, N3, K8, A8) and vsconstprod-design (review; vertex, 304 G310 lines); train 4 commits 9-11: K2, K4, K5 (kfold-refs, done) |
+| 4 | `TexCoord` | 0 / 198 | 198 | 198 | 0 | texture.specification 96, uniform_api.value 52, shaders.random 33 | 200 | -2 | **at or above** | texcoord-design (review; 202 G310 lines); T1 cube sequence is train 4 commit 12 (references drawn) |
+| 5 | `FsOperandForm` | 0 / 195 | 195 | 195 | 0 | shaders.operator 83, shaders.random 64, shaders.matrix 25 | 197 | -2 | **at or above** | opform: O1-O3 landed in train 3a; O4-O8 in train 3c (mali-train-3c, ready); step 4a pair trees train 4 commit 7 |
+| 6 | `LoopVertex` | 194 / 0 | 194 | 25 | 169 | shaders.loops 139, shaders.indexing 28, shaders.functions 7 | 194 | +0 | **at or above** | vsloop-refs (review; 179 G310 lines); loops 2.9 LS1, LS8-LS11 (loops2-refs, done); train 4 commits 13-17 (mali-train-4, todo) |
+| 7 | `IntValue` | 0 / 153 | 153 | 131 | 22 | shaders.operator 70, shaders.random 24, shaders.indexing 20 | 154 | -1 | **at or above** | fsintres-design (review; 197 G310 lines): fragment residue of intval-rest 2.1 R1 steps 2-4 |
+| 8 | `FsVaryingLoad` | 0 / 130 | 130 | 130 | 0 | shaders.operator 92, shaders.random 30, shaders.indexing 4 | 123 | +7 | **at or above** | varyload-lower-1 (train 3c, ready) and varyres-refs (review; 123 cases beyond varyload-lower-1's 22) |
+| 9 | `FsUniform` | 0 / 117 | 117 | 116 | 1 | shaders.random 62, shaders.matrix 36, fragment_ops.interaction 6 | 154 | -37 | **at or above** | unifmp FM1-FM3 landed in train 3a; FM4-FM7 in train 3c (ready); residue 117 |
+| 10 | `FusedMultiplyAdd` | 116 / 0 | 116 | 116 | 0 | shaders.operator 42, shaders.random 34, shaders.matrix 24 | 116 | +0 | **at or above** | fmares-refs (done: K6, K7, what K4 leaves); K4/K5 in train 4 (mali-train-4, todo) |
+| 11 | `ControlFlow` | 33 / 70 | 103 | 82 | 21 | shaders.random 53, shaders.loops 20, fragment_ops.interaction 11 | 102 | +1 | **at or above** | ctrlres-refs (done): CT1 steps 2-5 and the new inflow; cf-dead is train 4 commit 1 (cfdead-refs, review) |
+| 12 | `MixedPrecision` | 0 / 92 | 92 | 86 | 6 | shaders.operator 41, shaders.random 29, shaders.matrix 10 | 89 | +3 | under | mixprec2 M2-1..M2-4c in train 3c (ready); mixres-refs (review) for MX3, MX5 and new shapes |
+| 13 | `TexVertex` | 61 / 0 | 61 | 61 | 0 | uniform_api.value 44, uniform_api.random 11, uniform_api.info_query 6 | 61 | +0 | under | texmiscres-refs (review); texmisc 4b item 10 (texmisc-lower-1..6, no lowering item) |
+| 14 | `TexKind` | 0 / 59 | 59 | 59 | 0 | shaders.random 49, shaders.texture_functions 6, texture.mipmap 4 | 59 | +0 | under | texmiscres-refs (review); texmisc-lower-3..5 (no lowering item) |
+| 15 | `LoopMediump` | 0 / 53 | 53 | 0 | 53 | shaders.indexing 25, shaders.loops 24, shaders.struct 4 | 53 | +0 | under | loops 2.9 LS3-LS7 (loops2-refs, done; train 4 commits 13-14) |
+| 16 | `UniformArray` | 53 / 0 | 53 | 53 | 0 | uniform_api.value 36, uniform_api.random 9, uniform_api.info_query 8 | 53 | +0 | under | vsuarr VA1-VA3/U8 in train 3b (mali-train-3b, review) |
+| 17 | `VaryingForm` | 52 / 0 | 52 | 2 | 50 | shaders.indexing 49, shaders.struct 3 | 52 | +0 | under | posvaryres-refs (review); posvary 2.4 P-steps (no lowering item); 49 of 52 are shaders.indexing NotSupported |
+| 18 | `VaryingDuplicate` | 10 / 40 | 50 | 41 | 9 | shaders.swizzles 33, shaders.indexing 9, shaders.conversions 6 | 50 | +0 | under | varydupres-refs (review); MISC 2.10 varylink2 |
+| 19 | `Defect(IrIndex)` | 0 / 48 | 48 | 48 | 0 | shaders.matrix 24, shaders.conversions 16, shaders.discard 2 | 46 | +2 | under | irdefect-design (review; 207 G310 lines); load_mat3 and mat4_pair_unread are train 4 commits 4 and 6 |
+| 20 | `FragCoordMediump` | 0 / 40 | 40 | 40 | 0 | shaders.conversions 32, shaders.random 7, shaders.functions 1 | 39 | +1 | under | texmiscres-refs (review); texmisc 4b item 10 |
+| 21 | `NegZeroShared` | 18 / 12 | 30 | 30 | 0 | shaders.random 30 | 30 | +0 | under | constres-refs (running: N3); negzero 2.8 N1/N2 landed |
+| 22 | `ConstantFold` | 0 / 29 | 29 | 29 | 0 | shaders.constant_expressions 16, shaders.random 7, shaders.invariance 6 | 34 | -5 | under | constres-refs (running: CF-B/C/D); NF3 in train 3b |
+| 23 | `AlgebraicForm` | 1 / 27 | 28 | 28 | 0 | shaders.matrix 25, shaders.random 3 | 28 | +0 | under | constres-refs (running: K8) |
+| 24 | `LoopForm` | 0 / 21 | 21 | 0 | 21 | shaders.indexing 18, shaders.return 3 | 21 | +0 | under | loops 2.9 LS2/LS9-LS11 (loops2-refs, done; train 4) |
+| 25 | `DiscardForm` | 0 / 20 | 20 | 16 | 4 | shaders.discard 20 | 20 | +0 | under | ctrlres-refs (done): CT1 `disc-forms` |
+| 26 | `FragmentTooLarge` | 0 / 19 | 19 | 19 | 0 | uniform_api.value 12, uniform_api.info_query 4, uniform_api.random 3 | 7 | +12 | under | newtexts-refs (review); NEW first refusal, was 7; `uniform_api.*` shaders beyond the size limit |
+| 27 | `UniformPrecision` | 17 / 0 | 17 | 16 | 1 | uniform_api.value 12, shaders.struct 3, uniform_api.info_query 2 | 17 | +0 | under | vsunif residue, no step (train 3b's V-steps); unowned-refs (ready) if it stays at or above 100 (it does not) |
+| 28 | `link: varying offsets` | 0 / 14 | 14 | 14 | 0 | shaders.random 13, shaders.operator 1 | 14 | +0 | under | newtexts-refs (review) |
+| 29 | `AttributeNumbering` | 12 / 0 | 12 | 12 | 0 | shaders.random 12 | 12 | +0 | under | varydupres-refs (review) |
+| 30 | `Defect(LaneCycle)` | 0 / 11 | 11 | 11 | 0 | shaders.random 11 | 11 | +0 | under | newtexts-refs (review); fix C is train 4 commit 5 (kfold-refs/highpfs-refs, done) |
+| 31 | `Rebalance` | 8 / 2 | 10 | 10 | 0 | shaders.random 5, shaders.invariance 3, shaders.functions 2 | 10 | +0 | under | constres-refs (running: A8) |
+| 32 | `GuardMediump` | 0 / 10 | 10 | 0 | 10 | shaders.loops 10 | 10 | +0 | under | loops 2.9 LS5 (loops2-refs, done; train 4) |
+| 33 | `UniformIndexed` | 5 / 4 | 9 | 0 | 9 | shaders.indexing 9 | 9 | +0 | under | no item; unowned-refs (ready) lists it only if above 100 (it is not) |
+| 34 | `LinkedVertexNotLowered` | 8 / 0 | 8 | 8 | 0 | attribute_location.bind_aliasing 8 | 8 | +0 | under | varydupres-refs (review) |
+| 35 | `Defect(Encode)` | 6 / 0 | 6 | 6 | 0 | attribute_location.bind_aliasing 6 | 6 | +0 | under | DF1 (defects-ref, done); no lowering item; varydupres-refs (review) covers LinkedVertexNotLowered beside it |
+| 36 | `UboFallback` | 5 / 0 | 5 | 5 | 0 | light_amount.10omni 1, light_amount.12omni 1, light_amount.14omni 1 | 5 | +0 | under | newtexts-refs (review) |
+| 37 | `VaryingNotFromAttribute` | 4 / 0 | 4 | 3 | 1 | shaders.random 3, shaders.indexing 1 | 35 | -31 | under | posvaryres-refs (review) |
+| 38 | `PositionLane` | 3 / 0 | 3 | 0 | 3 | shaders.indexing 3 | 3 | +0 | under | posvaryres-refs (review) |
+| 39 | `TexLanes` | 0 / 3 | 3 | 3 | 0 | shaders.random 2, shaders.struct 1 | 3 | +0 | under | newtexts-refs (review) |
+| 40 | `TooManyValues` | 2 / 0 | 2 | 2 | 0 | uniform_api.random 2 | 2 | +0 | under | newtexts-refs (review) |
+| 41 | `Fp16Inexact` | 0 / 1 | 1 | 1 | 0 | shaders.matrix 1 | 1 | +0 | under | newtexts-refs (review) |
+| 42 | `PrecisionUnknown` | 0 / 1 | 1 | 1 | 0 | shaders.random 1 | 1 | +0 | under | newtexts-refs (review) |
+| 43 | `TexHighp` | 0 / 1 | 1 | 1 | 0 | state_query.shader 1 | 1 | +0 | under | newtexts-refs (review) |
+| | **Total** | 1600 / 3093 | 4693 | 4147 | 546 | | 4716 | -23 | | |
+
+Texts at or above the line: `Arithmetic` 1,406, `ColourForm` 955,
+`ArithConstant` 354, `TexCoord` 198, `FsOperandForm` 195, `LoopVertex` 194,
+`IntValue` 153, `FsVaryingLoad` 130, `FsUniform` 117, `FusedMultiplyAdd` 116
+and `ControlFlow` 103: **the same eleven as section 19**. Train 3a moved few
+first refusals: `FsUniform` 154 to 117 (FM1 lifted, `FsUniform` still above
+100), `FsOperandForm` 197 to 195, `FsVaryingLoad` 123 to 130 and `ColourForm`
+926 to 955 gained inflow. `FragmentTooLarge` rose 7 to 19 (`uniform_api.*`) and
+`VaryingNotFromAttribute` fell 35 to 4. Net change is 23 cases; this host
+measure shows 3a alone does not take any text under the line. Train 3b's and
+3c's texts that are under or near the line (`UniformArray` 53, `MixedPrecision`
+92) do not move c2; 3c's `FsVaryingLoad` and O4-O8 of `FsOperandForm` do.
+Section 19.2's recommendation (3c before 3b) therefore stands.
+
+Sections 18 and 19 are unchanged.
