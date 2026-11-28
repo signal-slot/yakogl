@@ -125,4 +125,31 @@ if python3 -I "$tri" "$tmp/real4.tsv" --check >"$tmp/rc.txt" 2>/dev/null; then
   [ "$(tail -n1 "$tmp/rc.txt")" = "$(printf 'total\t%s' "$rows")" ] || fail "real check total"
 fi
 
+# 6. stale class: a row built before the fix is stale, one built after stays open,
+#    a row no rule matches stays open, a pending fix never marks a row stale.
+printf '# t\ndEQP-GLES3.functional.s.*\ndEQP-GLES3.functional.t.*\ndEQP-GLES3.functional.u.*\n' >"$tmp/stree.txt"
+printf 'S-old\tdEQP-GLES3.functional.s.*\tbad pic\t02c5c9af\nS-new\tdEQP-GLES3.functional.t.*\t-\t381b0f09\nS-pend\tdEQP-GLES3.functional.u.*\t-\tpending:item\n' >"$tmp/stale.txt"
+cat >"$tmp/sn.tsv" <<'T'
+# rows 0-0: build 1234567, run 2026-10-01
+# rows 1-1: build b25997e4, run 2026-11-22
+# rows 2-2: build 1234567, run 2026-10-01
+Fail	dEQP-GLES3.functional.s.a	bad picture here	F
+Fail	dEQP-GLES3.functional.s.b	other message	F
+Fail	dEQP-GLES3.functional.t.c	m	F
+Fail	dEQP-GLES3.functional.u.d	m	F
+Fail	dEQP-GLES3.functional.v.e	m	F
+T
+python3 -I "$tri" "$tmp/sn.tsv" --stale "$tmp/stale.txt" --tree "$tmp/stree.txt" --depth 3 >"$tmp/sn.md"
+grep -q '^Stale .*: 1; open: 4; total: 5$' "$tmp/sn.md" || fail "stale totals"
+grep -q 'stale S-old: 1 (expected flip on rerun, 02c5c9af)' "$tmp/sn.md" || fail "stale match not reported"
+grep -q 'S-new' "$tmp/sn.md" && fail "row built after the fix is stale"
+grep -q 'S-pend' "$tmp/sn.md" && fail "pending fix marks a row stale"
+sec=$(awk '/^## functional.s.a$/{f=1;next}/^## /{f=0}f' "$tmp/sn.md")
+grep -q '^- stale: 1, open: 0$' <<<"$sec" || fail "stale group line"
+python3 -I "$tri" "$tmp/sn.tsv" --stale "$tmp/stale.txt" --tree "$tmp/stree.txt" --no-stale --depth 3 >"$tmp/sn2.md"
+grep -qi 'stale' "$tmp/sn2.md" && fail "--no-stale still prints stale"
+# the real list: stale and open totals are printed and add up
+python3 -I "$tri" "$np" >"$tmp/real_s.md"
+grep -q "^Stale .*: [0-9]*; open: [0-9]*; total: $rows\$" "$tmp/real_s.md" || fail "real list stale/open totals"
+
 echo "gles3-triage-selftest: ok"
