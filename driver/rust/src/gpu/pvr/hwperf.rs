@@ -28,7 +28,7 @@
 //! Clock. The firmware stamps with `RGX_CR_TIMER`, "it increments by 1 every
 //! 256 GPU clock ticks" (`rogue/rgx_fwif_km.h:1898-1901`). Whether the
 //! firmware writes that raw value into `ui64Timestamp` or a converted one is
-//! not in the headers (the note's (b), "[knowledge]"); the reader keeps the
+//! not in the headers (the note's (b), "\[knowledge\]"); the reader keeps the
 //! stamp as it is, in ticks, and [`ticks_to_ns`] converts a difference at a
 //! given core clock.
 
