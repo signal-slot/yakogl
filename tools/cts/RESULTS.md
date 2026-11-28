@@ -606,11 +606,94 @@ What these runs do not show:
 - The record in the BBM GPRs was not read back (the image printed no
   refusal line; the stock kernel's SCMI raw interface was not probed). The
   verdicts above are the console's.
-- `tools/board.sh imx95` has not run, nor has U-Boot started an image from
+- `tools/board.sh imx95` has not run (the 2026-11-28 glmark2 runs were
+  started by hand too), nor has U-Boot started an image from
   its boot command; the direct route has not been tried.
 - The 2026-11-27 session has the X12 picture (the triangle, camera-confirmed),
   but `display down` returned -5 and gl_test never lit the panel; both are
   open defects.
+
+### Mali: Verdin iMX95 glmark2-es2 (800x600 on the X12 panel)
+
+glmark2-es2 (`driver/samples/zephyr/glmark2`, `verdin_imx95/mimx9596/a55`) from
+main `92344e4d`, 2026-11-28, images built between 08:13 and 08:31 JST. Both
+images were started by hand at the U-Boot prompt (`ext4load mmc 0:2` and
+`go`, md5 compared), not by the eMMC one-shot and not through
+`tools/board.sh`, so `RUN_BOUND` and `BOARD_END_RE` did not apply. Run 1 used
+the default 33 entries (image sha256 `be5a57e73f20552e`). Run 2 used the
+default list without terrain, set at build time by `CONFIG_GLMARK2_ARGS`
+through an extra conf file (image `71789246867c156e`); there was no source
+change.
+
+**Score 46**, from run 2, and it covers **32 scenes, not 33**: 23 ran, 9
+failed (refused at glCompileShader), 0 unsupported, 0 GPU resets, 0 GL errors
+recorded; `yk-record: 594b1201 fc87002e 625c903f 00258320`. The console then
+printed `glmark2: FAIL rc=-5` and `verdin_imx95: display down: -116 after 0
+flip(s)` (a known defect), then `run over: PSCI SYSTEM_RESET`.
+
+Terrain is left out of the total because it stops the image: its shaders are
+refused at glCompileShader, and then glmark2 takes a NULL data abort in
+`Mesh::render_vbo` (mesh.cpp:575); the image goes down and WDOG3 resets the
+board. The default 33-scene list therefore never prints a score. Terrain's
+row below comes from run 1; scenes 1-23 were the same in both runs. The run 2
+failures are the 10 refused scenes minus terrain. The NanoPC-T6's Linux run
+aborts in terrain the same way.
+
+The light scenes are capped at 51 FPS (about 19.6 ms a frame, the panel's
+flip rate): the score is limited by the display, not the GPU. The GPU
+carve-out peaked at 22,172 KiB of 107,104 KiB
+(`CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=109674496`), so about 80 MiB of it is
+unused; the libc heap's peak was not measured. The camera (9 pictures, judged
+by eye) shows all correct: build (horse), texture (crate), shading gouraud
+(blue-lit cat), effect2d (Linaro edge lines), desktop (Tux windows with
+shadows), buffer (waving grid), pulsar (colour-graded quad) and loop
+(patterned grid). The refused ideas scene left the last buffer frame on the
+panel. There is no picture of bump high-poly, conditionals or function, and
+no console picture line reports a black frame. The console prints `E: invalid
+file name!!` in both runs (unexplained, an observation). The NanoPC-T6 refused
+31 scenes on 11-11 (main `a57d8104`); most of the difference is compiler work
+since then, not the board.
+
+Record `records/verdin-imx95/20261128-0813-glmark2-92344e4d` (pictures in the
+sibling `.camera/` directory, run 1's console `console-run1.txt`, the image
+hashes `images.sha256`). The refusal reasons are the online compiler's, the
+shared Mali compiler work's, not new defects.
+
+| # | Scene | Verdin iMX95 | NanoPC-T6 (#33, 11-11) |
+| ---: | --- | --- | --- |
+| 1 | `[build] use-vbo=false` | 39 FPS | refused |
+| 2 | `[build] use-vbo=true` | 51 FPS | refused |
+| 3 | `[texture] texture-filter=nearest` | 51 FPS | refused |
+| 4 | `[texture] texture-filter=linear` | 51 FPS | refused |
+| 5 | `[texture] texture-filter=mipmap` | 51 FPS | refused |
+| 6 | `[shading] shading=gouraud` | 51 FPS | refused |
+| 7 | `[shading] shading=blinn-phong-inf` | 51 FPS | refused |
+| 8 | `[shading] shading=phong` | refused: FS constant product | refused |
+| 9 | `[shading] shading=cel` | refused: FS constant product | refused |
+| 10 | `[bump] bump-render=high-poly` | 51 FPS | refused |
+| 11 | `[bump] bump-render=normals` | refused: FS texture result lanes (swizzle) | refused |
+| 12 | `[bump] bump-render=height` | refused: FS texture look-up beside another | refused |
+| 13 | `[effect2d] kernel=0,1,0;1,-4,1;0,1,0;` | 51 FPS | refused |
+| 14 | `[effect2d] kernel=1,1,1,1,1;…` | 51 FPS | refused |
+| 15 | `[pulsar] light=false:quads=5:texture=false` | 51 FPS | refused |
+| 16 | `[desktop] …effect=blur…` | 45 FPS | refused |
+| 17 | `[desktop] effect=shadow:windows=4` | 46 FPS | 1042 (the only T6 scene that ran) |
+| 18 | `[buffer] …map:interleave=false` | 29 FPS | refused |
+| 19 | `[buffer] …subdata:interleave=false` | 34 FPS | refused |
+| 20 | `[buffer] …map:interleave=true` | 31 FPS | refused |
+| 21 | `[ideas] speed=duration` | refused: FS integer or boolean value | refused |
+| 22 | `[jellyfish] <default>` | refused: VS constant product | refused |
+| 23 | `[terrain] <default>` | refused: FS arithmetic other than + - * and texture look-up beside another (x6), then a NULL data abort in glmark2 `Mesh::render_vbo`, image down, WDOG3 reset (run 1 only) | refused, then glmark2 abort |
+| 24 | `[shadow] <default>` | refused: FS gl_FragColor lane | refused |
+| 25 | `[refract] <default>` | refused: FS constant product | refused |
+| 26 | `[conditionals] fragment-steps=0:vertex-steps=0` | 51 FPS | refused |
+| 27 | `[conditionals] fragment-steps=5:vertex-steps=0` | 51 FPS | refused |
+| 28 | `[conditionals] fragment-steps=0:vertex-steps=5` | 51 FPS | refused |
+| 29 | `[function] fragment-complexity=low:fragment-steps=5` | 51 FPS | refused |
+| 30 | `[function] fragment-complexity=medium:fragment-steps=5` | 51 FPS | refused |
+| 31 | `[loop] fragment-loop=false:…` | 51 FPS | refused |
+| 32 | `[loop] fragment-uniform=false:…` | 51 FPS | refused |
+| 33 | `[loop] fragment-uniform=true:…` | refused: FS mediump loop with a run-time bound | refused |
 
 The module's own Linux and U-Boot, read the same night (read only): the
 stock Linux drives the G310 with `mali_kbase` r50p0 (`arch 10.12.7 r0p0`)
