@@ -83,9 +83,6 @@ pvr-instance-divisor = ["yakogl/pvr-instance-divisor"]
 msaa-fbo = ["yakogl/msaa-fbo"]
 # GL_EXT_color_buffer_float (the crate's feature; CMake YAKOGL_COLOR_BUFFER_FLOAT).
 color-buffer-float = ["yakogl/color-buffer-float"]
-# The STM32MP257F's GPU profile (the yakogl crate's own feature; CMake
-# YAKOGL_VIVANTE_ST, Kconfig YAKOGL_VIVANTE_ST).
-vivante-st = ["yakogl/vivante-st"]
 # The gl_test runner (driver/tools/pvrlab/runner): the walker of
 # tools/pvrlab/gl_test.c, which that file's gl_test_run calls, so every
 # build that links gl_test.c takes it (the gl_test images through Kconfig
