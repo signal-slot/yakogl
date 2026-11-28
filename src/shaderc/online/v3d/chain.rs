@@ -3644,6 +3644,38 @@ mod tests {
         .expect("scratch");
     }
 
+    /// `length(x)` (`fsqrt`, which is `frcp(frsq)`) and `normalize(x)`
+    /// (`frsq`) of one vector share one RSQRT (select.rs `Sel::rsqrts`,
+    /// glmark2 terrain.frag's `lVector`), and a uniform branch between two
+    /// of them keeps both: the first may not have run (an `if` prepare
+    /// makes selects runs both arms, and shares). Revert check: making
+    /// `Sel::rsqrt` always issue a new RSQRT gives 2 in the first program.
+    #[test]
+    fn length_and_normalize_of_one_vector_share_one_rsqrt() {
+        const VS: &str = "attribute vec4 p; varying vec4 v; void main() { v = p; gl_Position = p; }\n";
+        let rsqrts = |fs: &str| {
+            store::with_scratch(|a| {
+                let vsrc = a.alloc_str(VS).unwrap();
+                let fsrc = a.alloc_str(fs).unwrap();
+                let v = lower::compile_to_ir(a, Stage::Vertex, vsrc).map_err(|e| e.msg).unwrap();
+                let fr = lower::compile_to_ir(a, Stage::Fragment, fsrc).map_err(|e| e.msg).unwrap();
+                let p = compile_program(&v.module, &fr.module, Prim::Triangles, TARGET, a).expect("compiles");
+                check_all(&p);
+                p.fs.code.instrs.iter().map(text).filter(|o| o.starts_with("rsqrt")).count()
+            })
+            .expect("scratch")
+        };
+        let shared = "precision mediump float;\nvarying vec4 v;\n\
+            void main() { vec3 n = normalize(v.xyz); gl_FragColor = vec4(n * length(v.xyz), 1.0); }\n";
+        assert_eq!(rsqrts(shared), 1);
+        /* a look-up in the arm keeps the `if` a branch (prepare.rs
+         * a_uniform_if_with_a_look_up_is_a_branch) */
+        let branched = "precision mediump float;\nvarying vec4 v;\nuniform float u;\nuniform sampler2D t;\n\
+            void main() { vec3 c = vec3(0.0); if (u > 0.0) { c = normalize(v.xyz) * texture2D(t, v.xy).xyz; }\n\
+            gl_FragColor = vec4(c * length(v.xyz), 1.0); }\n";
+        assert_eq!(rsqrts(branched), 2);
+    }
+
     /// Merging a loop's two exits into one branch (select.rs merge_exits)
     /// leaves the loop's bound where it was: the counted back edge (ES 1.00
     /// Appendix A; verify.rs branches_are_counted_loops in check_all). With
