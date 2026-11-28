@@ -1,0 +1,102 @@
+run new: commit 099b5df61f7a59b654e02479cdaf657d16715d26, board nanopc-t6, kernel 6.18.55-current-rockchip64, pair sha256 3f6c0a1d9e2b4c5a8f7e6d5c4b3a29180716253443526170819a0b1c2d3e4f50
+#  scene                                                                                                  verdict    ms/frame   FPS  picture                      judgement    kmsg
+01 [build] use-vbo=false                                                                                  ok             2.08   480  crc16 1eef mean 29 13 17     match        0
+02 [build] use-vbo=true                                                                                   not-run           -     -  -                            not-run      0
+03 [texture] texture-filter=nearest                                                                       not-run           -     -  -                            not-run      0
+04 [texture] texture-filter=linear                                                                        not-run           -     -  -                            not-run      0
+05 [texture] texture-filter=mipmap                                                                        not-run           -     -  -                            not-run      0
+06 [shading] shading=gouraud                                                                              not-run           -     -  -                            not-run      0
+07 [shading] shading=blinn-phong-inf                                                                      not-run           -     -  -                            not-run      0
+08 [shading] shading=phong                                                                                not-run           -     -  -                            not-run      0
+09 [shading] shading=cel                                                                                  not-run           -     -  -                            not-run      0
+10 [bump] bump-render=high-poly                                                                           not-run           -     -  -                            not-run      0
+11 [bump] bump-render=normals                                                                             not-run           -     -  -                            not-run      0
+12 [bump] bump-render=height                                                                              not-run           -     -  -                            not-run      0
+13 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;                                                                  not-run           -     -  -                            not-run      0
+14 [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;                                                       not-run           -     -  -                            not-run      0
+15 [pulsar] light=false:quads=5:texture=false                                                             not-run           -     -  -                            not-run      0
+16 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4                                  not-run           -     -  -                            not-run      0
+17 [desktop] effect=shadow:windows=4                                                                      not-run           -     -  -                            not-run      0
+18 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map      not-run           -     -  -                            not-run      0
+19 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata  not-run           -     -  -                            not-run      0
+20 [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map       not-run           -     -  -                            not-run      0
+21 [ideas] speed=duration                                                                                 not-run           -     -  -                            not-run      0
+22 [jellyfish] <default>                                                                                  ok            16.67    60  crc16 a88a mean 126 30 118   match        0
+23 [terrain] <default>                                                                                    gpu-fault    333.33     3  crc16 7282 mean 0 0 0 black  black        3
+24 [shadow] <default>                                                                                     ok             8.33   120  crc16 e668 mean 184 56 152   match        0
+25 [refract] <default>                                                                                    not-run           -     -  -                            not-run      0
+26 [conditionals] fragment-steps=0:vertex-steps=0                                                         not-run           -     -  -                            not-run      0
+27 [conditionals] fragment-steps=5:vertex-steps=0                                                         not-run           -     -  -                            not-run      0
+28 [conditionals] fragment-steps=0:vertex-steps=5                                                         not-run           -     -  -                            not-run      0
+29 [function] fragment-complexity=low:fragment-steps=5                                                    not-run           -     -  -                            not-run      0
+30 [function] fragment-complexity=medium:fragment-steps=5                                                 not-run           -     -  -                            not-run      0
+31 [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5                                             not-run           -     -  -                            not-run      0
+32 [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5                                          not-run           -     -  -                            not-run      0
+33 [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5                                           not-run           -     -  -                            not-run      0
+scenes run 4 of 33; not-run 29, gpu-fault 1, ok 3; GL error lines 0, out of GPU memory lines 0, panthor kernel lines 3 (resets 0); 360.42 ms/frame summed over 4 scenes; score absent (not every scene has an FPS)
+pictures against column mali: 4 scenes, black 1, match 3
+scene [build] use-vbo=true: not-run (not run: no log, kmsg or status file)
+scene [texture] texture-filter=nearest: not-run (not run: no log, kmsg or status file)
+scene [texture] texture-filter=linear: not-run (not run: no log, kmsg or status file)
+scene [texture] texture-filter=mipmap: not-run (not run: no log, kmsg or status file)
+scene [shading] shading=gouraud: not-run (not run: no log, kmsg or status file)
+scene [shading] shading=blinn-phong-inf: not-run (not run: no log, kmsg or status file)
+scene [shading] shading=phong: not-run (not run: no log, kmsg or status file)
+scene [shading] shading=cel: not-run (not run: no log, kmsg or status file)
+scene [bump] bump-render=high-poly: not-run (not run: no log, kmsg or status file)
+scene [bump] bump-render=normals: not-run (not run: no log, kmsg or status file)
+scene [bump] bump-render=height: not-run (not run: no log, kmsg or status file)
+scene [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: not-run (not run: no log, kmsg or status file)
+scene [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: not-run (not run: no log, kmsg or status file)
+scene [pulsar] light=false:quads=5:texture=false: not-run (not run: no log, kmsg or status file)
+scene [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: not-run (not run: no log, kmsg or status file)
+scene [desktop] effect=shadow:windows=4: not-run (not run: no log, kmsg or status file)
+scene [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: not-run (not run: no log, kmsg or status file)
+scene [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: not-run (not run: no log, kmsg or status file)
+scene [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: not-run (not run: no log, kmsg or status file)
+scene [ideas] speed=duration: not-run (not run: no log, kmsg or status file)
+scene [terrain] <default>: gpu-fault (gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA <hex>)
+scene [refract] <default>: not-run (not run: no log, kmsg or status file)
+scene [conditionals] fragment-steps=0:vertex-steps=0: not-run (not run: no log, kmsg or status file)
+scene [conditionals] fragment-steps=5:vertex-steps=0: not-run (not run: no log, kmsg or status file)
+scene [conditionals] fragment-steps=0:vertex-steps=5: not-run (not run: no log, kmsg or status file)
+scene [function] fragment-complexity=low:fragment-steps=5: not-run (not run: no log, kmsg or status file)
+scene [function] fragment-complexity=medium:fragment-steps=5: not-run (not run: no log, kmsg or status file)
+scene [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: not-run (not run: no log, kmsg or status file)
+scene [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: not-run (not run: no log, kmsg or status file)
+scene [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: not-run (not run: no log, kmsg or status file)
+scene [terrain] <default>: picture black (all black, the reference is not)
+compare [build] use-vbo=false: ok -> ok; unchanged
+compare [build] use-vbo=true: not-run -> not-run; unchanged
+compare [texture] texture-filter=nearest: not-run -> not-run; unchanged
+compare [texture] texture-filter=linear: not-run -> not-run; unchanged
+compare [texture] texture-filter=mipmap: not-run -> not-run; unchanged
+compare [shading] shading=gouraud: not-run -> not-run; unchanged
+compare [shading] shading=blinn-phong-inf: not-run -> not-run; unchanged
+compare [shading] shading=phong: not-run -> not-run; unchanged
+compare [shading] shading=cel: not-run -> not-run; unchanged
+compare [bump] bump-render=high-poly: not-run -> not-run; unchanged
+compare [bump] bump-render=normals: not-run -> not-run; unchanged
+compare [bump] bump-render=height: not-run -> not-run; unchanged
+compare [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: not-run -> not-run; unchanged
+compare [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: not-run -> not-run; unchanged
+compare [pulsar] light=false:quads=5:texture=false: not-run -> not-run; unchanged
+compare [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: not-run -> not-run; unchanged
+compare [desktop] effect=shadow:windows=4: not-run -> not-run; unchanged
+compare [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: not-run -> not-run; unchanged
+compare [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: not-run -> not-run; unchanged
+compare [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: not-run -> not-run; unchanged
+compare [ideas] speed=duration: not-run -> not-run; unchanged
+compare [jellyfish] <default>: crash -> ok; forward
+compare [terrain] <default>: ok -> gpu-fault; back
+compare [shadow] <default>: gl-error -> ok; forward
+compare [refract] <default>: not-run -> not-run; unchanged
+compare [conditionals] fragment-steps=0:vertex-steps=0: not-run -> not-run; unchanged
+compare [conditionals] fragment-steps=5:vertex-steps=0: not-run -> not-run; unchanged
+compare [conditionals] fragment-steps=0:vertex-steps=5: not-run -> not-run; unchanged
+compare [function] fragment-complexity=low:fragment-steps=5: not-run -> not-run; unchanged
+compare [function] fragment-complexity=medium:fragment-steps=5: not-run -> not-run; unchanged
+compare [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: not-run -> not-run; unchanged
+compare [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: not-run -> not-run; unchanged
+compare [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: not-run -> not-run; unchanged
+compare: clean scenes 2 -> 3; GL error lines 4 -> 0; moved forward 2, back 1, unchanged 30

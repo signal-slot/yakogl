@@ -288,6 +288,28 @@ check "forecast: a malformed line exits 1" rc_is 1 tally --host-verdicts "$WORK/
 check "forecast: a missing file exits 1" rc_is 1 tally --host-verdicts "$T/nope.txt" "$T/clean"
 check "forecast: --host-verdicts needs a value" rc_is 2 tally --host-verdicts
 
+# --compare: per-scene movement against an earlier record (compare/old: build ok, jellyfish crash,
+# terrain ok, shadow gl-error; compare/new: build ok, jellyfish ok, terrain gpu-fault, shadow ok)
+CMP="$T/compare"
+check "compare: without the option the output is unchanged" \
+  same "$T/faults.table.expected" table "$T/faults"
+check "compare: table and compare lines match" \
+  same "$T/compare.table.expected" table --compare "$CMP/old" "$CMP/new"
+check "compare: exit 0 although a scene moved back" rc_is 0 tally --compare "$CMP/old" "$CMP/new"
+check "compare: a crash that runs is forward" \
+  grep -q '^compare \[jellyfish\] <default>: crash -> ok; forward$' "$WORK/out"
+check "compare: a clean scene that faults is back" \
+  grep -q '^compare \[terrain\] <default>: ok -> gpu-fault; back$' "$WORK/out"
+check "compare: a scene that stays ok is unchanged" \
+  grep -q '^compare \[build\] use-vbo=false: ok -> ok; unchanged$' "$WORK/out"
+check "compare: 33 scene lines" test "$(grep -c '^compare \[' "$WORK/out")" -eq 33
+check "compare: totals" \
+  grep -q '^compare: clean scenes 2 -> 3; GL error lines 4 -> 0; moved forward 2, back 1, unchanged 30$' "$WORK/out"
+check "compare: another output mode keeps its stdout, the lines on stderr" \
+  sh -c "python3 -I '$TALLY' --table '$TABLE' --compare '$CMP/old' --causes '$CMP/new' 2>'$WORK/cerr' | cmp -s - '$T/compare.causes.expected' && grep -q '^compare: clean scenes 2 -> 3' '$WORK/cerr'"
+check "compare: a missing earlier directory exits 1" rc_is 1 tally --compare "$T/nope" "$CMP/new"
+check "compare: --compare needs a value" rc_is 2 tally --compare
+
 # malformed input exits 1, usage 2
 for m in log status kmsg; do
   check "malformed-$m exits 1" rc_is 1 tally "$T/malformed-$m"
