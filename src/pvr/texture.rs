@@ -76,23 +76,42 @@ impl Default for TexLod {
 }
 
 /// The level parameters a draw's descriptor takes from bind `t` itself
-/// (`pvr::backend::build_tex_desc`): a plain 2D bind's
-/// [`GlesTextureBind::base_level`], the effective GL_TEXTURE_BASE_LEVEL the
-/// GL core fills (`gl::draw::bind_base_level`), with GL's defaults for the
-/// rest (the bind carries no MAX_LEVEL, MIN_LOD or MAX_LOD). Every other
-/// kind keeps base level 0 here: the native cube and 2D array copies, the
-/// stacked images and the native volume are restated by the GL core, not by
-/// these words (docs/es3/shader-failure-map.md section 7).
+/// (`pvr::backend::build_tex_desc`), for a plain 2D bind (GLES_TEXTYPE_2D)
+/// and the native cube's copy (GLES_TEXTYPE_CUBE_TWIDDLED_PROBE):
 ///
-/// Without it a 2D texture at GL_TEXTURE_BASE_LEVEL 1 was sampled and sized
-/// from level 0 (dEQP-GLES3 shaders.texture_functions.texturesize's "lod
-/// base" rows on the AM62P, tests/pvr_texsize_base_level.rs).
+/// - [`GlesTextureBind::base_level`], the effective GL_TEXTURE_BASE_LEVEL
+///   the GL core fills (`gl::draw::bind_base_level`): a linear 2D image is
+///   restated from it, the ETC word and a mipmapped native cube's copy
+///   (which holds the whole chain from level 0) name it in
+///   IMAGE_WORD1.baselevel. A one-level cube copy is level 0 alone and the
+///   builder writes no base level for it.
+/// - GL_TEXTURE_MIN_LOD and MAX_LOD from [`GlesTextureBind::min_lod`] and
+///   [`GlesTextureBind::max_lod`] (the sampler object's when one is bound):
+///   1/64 levels, the maximum plus one, 0 GL's default.
+/// - GL_TEXTURE_MAX_LEVEL: GL's default here, because the GL core already
+///   stops [`GlesTextureBind::mip_levels`] at it (`gl::draw::sampling_fields`),
+///   which [`sampled_levels`] counts from.
+///
+/// Every other kind keeps GL's defaults: the native 2D array copy, the
+/// stacked images (shader-addressed tall images) and the native volume
+/// (whose copy and LOD range come from `gl::native_vol::View`) are restated
+/// by the GL core, not by these words (docs/es3/shader-failure-map.md
+/// section 7).
+///
+/// Without the base level a 2D texture at GL_TEXTURE_BASE_LEVEL 1 was
+/// sampled and sized from level 0 (dEQP-GLES3
+/// shaders.texture_functions.texturesize's "lod base" rows on the AM62P,
+/// tests/pvr_texsize_base_level.rs); without the LOD range every 2D and cube
+/// texture sampled as if GL_TEXTURE_MIN_LOD and MAX_LOD were GL's defaults
+/// (tests/es3_pvr_base_lod.rs).
 pub fn bind_lod(t: &GlesTextureBind) -> TexLod {
-    if t.type_ == crate::backend::GLES_TEXTYPE_2D {
-        TexLod { base_level: u32::from(t.base_level), ..TexLod::DEFAULT }
-    } else {
-        TexLod::DEFAULT
+    use crate::backend::{GLES_TEXTYPE_2D, GLES_TEXTYPE_CUBE_TWIDDLED_PROBE};
+    if !matches!(t.type_, GLES_TEXTYPE_2D | GLES_TEXTYPE_CUBE_TWIDDLED_PROBE) {
+        return TexLod::DEFAULT;
     }
+    let min_lod = if t.min_lod == 0 { TexLod::DEFAULT.min_lod } else { f32::from(t.min_lod) / 64.0 };
+    let max_lod = if t.max_lod == 0 { TexLod::DEFAULT.max_lod } else { f32::from(t.max_lod - 1) / 64.0 };
+    TexLod { base_level: u32::from(t.base_level), max_level: TexLod::DEFAULT.max_level, min_lod, max_lod }
 }
 
 /// The base level the words may name: GL_TEXTURE_BASE_LEVEL, but never past

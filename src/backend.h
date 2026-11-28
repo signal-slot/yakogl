@@ -225,6 +225,12 @@ struct gles_texture_bind {
 	 * format's own channel mapping (no_alpha, depth_luminance, an L8/A8/LA8
 	 * storage). All zero is the identity. */
 	uint8_t  swizzle[4];
+	/* GL_TEXTURE_MIN_LOD (the bound sampler object's, else the texture's)
+	 * in 1/64 levels clamped to [0, 15]; 0 is GL's default (-1000). */
+	uint16_t min_lod;
+	/* GL_TEXTURE_MAX_LOD the same way, plus one: 0 is "not given", GL's
+	 * default 1000. GL_TEXTURE_MAX_LEVEL already stops mip_levels. */
+	uint16_t max_lod;
 };
 
 /* One component of gles_texture_bind.swizzle: 0 "itself" (the identity),

@@ -1112,6 +1112,30 @@ pub struct GlesTextureBind {
     /// a swizzle), as Mesa composes a view's swizzle with the format's
     /// (`util_format_compose_swizzles`). All zero is the identity.
     pub swizzle: [u8; 4],
+    /// GL_TEXTURE_MIN_LOD (ES 3.0.6 3.8.10; the sampler object's when one is
+    /// bound to the unit, else the texture's) in 1/64 levels, clamped to
+    /// [0, 15] ([`gles_lod_q6`]). A bound below 0 clamps as 0 does: lambda
+    /// at or below 0 is magnified from the base level whichever bound
+    /// clamped it. 0, a zeroed bind, is GL's default (-1000). It sits in
+    /// what was padding.
+    pub min_lod: u16,
+    /// GL_TEXTURE_MAX_LOD the same way, PLUS ONE, so that 0 -- a zeroed bind
+    /// -- is "not given", GL's default 1000 (no clamp past the levels). A
+    /// backend that clamps lambda reads `max_lod - 1` 64ths of a level
+    /// when this is not 0. GL_TEXTURE_MAX_LEVEL is not here: the GL core
+    /// already stops [`GlesTextureBind::mip_levels`] at it.
+    pub max_lod: u16,
+}
+
+/// A LOD (GL_TEXTURE_MIN_LOD, GL_TEXTURE_MAX_LOD) in the 1/64 levels of
+/// [`GlesTextureBind::min_lod`]: clamped to [0, 15], a NaN 0. 15 levels are
+/// more than any texture holds (16384 is level 14's 1).
+pub fn gles_lod_q6(lod: f32) -> u16 {
+    if lod > 0.0 {
+        (lod.min(15.0) * 64.0) as u16
+    } else {
+        0
+    }
 }
 
 /// GL's texture wrap modes, one per axis. The values are GL's three modes,
@@ -1196,6 +1220,8 @@ impl GlesTextureBind {
         depth_id: 0,
         cpu: core::ptr::null(),
         swizzle: [GLES_SWIZZLE_SAME; 4],
+        min_lod: 0,
+        max_lod: 0,
     };
 }
 

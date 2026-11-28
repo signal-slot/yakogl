@@ -6765,7 +6765,8 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
 /// The descriptor a draw binds for `t` ([`build_tex_desc`] with the
 /// debug option off), for the host tests that pin the state words of a
 /// texture kind against their design (tests/es3_pvr_2darray.rs): the
-/// bind's own base level as the draw takes it ([`tex_lod::bind_lod`]).
+/// bind's own base level and LOD range as the draw takes them
+/// ([`tex_lod::bind_lod`]).
 pub fn texture_descriptor(t: &GlesTextureBind) -> [u32; TEX_DESC_DWORDS as usize] {
     texture_descriptor_lod(t, &tex_lod::bind_lod(t))
 }
@@ -6795,8 +6796,8 @@ fn compose_tex_swizzle(fmt: [csb::ROGUE_TEXSTATE_SWIZ; 4], bind: &[u8; 4]) -> [c
 }
 
 /// The descriptor of a draw's bind: [`build_tex_desc_lod`] with the level
-/// parameters the bind carries ([`tex_lod::bind_lod`]: a 2D bind's
-/// GL_TEXTURE_BASE_LEVEL).
+/// parameters the bind carries ([`tex_lod::bind_lod`]: a 2D or native cube
+/// bind's GL_TEXTURE_BASE_LEVEL, MIN_LOD and MAX_LOD).
 fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
     build_tex_desc_lod(w, t, warned, &tex_lod::bind_lod(t));
 }
@@ -7195,7 +7196,7 @@ fn tex_desc_sampler_lod(w: &mut [u32], t: &GlesTextureBind, levels: u32, lod: Op
         ROGUE_TEXSTATE_SAMPLER_WORD0_pack,
         2,
         csb::ROGUE_TEXSTATE_SAMPLER_WORD0 {
-            /* LOD bias 0, minlod 0 but for a native volume's MIN_LOD */
+            /* LOD bias 0; minlod and maxlod GL's MIN_LOD and MAX_LOD */
             dadjust: csb::ROGUE_TEXSTATE_DADJUST_ZERO_UINT,
             minlod,
             maxlod,
