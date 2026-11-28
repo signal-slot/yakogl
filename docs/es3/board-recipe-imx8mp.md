@@ -1535,3 +1535,69 @@ TREE_IMAGE=$IMX8MP_OUT/wt-$HEAD8/zephyr/zephyr.bin tools/board.sh imx8mp tree to
 # after the run (it reads the directory's results.tsv) or after the commit (a README's or verdicts.txt's verdict lines):
 python3 -I tools/cts/imx8mp-es2-regress.py records/imx8mp/es2-$HEAD8
 ```
+
+### The ES 2.0 rows on the Armadillo-X2 (measured on the X2)
+
+The Verdin is off the farm (owner, 2026-11-27), so the ES 2.0 regression rows run on the **Armadillo-X2** (same
+i.MX 8M Plus and GC7000UL), and each record says it was **measured on the Armadillo-X2**. The commit is
+**`c29a5ffe`** (the `origin/main` tip of 2026-11-27). It is not the GLES3 campaign commit `05769bf2`: the two
+campaigns are independent and the ES 2.0 rows are compared with the stage-1 baseline, not with a GLES3 slice. The
+procedure was set by plan #372 items es2a (entries 0-14, `TREE_ROWS=0-14`) and es2b (entries 15-28,
+`TREE_ROWS=15-28`); `imx8mp-es2-regress.py` and `imx8mp-es2-summary.py` read `board.sh x2` lines (`es2x2tool`).
+**Status of those two runs: neither produced a record.** es2a built the image and jumped it; its first row ended
+with `board.sh` rc 5 after the first jump (below), and its record directory
+`records/x2/20261127-1304-es2-c29a5ffe-rows01-15-9551fc49` holds no record (the e00 run left none). es2b's
+directories `tools/cts/log/2026-11-imx8mp-es2-x2-c29a5ffe-rows16-29/` and `records/x2/…rows16-29…` were never
+created. So there are **no X2 ES 2.0 verdict lines, no record words and no regress output yet**: the lines below
+are the ones to expect (the Verdin ones, with `x2` for `imx8mp`), not ones that were printed. This section is
+replaced by the printed lines when a run completes.
+
+1. **Stage 1 and image** (the gles2 stage 1 needs a full VK-GL-CTS checkout; es2a's machine had it at
+   `$IMX8MP_OUT/deqp-stage1-gles2` with `IMX8MP_OUT=$CONNECTED_DEPS_DIR/imx8mp-out`; about 6 minutes from that
+   stage 1):
+   ```sh
+   COMMIT=c29a5ffe; HEAD8=c29a5ffe        # a worktree of c29a5ffe, outside /tmp
+   IMX8MP_BOARD=x2 DEQP_STAGE1=$IMX8MP_OUT/deqp-stage1-gles2 \
+     tools/cts/imx8mp-deqp-build.sh es2-$HEAD8 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt
+   # -> $IMX8MP_OUT/x2/es2-c29a5ffe/zephyr/zephyr.bin; no --gles3, no DEQP_MODULE, no IMX8MP_CONSOLE
+   sha256sum $IMX8MP_OUT/x2/es2-$HEAD8/zephyr/zephyr.bin    # es2a's image began 9551fc49
+   ```
+   The image figures (size, sha256, `gc_wdog_arm: armed`) were not kept with a record; take them again from the
+   rebuild and write them into the README.
+2. **Preflight**: `tools/cts/imx8mp-gles3-preflight.sh --board x2` has **no gles2 mode**. On a gles2 session it
+   always shows the four GLES3-only FAILs (the GLES3 stage 1, the 133-row table and its image); read the rest of
+   the lines and do not retry on those four. Making it gles2-aware is a small change in `tools/cts/imx8mp-gles3-*`.
+3. **Run** (one slice per session, one client at a time; the X2 has no remote power control, so a row that ends
+   `board.sh` rc 5 stops the session, as for the GLES3 slices):
+   ```sh
+   export IMX8MP_BOARD=x2 TREE_IMAGE=$IMX8MP_OUT/x2/es2-$HEAD8/zephyr/zephyr.bin
+   REC=records/x2/$(date -u +%Y%m%d-%H%M)-es2-$HEAD8-rows01-15-$(sha256sum "$TREE_IMAGE" | cut -c1-8)
+   TREE_ROWS=0-14 tools/board.sh x2 tree tools/cts/imx8mp-full-tree.txt "$REC" 2>&1 | tee "$REC.log"   # es2a
+   # es2b: TREE_ROWS=15-28 into its own new record directory (rows16-29)
+   ```
+   Always a new record directory: a directory that already holds an `e00` run is not reused. Each row prints
+   `board.sh x2 e<NN> rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent
+   record=<w0>,<w1>,<w2> back_after=<n>s (kexec-dev: a development run, never a row)`: three record words, not
+   four, and the `DEV` label does not make the row a non-row here. A row counts for the regress only when it is
+   clean (`rc=0`, `verdict=done`, `resets` absent or 0).
+4. **README and regress** (no board): `python3 -I tools/cts/imx8mp-es2-summary.py "$REC"` writes the slice README
+   under `tools/cts/log/2026-11-imx8mp-es2-x2-c29a5ffe-rows01-15/` (es2b: `…-rows16-29/`); its first line says
+   `es2 summary: measured on the Armadillo-X2`. es2a's README must be on a ref before es2b's combined run, which
+   is `python3 -I tools/cts/imx8mp-es2-regress.py <es2a dir> <es2b dir>` (or the record directories) and must print
+   `es2 regress: 29/29 entries, 0 worse, 0 missing`. With one slice only, `n/29` entries and `missing` for the
+   rest is correct and not a pass. A `-ge 29` check on the number of verdict lines in the two READMEs together
+   guards against a README that lost a line.
+
+### What es2a and es2b found different from the recipe
+
+- **A task machine loses ssh after the first jump.** `board.sh x2` from a task machine ends with rc 5 after the
+  first `kexec` jump: the X2's ssh host and user keys do not survive its watchdog reset for a machine whose key
+  is not saved on the board. Run the session from a farm node whose key the X2 keeps across reboots (7 persisted
+  farm keys), or have the owner save the task machine's key on the X2. Plan #372's item x2keys finds the way;
+  es2a2 reruns entries 0-14 with it. This also applies to the GLES3 slices of "Running a GLES3 slice on the
+  Armadillo-X2". `tools/board.sh` and `docs/notes/x2-direct-boot.md` are x2keys's, not changed here.
+- **No console capture.** `board.sh x2` cannot capture the console while the lease's console tool holds the
+  bridge's single connection (its probe gets "busy"), and `BOARD_UART` does not accept an `rfc2217://` address.
+  Without that fix the README says **recoveries were not observed** (the record is the result), as step 6 of
+  "Running a GLES3 slice on the Armadillo-X2" already says.
+- **The preflight has no gles2 mode** (step 2 above).
