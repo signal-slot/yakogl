@@ -97,6 +97,36 @@ T="$R/docs/es3/am62p-gles3-notpass.tsv"
 sed -i "s/^# rows 0-.*/# rows 0-$((N - 1)) (21 re-split as 21a-21b, 30 re-split as 30a-30c): build $SHA8, run 2026-11-30\/12-01/" "$T"
 expect resplit-head 0 '^c1 PASS .*'"$SHA8" -- --root "$R" --sha "$SHA"
 
+# a re-split made in the generator: MAX_CASES 1900 gives the tree table one more
+# row (N+1) and the splice writes 'rows 0-<N-1> (R re-split as Ra-Rb)'
+regen() { # regen <fixture>: the fixture's generator re-split, its table regenerated
+	sed -i 's/^MAX_CASES = 2000/MAX_CASES = 1900/' "$1/tools/cts/gen-am62p-gles3-tree.py"
+	python3 -I "$1/tools/cts/gen-am62p-gles3-tree.py" >/dev/null || fail "regen $1: generator failed"
+	N2=$(grep -cv -e '^#' -e '^[[:space:]]*$' "$1/tools/cts/am62p-gles3-tree.txt")
+	[ "$N2" -eq $((N + 1)) ] || fail "regen $1: $N2 tree rows, want $((N + 1))"
+}
+R=$(fixture gen-resplit)
+regen "$R"
+T="$R/docs/es3/am62p-gles3-notpass.tsv"
+sed -i "s/^# rows 0-.*/# rows 0-$((N - 1)) (21 re-split as 21a-21b): build $SHA8, run 2026-11-30\/12-01/" "$T"
+expect gen-resplit 0 '^c1 PASS .*'"$SHA8" '^c3 PASS ' -- --root "$R" --sha "$SHA"
+
+R=$(fixture gen-resplit-missing)
+regen "$R"
+sed -i "s/^# rows 0-.*/# rows 0-$((N - 2)) (21 re-split as 21a-21b): build $SHA8, run 2026-11-30/" "$R/docs/es3/am62p-gles3-notpass.tsv"
+expect gen-resplit-missing-row 1 "^c1 FAIL .*rows $((N - 1)) of" -- --root "$R"
+
+R=$(fixture gen-resplit-two)
+regen "$R"
+sed -i "s/^# rows 0-.*/# rows 0-30 (21 re-split as 21a-21b): build $SHA8, run 2026-11-30\n# rows 31-$((N - 1)): build ad2b5ed, run 2026-10-14/" \
+	"$R/docs/es3/am62p-gles3-notpass.tsv"
+expect gen-resplit-two-builds 1 '^c1 FAIL .*2 builds' -- --root "$R"
+
+R=$(fixture gen-resplit-note)
+regen "$R"
+sed -i "s/^# rows 0-.*/# rows 0-$((N - 1)): build $SHA8, run 2026-11-30/" "$R/docs/es3/am62p-gles3-notpass.tsv"
+expect gen-resplit-no-note 1 "^c1 FAIL .*rows $N of" -- --root "$R"
+
 # --- c1 fail ----------------------------------------------------------------
 R=$(fixture c1-two)
 sed -i "s/^# rows 0-.*/# rows 0-10: build b25997e4, run 2026-11-22\n# rows 11-$((N - 1)): build ad2b5ed, run 2026-10-13\/14/" \

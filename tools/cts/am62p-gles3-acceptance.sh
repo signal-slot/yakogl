@@ -23,6 +23,9 @@
 #       exactly one build, and their ranges cover rows 0..N-1 with N the
 #       image count of tools/cts/am62p-gles3-tree.txt (no row twice). A row
 #       end may carry a re-split suffix (22a-22d): it counts for its row.
+#       A header 'rows 0-45 (21 re-split as 21a-21b)' over a tree the
+#       generator re-split (47 table rows) counts base rows: N is the table's
+#       row count minus the extra parts the parenthesis names.
 #       With --sha, that one build is --sha.
 #   c2  no line of the TSV starts with 'NoResult'.
 #   c3  python3 tools/cts/gen-am62p-gles3-tree.py --check and --self-test
@@ -109,7 +112,7 @@ import gles3_rows  # the parser of the header gles3-notpass.py --splice writes
 
 # '# rows 0-45 (21 re-split as 21a-21b, 30 re-split as 30a-30c): build X, run Y':
 # the parenthesis names the re-split rows and is not part of the row spec.
-RESPLIT = re.compile(r"^(\d+) re-split as (\d+)a-(\d+)[b-z]$")
+RESPLIT = re.compile(r"^(\d+) re-split as (\d+)a-(\d+)([b-z])$")
 PAREN = re.compile(r"^(# rows [^:(]*?)\s*\(([^)]*)\)(:.*)$")
 
 
@@ -130,14 +133,22 @@ except OSError:
     out(False, "tools/cts/am62p-gles3-tree.txt does not exist")
 probs = []
 head = []
+extra = 0  # tree rows beyond the base rows: each re-split row of the header is k tree rows
+resplit_rows = set()
 for l in lines:
     if not l.startswith("#"):
         break
     m = PAREN.match(l)
     if m:
         for item in m.group(2).split(","):
-            if not RESPLIT.match(item.strip()):
+            r = RESPLIT.match(item.strip())
+            if not r or not (r.group(1) == r.group(2) == r.group(3)):
                 probs.append("header %r: %r is not 'N re-split as Na-Nx'" % (l, item.strip()))
+            elif r.group(1) in resplit_rows:
+                probs.append("header %r: row %s is re-split twice" % (l, r.group(1)))
+            else:
+                resplit_rows.add(r.group(1))
+                extra += ord(r.group(4)) - ord("a")
         l = m.group(1) + m.group(3)
     head.append(l)
 try:
@@ -149,7 +160,21 @@ if not parsed:
 builds = sorted({b.lower() for b in gles3_rows.builds(parsed)})
 if len(builds) != 1:
     probs.append("the header names %d builds (%s), not one" % (len(builds), ", ".join(builds)))
-cov = gles3_rows.coverage(n, parsed)
+# The header counts base rows: a tree the generator re-split has n tree rows
+# and n - extra base rows, 'rows 0-<n-extra-1> (R re-split as Ra-Rk)'. A header
+# whose range runs to the last tree row (the re-split note only names rows
+# already in the tree) counts tree rows, as it did before.
+n_tree = n
+cov = gles3_rows.coverage(n - extra, parsed) if extra and n - extra >= 1 else None
+if cov is not None:
+    n = n_tree - extra
+if cov is None or any(cov.values()):
+    old = gles3_rows.coverage(n_tree, parsed)
+    if cov is None or not any(old.values()):
+        cov, n = old, n_tree
+if any(int(r) >= n for r in resplit_rows):
+    probs.append("re-split rows %s are beyond the %d base rows"
+                 % (",".join(sorted((r for r in resplit_rows if int(r) >= n), key=int)), n))
 if cov["missing"]:
     probs.append("rows %s of 0-%d have no header range" % (",".join(map(str, cov["missing"])), n - 1))
 if cov["incomplete"]:
@@ -164,7 +189,7 @@ if want and len(builds) == 1 and not (want.startswith(builds[0]) or builds[0].st
     probs.append("the build is %s, not %s" % (builds[0], want[:8]))
 if probs:
     out(False, "; ".join(probs), builds[0] if len(builds) == 1 else "-")
-out(True, "rows 0-%d of %d tree images come from build %s" % (n - 1, n, builds[0]), builds[0])
+out(True, "rows 0-%d of %d tree images come from build %s" % (n - 1, n_tree, builds[0]), builds[0])
 PYEOF
 )
 c1_build=$(printf '%s\n' "$c1_out" | sed -n 2p)
