@@ -24,6 +24,8 @@ names exactly these files.
 | `gl_test-217-on.conf` | gl_test | case 217, the knob on, the same cap and layers: the acceptance run, judged `pr-verdict.py --expect pr` | `tools/cts/log/2026-11-02-pr-217probe` run B (`pr-session.sh <name> --leg 217-on`): the same cause-2 stop, measured before the driver's at-maximum wait landed (`9b2e88bc`) |
 | `gl_test-217-runC-off.conf` | gl_test | case 217 in run C's fallback configuration, the knob off: no cap, no grow reserve, 1220 layers; the list is free to ask, the refused grow stops the run | the knob-off partner of 217probe run C, never run itself (`pr-session.sh <name> --knob off --cap-pages 0 --cases 217`, plus the fragment's `FL_PROBE_NO_RESERVE=y`) |
 | `gl_test-217-runC-on.conf` | gl_test | run C, the knob on: the grow request refused, the firmware's one partial render, the kick complete, the pixels not yet equal (the frame side is pr-frame-colour's) | `tools/cts/log/2026-11-02-pr-217probe` run C (built with `pr-session.sh <name> --knob on --cap-pages 0 --cases 217`'s arguments plus `FL_PROBE_NO_RESERVE=y`) |
+| `gl_test-217-bgndA-on.conf` | gl_test | the `pds_pr_bgnd` placement probe A (to try first): `gl_test-217-runC-on.conf` plus `CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT=1`, the 3D_PR carrying the kick's `frag_pr.pds_pr_bgnd` at dwords 64..69; a resumed render that reloads its stored tiles says the firmware reads them there | none yet (built with run C's `pr-session.sh` arguments plus `FL_PROBE_NO_RESERVE=y` and the placement) |
+| `gl_test-217-bgndB-on.conf` | gl_test | the placement probe B: the same with `CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT=2`, dwords 62..67 | none yet (as probe A, placement 2) |
 | `glmark2-d320c8a5-off.conf` | glmark2 | d320c8a5's configuration (one kick in flight), the knob off: the stop of 2026-10-04 | image d320c8a5, docs/notes/pvr-render-pool.md "The one-kick-in-flight run: d320c8a5" (`pr-session.sh <name> --knob off --glmark2 --one-in-flight`) |
 | `glmark2-d320c8a5-on.conf` | glmark2 | d320c8a5's configuration, the knob on: the refused grow must complete, partial renders >= 1, no stop | the note's "first board measurement" step 2 (`pr-session.sh <name> --knob on --glmark2 --one-in-flight`) |
 
@@ -45,6 +47,16 @@ the 217 fragments carry none. `selftest.sh` compares the 217 pair against
 the `--leg` dry run's options and the runC pair against the
 `--knob <off|on> --cap-pages 0 --cases 217` line. In each `-off`/`-on` pair
 the knob is the only difference; `selftest.sh` checks that.
+
+The two `gl_test-217-bgnd{A,B}-on` probes are `gl_test-217-runC-on.conf`
+plus one line, `CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT` (1 for A, 2
+for B; the option defaults to 0, none, and depends on the partial-render
+knob). It is a board probe: neither placement is measured, and no vendored
+DDK header defines the 3D command's register block that would place the
+words (`gpu::pvr::render::pr_bgnd_dw`). `pr-session.sh` has no option for
+it, so `selftest.sh` compares the probes against run C's knob-on line,
+accepts the placement and no-reserve lines only in them, and checks that
+each differs from `gl_test-217-runC-on.conf` in that one line.
 
 ## Building with a fragment
 

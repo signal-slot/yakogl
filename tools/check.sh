@@ -3290,6 +3290,27 @@ if command -v cc >/dev/null 2>&1; then
   }
   uses w:rgx-target
   step "run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers)" pvr_km_check
+  # The pds_pr_bgnd placement probe (CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT,
+  # cfg.pr_bgnd_placement in driver/rust/src/gpu/pvr/render.rs): at none the
+  # 3D_PR is today's, at A or B the three words land at their dwords of the
+  # 3D_PR only. The tests also run in the "test    yakogl-drivers" row; this
+  # row names them, so a test that stops being compiled or matched fails
+  # here. The km records above are the option at none (km_check sets no
+  # placement).
+  PVR_PR_BGND_TESTS=(
+    gpu::pvr::render::submit_tests::g6_at_placement_none_the_3d_pr_is_todays
+    gpu::pvr::render::submit_tests::g7_placements_a_and_b_put_pds_pr_bgnd_at_their_dwords_of_the_3d_pr_only
+  )
+  pvr_pr_bgnd_tests() {
+    local out t
+    out=$(cargo_test --libtest --no-fail-fast -p yakogl-drivers --all-features --lib gpu::pvr::render::submit_tests::g 2>&1) ||
+      { printf '%s\n' "$out" | tail -20; return 1; }
+    for t in "${PVR_PR_BGND_TESTS[@]}"; do
+      printf '%s\n' "$out" | grep -qxF "test $t ... ok" || { echo "pds_pr_bgnd test did not run and pass: $t"; return 1; }
+    done
+  }
+  scope pvr drivers
+  step "test    pvr render pds_pr_bgnd placement (${#PVR_PR_BGND_TESTS[@]} tests by name)" pvr_pr_bgnd_tests
   # Tile at upload: the copy made from the caller's rows (v3d_tex_store_box at
   # the unpack stride) and the copy made at a draw from the GL core's storage
   # (v3d_tex_store_level at tex_pitch) must be the same bytes, for every
