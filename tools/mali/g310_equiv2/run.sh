@@ -15,7 +15,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 since=7e27b1eb
 if [ "${1:-}" = "--since" ]; then since="$2"; shift 2; fi
-scratch="${TMPDIR:-/var/tmp}/g310_equiv2.$$"
+scratch="${TMPDIR:?set TMPDIR}/g310_equiv2.$$"
 mkdir -p "$scratch"
 trap 'rm -rf "$scratch"' EXIT
 exec "$here/../g310_check.sh" --since "$since" --scratch "$scratch" "$@" '*.expect.json'
