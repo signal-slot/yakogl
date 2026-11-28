@@ -31,21 +31,33 @@ no `eight_output_registers` (`docs/es3/backend-caps.md:128`).
 `OUTPUT_REGS` is 4 (`src/pvr/mrt_layout.rs:65`), and the back end emits
 against the same count (`PVR_BACKEND_MAX_OUT_REGS`,
 `src/pvr/backend.rs:538`). A colour target takes its format's dwords
-(`surf_out_dwords`, `src/pvr/backend.rs:1040-1046`):
+(`surf_out_dwords`, `src/pvr/backend.rs:1124-1130`):
 
 | dwords | ES 3.0 colour-renderable formats (this build: `src/gl/framebuffer.rs:667-707` and `:801-803`) |
 |---|---|
-| 1 | the RGBA8 class: RGBA8, RGB8, RG8, R8, RGB565, RGBA4, RGB5_A1, RGB10_A2 (held as RGBA8 today, `tests/es3_mrt4_formats_pvr.rs:760-762`); R16F, R32F; every integer layout of at most 32 bits: R8I/UI, RG8I/UI, RGBA8I/UI, R16I/UI, RG16I/UI, R32I/UI, RGB10_A2UI |
-| 2 | RGBA16F, RGB16F, RG16F (all kept as RGBA16F surfaces, `tests/es3_mrt4_formats_pvr.rs:782-786`); SRGB8_ALPHA8 (its linear F16 halves); RGBA16I/UI, RG32I/UI |
+| 1 | the RGBA8 class: RGBA8, RGB8, RG8, R8, RGB565, RGBA4, RGB5_A1; R16F, R32F; every integer layout of at most 32 bits: R8I/UI, RG8I/UI, RGBA8I/UI, R16I/UI, RG16I/UI, R32I/UI, RGB10_A2UI |
+| 2 | RGBA16F, RGB16F, RG16F (all kept as RGBA16F surfaces, `tests/es3_mrt4_formats_pvr.rs:782-786`); SRGB8_ALPHA8 (its linear F16 halves); **RGB10_A2** (the same four F16 halves, packed A2R10B10G10 by the PBE: `unorm_halves`, `src/pvr/backend.rs:1139-1141`; pinned `surf_out_dwords(GLES_SURF_RGB10_A2) == 2`, `src/pvr/backend.rs:12031`); RGBA16I/UI, RG32I/UI |
 | 4 | RGBA32I/UI |
+
+An earlier version of this table listed RGB10_A2 in the 1-dword row
+("held as RGBA8 today"); it is not: `surf_out_dwords` gives 2
+(`src/pvr/backend.rs:1124-1130`), and RGB10_A2 draws alone (the draw refuses
+it beside another target, `src/pvr/backend.rs:7635`). RGB10_A2UI, the integer
+layout, is still one dword.
 
 The integer counts are `ShcIntRt::dwords`, `ceil(channels * bits / 32)`
 with the 10-bit layout as one dword (`src/shaderc/mod.rs:253-256`). No
 renderable format is 3-dword wide (`src/pvr/mrt_layout.rs:291-293` pins
-that a 3-dword layout walks; no format reaches it). R32F, RG32F, RGBA32F
+that a 3-dword layout walks; no format reaches it). RG32F, RGBA32F
 and R11F_G11F_B10F are colour-renderable only with
-GL_EXT_color_buffer_float (`src/gl/framebuffer.rs:692-700`; plan #360),
-and would take 1, 2, 4 and 1.
+GL_EXT_color_buffer_float (`src/gl/framebuffer.rs:692-700`; plan #360).
+`surf_out_dwords` has no arm for R11F_G11F_B10F: it falls to the default
+and answers **1** dword (`src/pvr/backend.rs:1124-1130`), but its
+accumulation is F16 x3 = 6 bytes, so **2** dwords in Mesa
+(`src/imagination/vulkan/pvr_arch_formats.c:258`). The two disagree; the
+format is INCOMPLETE_ATTACHMENT here (`tests/es3_mrt4_formats_pvr.rs:781`),
+so the 1 is unreachable today, and whoever makes it renderable must give it
+2 (RG32F and RGBA32F would take 2 and 4 by the same function).
 
 The rule is `walk` (`src/pvr/mrt_layout.rs:216-242`), reached as
 `layout` (`:204`, with tile buffers) and as `register_layout` (`:212`,
@@ -222,6 +234,43 @@ draw test, and the 80 refused four-target width sequences exceed what the
 fifteen pinned combinations sample: the pinned thirteen float rows and two
 integer rows are the ones the draw families make observable today.
 
+### 2.4 Differences from Mesa 26.2.1
+
+Cited from the plan's comparison (`mesa-rt4-pvr`): the vendored
+`third_party/mesa-26.2.1/src/imagination` holds `common`, `csbgen`,
+`include` and `vulkan`, but not `pvr_arch_mrt.c` or `pvr_arch_formats.c`,
+so these Mesa lines are not re-greppable at this tip.
+
+- **First fit with back-fill, shared tile buffers.** Mesa places each
+  target at the first free register run that holds it, back-filling holes,
+  and shares tile buffers between spilled targets
+  (`src/imagination/vulkan/pvr_arch_mrt.c:57-197`). yakogl's `walk` places
+  in order and never back-fills (`src/pvr/mrt_layout.rs:216-242`). Mesa
+  therefore fits 1,2,1 in registers (0, 2, 1) where yakogl spills the
+  third target (`eot3_tb`), and it draws lists yakogl has no program for.
+  Where a mix fits in registers both place alike; the port in
+  `tests/pvr_mrt_layout_mesa.rs` lists the lists where they differ.
+  Placement differences are defects pinned by `tests/pvr_mrt_layout_mesa.rs`
+  (port of `pvr_alloc_mrt`, not diffed against the missing source).
+- **Mesa never refuses at four attachments.** It spills to tile buffers and
+  fails with `VK_ERROR_TOO_MANY_OBJECTS` only past 7 tile buffers. Our
+  `GL_FRAMEBUFFER_UNSUPPORTED` for a list `register_layout` refuses
+  (section 4) is a stricter answer that ES 3.0 4.4.4.2 allows (the
+  implementation-dependent format combination); it is not a hardware limit.
+- **Only the last spilled target is emitted.** With two or three spilled
+  targets (`eot4_tb2`, `eot4_tb3`) the back end emits only the last
+  attachment from a tile buffer (`src/pvr/backend.rs:10724-10730`, the
+  `i + 1 == nrt_want` test); pinned by `tests/es3_mrt4_spill_pvr.rs`.
+- **RG16F takes 2 registers here, 1 in Mesa.** The GL core hands RG16F over
+  as an RGBA16F surface (`tests/es3_mrt4_formats_pvr.rs:782-786`), so
+  `surf_out_dwords` answers 2; Mesa accumulates two halves in one register.
+  RG16F as attachment 3 beside three RGBA8 is therefore over budget here
+  (1,1,1,2) and fits in Mesa; pinned by `tests/es3_mrt4_rg16f_pvr.rs`.
+
+The three pin files named above are added by parallel items
+(`tests/pvr_mrt_layout_mesa.rs` exists at this tip; `es3_mrt4_spill_pvr.rs`
+and `es3_mrt4_rg16f_pvr.rs` do not yet).
+
 ## 3. Why the budget belongs to glCheckFramebufferStatus
 
 `glCheckFramebufferStatus` (`src/gl/framebuffer.rs:2236-2261`,
@@ -301,7 +350,7 @@ its Vulkan driver advertises 4 colour attachments on this core
   `GL_FRAMEBUFFER_UNSUPPORTED` when they do not. The question is a hook
   on the back-end table (`src/backend.rs` — owned by #354, so rebase onto
   it; `src/gl/framebuffer.rs` is also in plan #364's remaining items).
-  The PowerVR answers from `surf_out_dwords` (`src/pvr/backend.rs:1040-1046`)
+  The PowerVR answers from `surf_out_dwords` (`src/pvr/backend.rs:1124-1130`)
   plus `layout`'s acceptance (section 4.3); the V3D and the GC7000UL
   answer "fits" (their counts are 4-capable, `src/backend.rs:884-900`).
   A build at three draw buffers keeps today's answers: the hook only
