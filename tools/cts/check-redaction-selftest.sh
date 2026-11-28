@@ -34,14 +34,22 @@ bad() { echo "FAIL $1"; fail=1; }
 
 # Made-up values, assembled so that no literal of them is in this file.
 o10=10
+E=""                                        # empty: splits each value so no line holds one (even unquoted)
 PRIV4="${o10}.0.2.7"                        # a private address (RFC 5737's 192.0.2.7, first octet changed)
-V6="fd00:"":1234:5:6:7"                     # a ULA address
-LL6="fe80""::7"                             # a link-local address
-SER="ID_SERIAL_SHORT""=A1B2C3D4E5"          # a udev serial property
-ISER="iSerial 3 ""FAKE0123456"              # an lsusb serial string
-ULINK="usb-Fake_Bridge_Y_""ABCD1234-if00"   # a usb-serial by-id link tail
-SSHBAD="ssh root""@host-1.lab.invalid2"
-SCPBAD="scp a.bin pi""@made-up-box:/x"
+V6="fd00:${E}:1234:5:6:7"                   # a ULA address
+LL6="fe80${E}::7"                           # a link-local address
+SER="ID_SERIAL_SHORT${E}=A1B2C3D4E5"        # a udev serial property
+ISER="iSerial 3 ${E}FAKE0123456"            # an lsusb serial string
+ULINK="usb-Fake_Bridge_Y_${E}ABCD1234-if00" # a usb-serial by-id link tail
+SSHBAD="ssh root${E}@host-1.lab.invalid2"
+SCPBAD="scp a.bin pi${E}@made-up-box:/x"
+# Shell-quoting evasions: the quotes are the only thing that hides the value.
+QS1="ssh root${E}''@''${E}made-up-box2"
+QS2="scp x ro\"ot\"@\"made-up-box3\":/y"
+QS3="ssh pi${E}@'made-up-box4'"
+QS4="s''sh pi${E}@made-up-box5"
+QS5="addr ${o10}\".\"0.2\"'.7'"
+QS6="ID_SERIAL_SHORT${E}=\"A1B2\"'C3D4E5'"
 USR="us""er"; PWK="pass""word"
 
 g() { git -C "$T/repo" -c user.name=t -c user.email=t@example.invalid "$@"; }
@@ -61,6 +69,12 @@ g update-ref refs/remotes/origin/main HEAD
   echo "link $ULINK"                         #  7 usb-serial
   echo "$SSHBAD"                             #  8 ssh-host
   echo "$SCPBAD"                             #  9 ssh-host
+  echo "$QS1"                                # 10 ssh-host, split by empty quotes
+  echo "$QS2"                                # 11 ssh-host, quoted fragments
+  echo "$QS3"                                # 12 ssh-host, quoted host
+  echo "$QS4"                                # 13 ssh-host, quoted command word
+  echo "$QS5"                                # 14 ipv4, address split by quotes
+  echo "$QS6"                                # 15 usb-serial, split by quotes
 } > "$T/repo/g.txt"
 g add -A; g commit -q -m hits
 
@@ -76,11 +90,13 @@ chk() { # <line> <class>
 chk 2 ipv4; chk 3 ipv6; chk 4 ipv6
 chk 5 usb-serial; chk 6 usb-serial; chk 7 usb-serial
 chk 8 ssh-host; chk 9 ssh-host
+chk 10 ssh-host; chk 11 ssh-host; chk 12 ssh-host; chk 13 ssh-host
+chk 14 ipv4; chk 15 usb-serial
 grep -q "^g.txt:1:" <<<"$out" && bad "clean line flagged" || ok "clean line passes"
 
 # 2. Nothing is printed in full.
 leak=0
-for v in "$PRIV4" "$V6" "$LL6" A1B2C3D4E5 FAKE0123456 "$ULINK" host-1.lab.invalid2 made-up-box; do
+for v in "$PRIV4" "$V6" "$LL6" A1B2C3D4E5 FAKE0123456 "$ULINK" host-1.lab.invalid2 made-up-box made-up-box2 made-up-box3 made-up-box4 made-up-box5; do
   case "$out" in *"$v"*) leak=1 ;; esac
 done
 [ "$leak" = 0 ] && ok "matches are masked" || bad "a match is printed in full"
@@ -88,6 +104,8 @@ done
 # 3. Placeholders: every line of the fixture must pass.
 cat > "$T/repo/h.txt" <<'EOT'
 ssh root@$BOARD_HOST
+ssh "root"@"$BOARD_HOST"
+ssh root''@''example.invalid
 ssh torizon@<board>
 ssh root@example.invalid
 ssh git@github.com

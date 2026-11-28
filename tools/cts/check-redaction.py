@@ -24,6 +24,9 @@ plus the classes that scanner lacks:
                  Board variables in the repo: BOARD_HOST, BOARD_UART,
                  PI4_HOST, PI4_UART, PI5_HOST, PI5_UART, T6_UART.
 
+Shell quoting is normalised first (adjacent empty quotes, quoted fragments,
+quoted hosts), and the line is scanned in both forms.
+
 Output `path:line: class: masked`, exit 0 clean, 1 hits, 2 unreadable.
 tools/cts/check-redaction-selftest.sh checks it.
 """
@@ -91,10 +94,28 @@ def extra_hits(line):
 _base_scan = base.scan_line
 
 
+def unquote(line):
+    """The line as a shell reads it once quoting is gone: `root''@''host`,
+    `"root"@"host"`, `ro"ot"@'host'`, `s''sh`, `192"."0.2.7` become the plain
+    word. Empty quote pairs go first, then every remaining quote character.
+    Backslashes stay (a printf `\\n` must not glue onto the word before it)."""
+    prev = None
+    while prev != line:
+        prev = line
+        line = line.replace("''", "").replace('""', "")
+    return line.replace("'", "").replace('"', "")
+
+
 def scan_line(line):
     if base.MARKER in line:
         return []
-    return sorted(_base_scan(line) + extra_hits(line))
+    hits = _base_scan(line) + extra_hits(line)
+    plain = unquote(line)
+    if plain != line:  # a hit only the unquoted form shows: quoting was the evasion
+        seen = {(c, t) for _p, c, t in hits}
+        hits += [h for h in _base_scan(plain) + extra_hits(plain)
+                 if (h[1], h[2]) not in seen]
+    return sorted(hits)
 
 
 base.scan_line = scan_line  # the imported main() then reports the new classes
