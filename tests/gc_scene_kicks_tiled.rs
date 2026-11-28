@@ -74,7 +74,7 @@ mod gc_scenes;
 
 use gc_scenes::*;
 use std::sync::Mutex;
-use yakogl::vivante::backend::gc_debug_set_tiled_rt;
+use yakogl::vivante::backend::{gc_debug_set_tiled_rt, gc_debug_set_tiled_sample};
 
 /* ---- gc_scene_kicks.rs's ceilings, copied: the knob off stays under them ---------------- */
 
@@ -116,11 +116,13 @@ const fn s(
 
 /// One scene's frame, a GPU model and the knob: the most over the counted
 /// frames, and a check that every counted frame is the same.
-fn frame(on: bool, gpu: Gpu, scene: fn() -> Box<dyn FnMut()>) -> (Counts, StreamCounts) {
+fn frame(on: bool, sample: bool, gpu: Gpu, scene: fn() -> Box<dyn FnMut()>) -> (Counts, StreamCounts) {
     let _k = KNOB.lock().unwrap_or_else(|e| e.into_inner());
     gc_debug_set_tiled_rt(i32::from(on));
+    gc_debug_set_tiled_sample(i32::from(sample));
     let r = std::panic::catch_unwind(|| run_full(gpu, scene, Hooks::default()));
     gc_debug_set_tiled_rt(0);
+    gc_debug_set_tiled_sample(0);
     let (frames, _, streams) = r.unwrap_or_else(|e| std::panic::resume_unwind(e));
     assert!(frames.windows(2).all(|w| w[0] == w[1]), "the counted frames differ: {frames:?}");
     assert!(streams.windows(2).all(|w| w[0] == w[1]), "the counted frames' streams differ: {streams:?}");
@@ -142,17 +144,25 @@ struct Scene {
     ceilings: (Counts, Counts),
     off: (Counts, Counts, StreamCounts),
     on: (Counts, Counts, StreamCounts),
+    /// `gc_tiled_rt` and `gc_tiled_sample` both on (measured at 14e7a7421).
+    on_sample: (Counts, Counts, StreamCounts),
 }
 
 fn check(sc: &Scene) {
-    for (knob, gpu_counts, ceil) in [(false, &sc.off, Some(&sc.ceilings)), (true, &sc.on, None)] {
+    for (knob, sample, gpu_counts, ceil) in
+        [(false, false, &sc.off, Some(&sc.ceilings)), (true, false, &sc.on, None), (true, true, &sc.on_sample, None)]
+    {
         for (gpu, want, ceiling) in
             [(Gpu::Lag, gpu_counts.0, ceil.map(|c| c.0)), (Gpu::Done, gpu_counts.1, ceil.map(|c| c.1))]
         {
-            let (got, stream) = frame(knob, gpu, sc.run);
-            eprintln!("{} knob {} {gpu:?}: {got:?} {stream:?}", sc.name, if knob { "on" } else { "off" });
-            assert_eq!(got, want, "{} (knob {knob}, {gpu:?}): the GC counts", sc.name);
-            assert_eq!(stream, gpu_counts.2, "{} (knob {knob}, {gpu:?}): the stream counts", sc.name);
+            let (got, stream) = frame(knob, sample, gpu, sc.run);
+            eprintln!(
+                "{} knob {} sample {sample} {gpu:?}: {got:?} {stream:?}",
+                sc.name,
+                if knob { "on" } else { "off" }
+            );
+            assert_eq!(got, want, "{} (knob {knob}, sample {sample}, {gpu:?}): the GC counts", sc.name);
+            assert_eq!(stream, gpu_counts.2, "{} (knob {knob}, sample {sample}, {gpu:?}): the stream counts", sc.name);
             if let Some(ceiling) = ceiling {
                 let over = got.within(&ceiling);
                 assert!(
@@ -191,6 +201,7 @@ fn terrain_with_gc_tiled_rt_on_beside_off() {
         ceilings: (OFF_TERRAIN_LAG, OFF_TERRAIN_DONE),
         off: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(2, 0, 9, 51, 0, 0)),
         on: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(3, 2, 9, 51, 2, 2)),
+        on_sample: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(3, 2, 9, 51, 2, 2)),
     });
 }
 
@@ -214,6 +225,7 @@ fn shadow_with_gc_tiled_rt_on_beside_off() {
         ceilings: (OFF_SHADOW_LAG, OFF_SHADOW_DONE),
         off: (cs(2, 0, 0, 0, 1), cs(2, 0, 0, 0, 0), s(0, 0, 3, 3, 0, 0)),
         on: (cs(2, 0, 0, 0, 1), cs(2, 0, 0, 0, 0), s(0, 0, 3, 3, 0, 0)),
+        on_sample: (cs(2, 0, 0, 0, 1), cs(2, 0, 0, 0, 0), s(0, 0, 3, 3, 0, 0)),
     });
 }
 
@@ -234,5 +246,12 @@ fn refract_with_gc_tiled_rt_on_beside_off() {
         ceilings: (OFF_REFRACT_LAG, OFF_REFRACT_DONE),
         off: (cs(3, 2, 0, 0, 1), cs(3, 0, 0, 0, 0), s(0, 0, 4, 12, 0, 0)),
         on: (cs(3, 2, 0, 0, 1), cs(3, 0, 0, 0, 0), s(0, 0, 4, 12, 0, 0)),
+        on_sample: (cs(3, 2, 0, 0, 1), cs(3, 0, 0, 0, 0), s(0, 0, 4, 12, 0, 0)),
     });
 }
+
+/* RS byte figures (sa-host-predict's request (b)): none exists. The stand-in
+ * OSAL reads a kick's stream length (`stream_bytes`) and counts RS jobs by
+ * shape, but nothing in `common/gc_scenes.rs` or `tools/hostharness` decodes
+ * an RS job's width, height or stride into bytes moved, so no byte column is
+ * pinned here and the harness is not changed. */
