@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The fragment shader of dEQP-GLES2.functional.shaders.loops.do_while_dynamic_iterations.nested_tricky_dataflow_2_vertex as dEQP-GLES2 writes it (VK-GL-CTS 93bca01), rebuilt from the generator createSpecialLoopCase/createGenericLoopCase of modules/gles2/functional/es2fShaderLoopTests.cpp; that rebuild is byte-equal to all 106 verbatim .qpa loop sources of the earlier deqp_loops*_vs_* and deqp_vsloop*_ references (plan #387 item vsloop-refs).
