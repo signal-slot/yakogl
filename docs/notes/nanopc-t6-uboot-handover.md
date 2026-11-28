@@ -212,7 +212,8 @@ issue #26.
    when both WDT0 gates read open, WDT0's `WDT_CR` and `WDT_TORR`
    (0xfeaf0000, 2 words) and `COMP_PARAM_1`, `COMP_VERSION`, `COMP_TYPE`
    (0xfeaf00f4, 3 words); never `WDT_EOI` (+0x14), whose read clears the
-   interrupt. Added after the 2026-11-12 run, not yet read on the board.
+   interrupt. Added after the 2026-11-12 run, not yet read on the board
+   (still unread on 2026-11-28: section 4 (d)).
    Record `GLB_RST_ST` and `GLB_RST_CON` verbatim and compare them with
    Armbian's 0x00000002 and 0x0000ffdf (driver/docs/nanopc-t6-mali.md);
    claim no meaning for a bit. Tells: whether WDT0 is clocked and stopped as
@@ -293,6 +294,56 @@ at `SET_CPLL_HZ` in normal mode), so `gpu_clock_set` writes CPLL / 5. PD_GPU is
 off, so the QoS words were not read. DCDC1's state was not read (no `pmic`
 command).
 
+(d) The measured hand-over from an image start (plan #408, items uboot-s1c
+and uboot-s2c; written 2026-11-28 by item handover-docs2 from the committed
+logs only). **Nothing below was measured.** The two sessions that were to
+read these values left no log slice in the tree: no
+`tools/cts/log/*-t6-uboot-s1c-*/` and no `tools/cts/log/*-t6-uboot-s2c-*/`
+exists at main 29108faa, and their reports say they stopped before any
+board change, for three causes: the serial adapter's one client slot held
+by the lease's own console server, no `T6_HAND` in the environment, and no
+fetch access to `origin` for preflight check (c). The board was left in
+Armbian, nothing staged.
+
+| What | Value | Source |
+|---|---|---|
+| Prompt reads, the section 3 list with the section 6 gate words | not read | no `prompt-reads.sh --go` record since 2026-11-12 |
+| `CLKGATE_CON(15)` (0xfd7c083c), `PCLK_WDT0` bit 0 and `TCLK_WDT0` bit 1, decoded by the section 6 table | not read | same |
+| `GLB_RST_CON` (0xfd7c0c10), raw; Armbian 0x0000ffdf | not read | same |
+| `GLB_RST_ST` (0xfd7c0c04), raw; Armbian 0x00000002 | not read | same |
+| WDT0 `WDT_CR`, `WDT_TORR`, `COMP_PARAM_1`, `COMP_VERSION`, `COMP_TYPE` | not read | same (read only when both gates read open) |
+| UART2 `LCR`/`USR` and its CRU clock select | not read | same |
+| `gpu_clock_set`: keep, move or refuse | not in a committed log. Predicted **move** from section 4 (c) (SPLL, CPLL 1500 MHz normal) | the 2026-11-24 go records below carry `t6_gpu` PASS, but no log slice of them is in the tree |
+| The supply read (RK806 `POWER_EN0`, DCDC1) and `PD_GPU` before `gpu_up` | not in a committed log. `PD_GPU` off at the prompt (section 4 (c)) | same |
+| WDT0 arm (`T6:A3`, predicted `period_ms` 22369 for TOP 13) and the feeder's first feed | not in a committed log | same |
+| `CNTFRQ_EL0` at entry (`T6:A`) | not in a committed log | same |
+| Return route (PSCI `SYSTEM_RESET` or WDT0), and `GLB_RST_CON` after a WDT0 return | not in a committed log, so section 6's WDT0 reset proof is still open | same |
+
+The block is made by `tools/cts/t6-uboot-handover-summary.py` from a
+session's `prompt-reads.sh --go` record and its `t6_cold` and `t6_gpu` go
+records; the next session that reaches the prompt replaces the "not read"
+cells with its output and names its log slice under "Records
+(t6-uboot-go)" below.
+
+Records (t6-uboot-go). The directories a measured value would rest on, all
+the ones the tree names:
+
+- `records/nanopc-t6/20261124-103406-t6-uboot-go` (t6_hello),
+  `-103839-` (t6_gpu), `-104043-` (t6_mmu), `-104930-` (t6_fw),
+  `-105135-` (t6_submit), `-212159-` (t6_cold), `-211350-` (triangle):
+  `prompt-go.sh --go` runs of 2026-11-24, each `T6_ROUTE=uboot` verdict
+  PASS (tools/cts/RESULTS.md, "Mali: NanoPC-T6 on Zephyr (by U-Boot's
+  `go`)"; driver/docs/nanopc-t6-display.md, step D9). The records are
+  gitignored and no log slice of them is under `tools/cts/log/`, so this
+  note takes none of their hand-over lines; they were before the section 6
+  gate words and the UART2 reads joined the read list.
+- `tools/cts/log/2026-11-t6-uboot-s1-cbb55860/` and
+  `tools/cts/log/2026-11-25-t6-uboot-65af54b5/` (item uboot-s1, 2026-11-25):
+  images staged and dry runs exit 0, then `prompt-reads.sh --go` exit 40
+  (adapter `busy`), `stage.sh undo` exit 0; no reboot, no go record.
+- uboot-s1b (2026-11-26): `console-check.sh` exit 6, no log slice.
+- uboot-s1c, uboot-s2c: no log slice (above).
+
 ## 5. The proposed ext4load route
 
 U-Boot's default boot is `bootflow scan -lb`, which walks `boot_targets`, finds
@@ -334,12 +385,16 @@ byte 56, `crc32` of the loaded bytes against the host's, `go 0x10000000`
 (driver/tools/uboot-t6/README.md, "The route"; issue #4627): `stage.sh` puts
 the image under /boot/yakogl, `prompt-go.sh` and `prompt-go.py` type and
 check the commands, `go`, record the image's output and judge it with
-`t6-verdict.sh` (`T6_ROUTE=uboot`). None of this has run on the board. (The
+`t6-verdict.sh` (`T6_ROUTE=uboot`). It ran on the board on 2026-11-24
+(seven images, verdict PASS each; section 4 (d)), the tool typing the
+commands; U-Boot starting an image by itself has not run. (The
 script draft t6-zephyr.cmd, which needed `setexpr`, `icache` and `dcache`,
 was removed.)
 
-Board sessions (plan #408, item uboot-s1, issue #4627). None has reached the
-prompt. The three attempts of 2026-11-25 (at cbb55860 and 65af54b5, where
+Board sessions (plan #408, item uboot-s1, issue #4627). None of plan
+#408's sessions has reached the prompt (the earlier `prompt-go.sh` runs of
+2026-11-24 did: section 4 (d), "Records (t6-uboot-go)"). The three attempts
+of 2026-11-25 (at cbb55860 and 65af54b5, where
 t6_cold, t6_gpu, t6_fw and t6_submit were staged with `stage.sh` and every
 dry run of `prompt-reads.sh` and `prompt-go.sh` exited 0, then `stage.sh
 undo`; and again on main 35c98f25) stopped at the same cause, before
@@ -367,9 +422,10 @@ rate).
 Update, session uboot-s1b (2026-11-26): `console-check.sh` ran on the board
 for the first time and behaved as documented: exit 6 (slot busy), the board
 read correctly as a NanoPC-T6 with `/dev/ttyS2` at 1500000. Nothing was
-rebooted; no `t6-uboot-s1b` log slice exists, and no `t6-uboot-go` record (a
-`prompt-reads.sh --go` or `prompt-go.sh --go` record directory) has been made
-by any session. A second blocker is the farm's "never reboot" rule for the
+rebooted; no `t6-uboot-s1b` log slice exists, and no session of plan #408
+made a `t6-uboot-go` record (a `prompt-reads.sh --go` or `prompt-go.sh --go`
+record directory); the 2026-11-24 ones are listed in section 4 (d). A
+second blocker is the farm's "never reboot" rule for the
 T6 resource, which conflicts with these runners, whose job is to reboot the
 board into U-Boot; the owner has to settle it, and a `T6_HAND` must be set.
 Session uboot-s2 (gl_test, triangle, dEQP rows) did not run: it needs s1b
@@ -378,7 +434,8 @@ first, its images rebuilt at one origin/main commit and each copied to
 The serial lease's registration now gives the stored baud 1500000 and a raw
 TCP stream with a shell prompt, and RFC 2217 at 1500000 for the session only;
 `console-check.sh` has to confirm that before a reboot. Measured at the
-prompt since 2026-11-12: nothing. Section 4 (c) holds the only values read
+prompt since 2026-11-12: nothing (uboot-s1c and uboot-s2c stopped before
+any board change, section 4 (d)). Section 4 (c) holds the only values read
 from U-Boot. A session's measured block comes from
 `tools/cts/t6-uboot-handover-summary.py` run on its `t6-uboot-go` record.
 
@@ -515,7 +572,8 @@ different fact (WDT0 is clocked) and does not prove the reset either.
 - UART2: read from offset 4, because offset 0 pops a received byte.
 - `CNTFRQ_EL0` is printed by the early banner's T6:A line, in decimal Hz, as
   found at entry (so U-Boot's value shows up against Linux's); `SCTLR_EL2` is
-  printed there too. The value is not yet measured on the board.
+  printed there too. The value is not yet measured on the board (no
+  committed log carries a `T6:A` line from U-Boot's state; section 4 (d)).
 
 None of the changes the audit found was made by this plan.
 
