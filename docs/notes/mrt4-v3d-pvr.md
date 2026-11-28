@@ -526,6 +526,28 @@ shape).
    PDS words (§2.2): **run case 106 `mrt3` and the regression set first in the
    same image or the one before it**, so a regression of the three-target path
    is attributed to the constant and not to the fourth target.
+1a. **Check RT 3's PBE register pair in the kick before trusting any
+   four-target result (firmware ABI, only a board settles it).** The kick
+   writes RT i's PBE pair at 3D-command dwords `30 + 4*i` and `32 + 4*i`
+   (`driver/rust/src/gpu/pvr/render.rs:58` `PBE_STRIDE_DW`, `:1521-1527`), so RT 3
+   is at dwords **42-45**. The stride 4 was measured on the board for RT 0-2
+   only; RT 3 is an extrapolation. The DDK 25.2 `RGXFWIF_CMD3D` register struct
+   is not in `third_party/ti-img-rogue-ddk-25.2`, and Mesa's upstream firmware
+   stream uses `pbe_reg_words[8][3]` (stride 6,
+   `imagination/vulkan/pvr_arch_job_render.c:1046-1052`). If the stride is
+   wrong, RT 3 stores to the wrong place or the GPU faults. Procedure: build
+   with `CONFIG_PVR_GL_TEST_MRT4=y` and the render layer's verbose flag
+   (`cfg.verbose`, `render.rs:1568`) on, run case 245, and read the dump of
+   `dk[42..45]`. It must equal `pbe_word[3]` (low and high word of both
+   entries, as `lohi` writes them), and case 245 must show attachment 3's
+   colour with no FWCCB fault and no MMU fault in the log. Record, with the
+   case line:
+   `pvr_gl_test: rt3 pbe dk[42..45] == pbe_word[3] ok, no FWCCB/MMU fault`
+   (or `MISMATCH dk[42..45]=<dump> pbe_word[3]=<dump>`). **On a mismatch, a
+   fault, or attachment 3 stored elsewhere: stop. Record the dump in the issue
+   and the commit message, and do not flip `DRAW_TARGETS` to 4**; the stride
+   is then a firmware question (try 6 per Mesa) for a separate item, not for
+   this session's guess.
 2. Boot, run once. Read: the check lines (above); the case line `gl_test: case
    245 mrt4: PASS|FAIL` (the harness's per-case line, `gl_test.c` header);
    a skip prints `gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS N < 4)`; and
