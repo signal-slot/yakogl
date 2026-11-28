@@ -82,14 +82,88 @@ Feature sets and commands are as `docs/notes/v3d71-gl-table.md` section 4 decide
 | N2 | `test    $V3D71_CONFIG (--lib)` | `cargo_test --libtest --no-fail-fast --no-default-features --features "$V3D71_CONFIG" --lib`, like `v3d_lib_tests` (`:1862-1897`) with its own ignored list file (`build/check/v3d71-ignored.txt`) | No | `v3d`; the unit tests of `src/v3d/*71.rs` and `backend71.rs` | `backend71` |
 | N3 | `test    $V3D71_CONFIG (tests/v3d71_backend.rs, ...)` | one `cargo_test --test <name>` per new integration test that needs `gpu-v3d71` (the existing `tests/v3d71_*.rs` need only `gpu-v3d` and stay in E2). Named rows, as `:1919-1989` do, each with `tests_row`/`--test` so `check_tests_reach.py` narrows them | No. Tests that need `V3D_SHC`/`MESA_V3D_TREE` skip inside the test and their input is E1's | tests: `tests` narrowed (`:255-258`); `src/v3d/*` → `v3d` | `backend71`, `cases71`, `mip71` (each adds its own target in its own commit) |
 | N4 | `test    $V3D71_CONFIG (every tests/ target)` | `cargo_test --no-fail-fast --no-default-features --features "$V3D71_CONFIG" --tests`, as `:1903-1905`: runs `v3d71_*.rs` on the 7.1 selection too | No | `scope v3d tests` | `backend71` |
-| N5 | `build   $V3D71_CONFIG, staticlib as the image links it` | the lib built `--no-default-features --features "$V3D71_CONFIG"` with the `gl-test-runner`/`test-knobs` set the image takes; mirrors the existing gl_test runner library row, `:3455-3459` (`clippy  yakogl-gltest-runner (aarch64-unknown-none)`), and the aarch64 rows of the other GPUs, `:3448-3454`. Keeps the image row (N6) from being the first place the 7.1 library builds | No | `v3d` | `backend71`, extended by `gltest71` |
-| N6 | `zephyr  rpi5 gl_test image, -Werror on our C files` | `scope v3d v3d71 gltest drivers samples` /`step "zephyr  rpi5 gl_test image, -Werror on our C files" zephyr_werror_image rpi_5 gl_test rpi5 -DCONFIG_YAKOGL_GPU_V3D71=y` inside the `ZEPHYR_WS` block, after the Pi 4 row at `:4956` and **before** the NanoPC block (it uses no `mali_csffw`, so it needs no `needs`). `zephyr_werror_image` already passes `-DYAKOGL_WERROR=ON` (`:4547-4549`) and runs the `yakogl_zephyr_present` check (`:4561-4570`, wanted here: gl_test makes GL calls) | **Yes**, `ZEPHYR_WS`, same single gap as E4 (`:5054`). No `driver/src/fw/pvr_fw_blob.h`: the Pi 5 image embeds no firmware. Needs `driver/samples/zephyr/gl_test/boards/rpi_5.conf` and `rpi_5.overlay` (Kconfig opt-ins, as `rpi_4b.conf`), and a `g_backend` pick in `gl_test` | `gltest` (`driver/tools/pvrlab/*`, `:245`), `drivers` and `samples` (`driver/samples/*`, `driver/zephyr/*`), and `v3d` (`src/v3d/*`). `src/osal/*` and `src/gl/*` are `all` (`:260`) | `gltest71` (new knob joins check.sh's lists in this commit: the `-D` above, and any `CONFIG_` it adds, in `no_board_env`-style lists if a board variable) |
+| N5 | `clippy  yakogl-capi $V3D71_IMAGE_CONFIG (aarch64-unknown-none, as the rpi_5 gl_test image links it)` and the TARGET_CONFIGS and knob additions | exact text in 3.1 | No (cargo; inside the existing `rustup target` block) | `config_scopes` maps `gpu-v3d71` to `v3d` (`*gpu-v3d*`, `:487`); the new step adds `gltest` | `gltest71` (merged); the rows wait for `check.sh`'s holder |
+| N6 | `zephyr  rpi5 gl_test image, -Werror on our C files` | exact text in 3.2 | **Yes**, `ZEPHYR_WS`, the same single gap as E4 | `scope v3d gltest drivers samples` | `gltest71` (merged); waits for `check.sh`'s holder |
 | N7 | `zephyr  rpi_5 probe images`: **no new row** | new probes land in E4's loop automatically (`:4579-4589`). `texprobe71`'s `rpi5_tex` and any later probe need a `CMakeLists.txt` and `prj.conf` and nothing else | as E4 | `tools/probes/*` → `samples` | `texprobe71` (and every later probe), no check.sh edit |
 | N8 | `tools   board.sh pi5 gl_test verdicts (rpi5_gl_test replay)` | extend `board_selftest.sh` (so row `:4258` carries it): replays of a recorded `gl_test` image's `v3d_gl_test` record end and verdict lines on `pi5-fake` (`boardprep71` did the record-end part; `texverdict71` adds `v3d_tex`/`v3d_cube`). The verdict reader is `tools/cts/pi5-gltest-verdicts.sh` (six lines, a FAIL named by its `draw refused:` line, exit 1 on a missing case, an unnamed FAIL or no record end); until the first board record it is proven on a synthetic console by `pi5-gltest-verdicts-selftest.sh`, a `tools` row of its own (`tools/check_selftests.py`) | No (host replay) | `tools` | `boardprep71` (done), `texverdict71`, `board71` for the six cases' recorded replay |
 | N9 | `tools   board-stage.sh pi5 common` self-test | a `board-stage.sh pi5 common` arm (the Pi 5 `layout`/`key` pair, `board-stage.sh:182`, usage `:175`) with its dry-run checked in `tools/cts/cts-selftest.sh` or `tools/board_selftest.sh`, the way `pi4 common` is (`images-selftest.sh:456-465` loop `am62p imx8mp rpi_4b`: add `rpi_5`) | No. The stage needs `PI5_*` values only at run time; the dry run needs none | `tools` | `stage71` |
 | N10 | `docs / tools` rows touched by results | `tools/cts/RESULTS.md` Pi 5 row and `STATUS.md` line: the `ctsdoc`-style lints reach `tools` and `docs`; no new row | No | `docs`, `tools` | `board71`, `board71-tex` (their commit message and RESULTS row; not check.sh) |
 | N11 | P12 gate: the v3d71 row (E1) at 0 gaps | not a new row: E1 must pass with an aarch64 C compiler on the runner (see section 5) | **Yes**: that compiler only (measured 2026-11-24). `MESA_V3D_TREE` and `V3D_SHC` are **not** needed: unset `MESA_V3D_TREE` means the vendored reference build, and `gltest_mesa71*` pass on it; set to a tree without `build-v3d` it is a gap, so leave it unset or point it at a built tree | `v3d71` | the P12 closer (no item yet; see section 5) |
 | N12 | P13: `dEQP-GLES2` and `glmark2` rows for the Pi 5 | image builders for `rpi_5` (`deqp-tree-images.sh rpi_5`, `images-selftest.sh:380-381` and `:456-465`) and a `board-stage.sh pi5 deqp\|ms4` stage | No in the gate (host rows only); real runs are board sessions | `tools` | P13 items (`deqp71plan` designs them) |
+
+### 3.1 and 3.2: N5 and N6 as `tools/check.sh` rows
+
+Read at `2dd734313308cc1781ad2889ac790b71bced9618` (line numbers are of that
+file). Text to paste, in the style of the neighbouring rows. Nothing here was
+run (docs only).
+
+**What is already true.** `driver/samples/zephyr/gl_test/boards/rpi_5.conf`
+sets `CONFIG_YAKOGL_GPU_V3D71=y`, so the image needs **no** `-DCONFIG_...` on
+the west line. The gl_test Kconfig selects `YAKOGL_GL_TEST_RUNNER` and
+`YAKOGL_TEST_KNOBS` (`gl_test/Kconfig:14` and `:27`), which `zephyr/CMakeLists.txt`
+turns into the crate features `gl-test-runner` and `test-knobs`
+(`capi/yakogl_capi.cmake`). The image's library is therefore
+`yakogl-capi` with `osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table,test-knobs,gl-test-runner`.
+The tip has **no** deqp or glmark2 image row for `rpi_4b` either (only the
+`rpi4 gl_test` row at `:5501`), so none is proposed for `rpi_5`; N6 is the one
+image row.
+
+**3.1 (N5)**, three additions, all in the cargo part:
+
+1. `TARGET_CONFIGS` (`:3915`), a fifth line, so the existing loop at `:3933`
+   (`clippy  $f (aarch64-unknown-none, no host-test)`, scope from
+   `config_scopes`, therefore `v3d`) covers the 7.1 library:
+
+```bash
+  "osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table"
+```
+
+2. After the `yakogl-gltest-runner` row (`:3938-3939`), inside the same
+   `if rustup target list ...` block:
+
+```bash
+  # The library as the rpi_5 gl_test image links it (Kconfig GL_TEST_RUNNER and
+  # GL_TEST_KNOBS select these two features): the 7.1 table behind both.
+  V3D71_IMAGE_CONFIG="osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table,test-knobs,gl-test-runner"
+  scope v3d gltest
+  step "clippy  yakogl-capi $V3D71_IMAGE_CONFIG (aarch64-unknown-none, the rpi_5 gl_test image's library)" \
+    cargo clippy -p yakogl-capi --no-default-features --features "$V3D71_IMAGE_CONFIG" \
+      --target aarch64-unknown-none --lib
+```
+
+3. The knob lists. `gpu-v3d71 = ["gpu-v3d"]` (`Cargo.toml:109`), so the 7.1
+   archive carries the same `src/v3d` knobs as the 4.2 one: `KNOB_V3D_SYMBOLS`
+   and `KNOB_V3D_PRODUCT` (`:4337-4338`) apply unchanged and need no new
+   variable. One line joins `check_knobs_absent` (`:4673-4677`), after the
+   `v3d` line (`:4676`), so a knob or a `gl_test_*` symbol in the 7.1 product
+   archive fails the row:
+
+```bash
+  knob_sets v3d71 '^(v3d_debug_|gl_test_)' "$KNOB_V3D_SYMBOLS" "$KNOB_V3D_PRODUCT" || return 1
+```
+
+   (`knob_sets` builds `osal-zephyr,gpu-v3d71,shaderc-online,no-shader-table`
+   with and without `test-knobs`, `:4652-4659`. If the first run shows a 7.1
+   difference from the 4.2 set, the diff the row prints is the expected set to
+   paste.) The row's key (`:4350`) already holds both variables.
+
+**3.2 (N6)**, after the Pi 4 row (`:5501`), in the `ZEPHYR_WS` block, before
+the Pi 4 examples (`scope drivers samples` rows follow them). The scope line
+is already `scope v3d gltest drivers samples` there, so only the step is new:
+
+```bash
+    step "zephyr  rpi5 gl_test image, -Werror on our C files" zephyr_werror_image rpi_5 gl_test rpi5
+```
+
+It keeps `zephyr_werror_image`'s `yakogl_zephyr_present` check (`:5079-5092`):
+the image has `CONFIG_YAKOGL=y` and `CONFIG_YAKOGL_BOARD=y`, so the hook must be
+linked. No `needs`: the Pi 5 image has no firmware blob.
+
+**What still waits for `mod71open`** (the recording library): neither row.
+Both only build and link, which the tip does (`gltest71` is merged). What waits
+is the board verdict (the six cases record nothing until then) and any N3 row
+for tests that need `gpu-v3d71`'s recorded draws.
+
 
 ## 4. Order of the open items
 
