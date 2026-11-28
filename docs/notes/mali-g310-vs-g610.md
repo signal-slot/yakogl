@@ -286,6 +286,45 @@ disk at the tip (896) and the new `gm2_*`, `prec_rebal_*` and `route_*`
 references: the claim that the G310 needs no separate compiler work now
 holds over the whole reference corpus the train compares.
 
+### Second extension: the references added since `7e27b1eb`, tip `1e1380b1`
+
+Date 2026-11-28 (plan #387 item `g310-equiv-2`), tip `1e1380b1`. Repeats the
+recheck above for every `*.expect.json` added, changed or renamed in
+`tools/mali/testdata` since `7e27b1eb`: 330 references (322 `deqp_*`, in the
+families intval5, idxloc, unifmp, vsunif, nonfin, vsuarr, opform, mixprec2,
+t3gap, loops2, kfold, highpfs and others, and 8 not named `deqp_*`:
+`gm2_mploop_1..3`, `prec_dead_unknown_vs`, `vs_tex2d_cube`, `cube_lod_fs`,
+`cube_lod_vs`, `vs_cube_edge`). Same method: Mesa 26.2.1 unmodified
+drm-shim, each reference drawn with the first option set that reproduces the
+committed G610 file (`trace` aside), then drawn on the G310v2
+(`PAN_GPU_ID=ac74:1`, the Verdin iMX95's variant) and compared per region
+(words, FAU, `work_reg_count`, `preload`, VA, `secondary_offset`,
+attributes). Nothing in `tools/mali/testdata` was changed.
+
+| Run | References | Result |
+| --- | --- | --- |
+| `tools/mali/g310_equiv2/run.sh` | 330 selected | `327 identical, 0 differ, 3 skipped` |
+| `tools/mali/g310_equiv2/cube.sh` | the 3 skipped (5 cases) | `5 identical, 0 differ` |
+
+**330 of 330 references drew a G610 redraw equal to the committed file and a
+G310v2 extract identical to it: 0 differences, in no field.** With the 387
+of the previous section, the 580 before it and the 869 of the first sample,
+the G310 = G610 shader-word claim now covers every `*.expect.json` at the
+tip. No difference to explain.
+
+Tool changes: `g310_check.py` gained the option sets `--mat-columns` (with
+and without `--uniform-values`; the two `deqp_fclane_mat_*` references) and
+a `.bind` file's `--attrib-bindings` (the earlier 10 skips; the `.bind`
+suggestion of the previous section), so `g310_check.sh` no longer skips
+them. The three cube references were made by
+`testdata/vs_cube_edge_ref.sh` with its own draw program, not `gl_ref.py`,
+so `g310_equiv2/cube.sh` draws those cases on both GPUs (ES 3 context, the
+one the references were made in). `run.sh` selects with `--since 7e27b1eb`
+(or another base) and every `*.expect.json` name. Rerun:
+`tools/mali/g310_equiv2/run.sh && tools/mali/g310_equiv2/cube.sh` (needs
+`CONNECTED_DEPS_DIR`; the shim builds on first use, about 3 minutes, and a
+rerun takes about 5 minutes).
+
 ### The identity reached the driver
 
 "Identical" does not mean "the switch did nothing". Three pieces of
