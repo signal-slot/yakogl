@@ -716,6 +716,84 @@ The shape measures above predate this tip (`e65567ea` and earlier); plan
 baseline lines are the `789ee9bb` first-refusal counts of the
 [baseline note](notes/mali-deqp-402-baseline.md); the board counts stay those of `8ff01055`.
 
+### M.5 Current causes: the host first-refusal ranking at `e90336635`
+
+The block, M.1 and M.2 above are the **board baseline**: the NanoPC-T6's
+whole tree as the board measured it (`8ff01055`, 18 rows rerun at
+`c8fbf34e`; plan #387's starting run of 2026-11-17 at `de2f2c103` read the
+same refusal texts, 9,482 of its 9,545 failures). They are not rewritten
+here. Compiler work lands on the host first and the board is rerun in
+batches, so the causes the compiler has now are the host's.
+
+**Latest host ranking** (HOST-ONLY: compile and link outcomes against the
+Mali C pair, never a board result): section 19 of
+[`notes/mali-deqp-families.md`](notes/mali-deqp-families.md), "Ranked refusal
+texts after train 2 at `e9033663`", measured at the integration tip
+`e90336635cfab7ab5839d5e3ea2d5231e5afce6d`. It ranks each case once, by its
+**first** refusal, with the `MaliError` text, the dEQP groups and the owner
+step; the table is not copied here. Section 20 (after train 3a) is being
+written in the same note and supersedes it when merged; read its tip there.
+Its counts are of the 10,597 cases of the 2026-11-15 slices that were refused,
+not of this block's 17,165, so a host count and a board count of one text
+differ even where the compiler is the same. At that tip 4,716 cases still
+meet a refusal (6,196 at `9ac31f30`, section 18). Eleven texts stay at or
+above 100 cases: `Arithmetic` 1,410, `ColourForm` (the gl_FragColor lane)
+926, `ArithConstant` 350, `TexCoord` 200, `FsOperandForm` 197, `LoopVertex`
+194, `FsUniform` 154, `IntValue` 154, `FsVaryingLoad` 123,
+`FusedMultiplyAdd` 116, `ControlFlow` 102.
+
+What left the board table since `8ff01055`, by family. "Removed" means the
+text is no longer anyone's first refusal in the host ranking; "reduced"
+means it is still there. Commits are on main's line; "train N" is a plan
+#387 pull request, a commit per step.
+
+- **A vertex shader uniform other than a float, vec2, vec3, vec4 or mat4
+  (board 184 Fail + 82 NotSupported): removed** by intval vs16-1 and vs16-2
+  (`759132f28`, `5e1feec90`, train 1), with `c6ad0933e` and `52c530991`
+  (struct members). A residue under another text, `UniformPrecision` (17), is
+  not at the 100 line.
+- **A vertex constant operation on a value that is not a finite normal float
+  (board 156 + 73): removed** by ConstantFold step A (`65a9ba11e`, train 1;
+  0 first refusals at `224cc3f7`). Its fragment half is `ConstantFold` 34;
+  what is left (NF3) is in train 3b.
+- **An integer or boolean value** (board 184 + 22 fragment): reduced by
+  intval-rest M1 (`dc0208a85`, train 1) and vs16-1/-2 above; 154 left, owner
+  intval-rest steps 2-4.
+- **A mediump fragment shader uniform** (board 291 + 1): reduced by unifmp
+  U1, U2 (`4c51beda9`, `3a2cca5b5`) and the struct word (`3e788de94`), train
+  3a, after the ranking's tip; 154 at the tip. U7 (`c8ace1052`) is later.
+- **A fragment operand form** (board 164 + 4): O2 (`ce9b759df`) and O3
+  (`66ddabe68`) of train 3a landed after the ranking's tip; O4-O8 are train
+  3c.
+- **Defect(IrIndex)** (board 205): reduced to 46 by `85ef7ea68` (train 2),
+  `d3876279b` (cause D1) and `65a9ba11e`.
+- **Loops** (board vertex 177 + 24, fragment mediump 87, forms 23 + 10):
+  `LoopMediump` reduced from 281 to 53 by `411da278c` (train 1's mediump kept
+  loop); the vertex loop (194) is not removed: `b4bbd5223` (vsloop step 1,
+  after the tip) and train 4 take it.
+- **Arithmetic** (board 862 + 670 + 78): reduced by arith steps 3 and 4a
+  (`35f40637f`), 1a (`dbdfb25b2`), 1b (`521a1624d`), 2 (`52d9d5fef`) and
+  smoothstep (`e90336635`); `Rebalance` (A8) is split out and not lowered.
+- **gl_FragColor lane** (board 789 + 5): reduced by mechanisms A, B and D's
+  ramp with mixcol MX1/MX4 (`4455e85c4`, train 1); `ColourForm` is still
+  926 on the host, the largest single text after `Arithmetic`.
+- **Constant products, negative zero** (board 194 + 98; 21 + 14): reduced by
+  K1 (`f9d2a3eaa`) and the constant-fold helper, `ArithConstant` 350 and
+  `NegZeroShared` 30 left.
+- **Vertex uniform array** (board 195): reduced to 53 by `aaa91bbc5` and
+  earlier vsuarr steps; train 3b (review) takes the rest.
+- Not changed since the board run: `TexCoord` (200), `FusedMultiplyAdd`
+  (116), `ControlFlow`/`DiscardForm`, `TexVertex`/`TexKind`, the link text
+  for varyings at different offsets (board row 15). Owners and order:
+  `docs/notes/mali-lowering-schedule.md` sections 5.5 and 5.6.
+
+The Verdin iMX95 (G310) counts of refusal lines in section N and in the
+schedule's section 5.1 (run of 2026-11-25, build `e63ab28e`, quoted there as
+main `a3d8d2de`) are kept as they are; G310 and G610 words are equal
+(`notes/mali-g310-vs-g610.md`), so the same families serve both boards. The
+board rerun that replaces the block and this subsection's baseline is a
+later item of plan #387.
+
 ## N. Mali-G310 (Verdin iMX95): the whole tree on Zephyr, at `e63ab28e`
 
 The `gpu-mali` back end on the Toradex Verdin iMX95 (i.MX 95, Mali-G310v2,
