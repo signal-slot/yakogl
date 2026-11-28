@@ -104,6 +104,7 @@
 //!   vertex into the array offsets (the 4.2 table's `first: 0`).
 //! * glBlendColor is clamped to 0..1 here (fill71 takes it clamped).
 
+use super::admit71::reason;
 use super::{attr71, draw71, ffi71, fill71, prim71};
 use crate::backend::{
     draw_pitch, GlesAttrib, GlesDraw, GLES_ATTRIBF_BYTE, GLES_ATTRIBF_FIXED, GLES_ATTRIBF_FLOAT32, GLES_ATTRIBF_SHORT,
@@ -155,8 +156,8 @@ const REF_STENCIL_OP: &str = "V3D 7.1: an unknown stencil op";
 const REF_BLEND: &str = "V3D 7.1: an unknown blend factor or equation";
 const REF_NO_PROGRAM: &str = "V3D 7.1: a draw with no linked program";
 
-fn refuse(reason: &str) -> Refusal {
-    Refusal { module: "glue71", reason: reason.to_string() }
+fn refuse(text: &str) -> Refusal {
+    Refusal { module: "glue71", reason: reason(format_args!("{}", text)) }
 }
 
 /* ---- the framebuffer --------------------------------------------------------- */
@@ -321,7 +322,10 @@ pub fn refusal(d: &GlesDraw) -> Option<Refusal> {
 /// ([`ops_textured`]), so sampling a texture is no refusal.
 fn refusal_of(d: &GlesDraw, textured: bool) -> Option<Refusal> {
     if d.samples > 1 {
-        return Some(Refusal { module: "draw71", reason: draw71::Refusal71::Multisample.message().into() });
+        return Some(Refusal {
+            module: "draw71",
+            reason: reason(format_args!("{}", draw71::Refusal71::Multisample.message())),
+        });
     }
     if d.index_count == 0 {
         return None; /* a clear alone: its state is the clear quad's own */
@@ -547,7 +551,7 @@ pub fn prim(d: &GlesDraw, indices: Option<IndexPlace>) -> Result<prim71::Draw, R
             t => {
                 return Err(Refusal {
                     module: "prim71",
-                    reason: prim71::Refusal71::IndexType(u32::from(t)).to_string(),
+                    reason: reason(format_args!("{}", prim71::Refusal71::IndexType(u32::from(t)))),
                 })
             }
         };
@@ -563,20 +567,43 @@ pub fn prim(d: &GlesDraw, indices: Option<IndexPlace>) -> Result<prim71::Draw, R
     Ok(p)
 }
 
+/// The GL vertex arrays of [`attrs_inline`]: `list()` is the first `len`
+/// entries, index = attribute location.
+#[derive(Clone, Copy, Debug)]
+pub struct Attrs71 {
+    attrs: [attr71::Attr; attr71::MAX_ATTRS],
+    len: usize,
+}
+
+impl Attrs71 {
+    pub fn list(&self) -> &[attr71::Attr] {
+        &self.attrs[..self.len]
+    }
+}
+
 /// The GL vertex arrays, index = attribute location (`vi_reg`), the
 /// locations no array names disabled. `staged[k]` is where the table copied
 /// `attribs[k]`'s draw-time bytes (`cpu`), read only for those.
-pub fn attrs(d: &GlesDraw, staged: &[u32]) -> Result<Vec<attr71::Attr>, Refusal> {
+pub fn attrs_inline(d: &GlesDraw, staged: &[u32]) -> Result<Attrs71, Refusal> {
     let list = &d.attribs[..(d.num_attribs as usize).min(d.attribs.len())];
     let len = list.iter().map(|a| a.vi_reg as usize + 1).max().unwrap_or(0);
     if len > attr71::MAX_ATTRS {
-        return Err(Refusal { module: "attr71", reason: attr71::Refusal71::TooManyAttributes(len).message().into() });
+        return Err(Refusal {
+            module: "attr71",
+            reason: reason(format_args!("{}", attr71::Refusal71::TooManyAttributes(len).message())),
+        });
     }
-    let mut out = vec![attr71::Attr::disabled(); len];
+    let mut out = Attrs71 { attrs: [attr71::Attr::disabled(); attr71::MAX_ATTRS], len };
     for (k, a) in list.iter().enumerate() {
-        out[a.vi_reg as usize] = attr(a, if a.cpu.is_null() { None } else { staged.get(k).copied() })?;
+        out.attrs[a.vi_reg as usize] = attr(a, if a.cpu.is_null() { None } else { staged.get(k).copied() })?;
     }
     Ok(out)
+}
+
+/// [`attrs_inline`] as a `Vec` (host tests).
+#[cfg(feature = "host-test")]
+pub fn attrs(d: &GlesDraw, staged: &[u32]) -> Result<Vec<attr71::Attr>, Refusal> {
+    Ok(attrs_inline(d, staged)?.list().to_vec())
 }
 
 fn attr(a: &GlesAttrib, staged: Option<u32>) -> Result<attr71::Attr, Refusal> {
@@ -587,7 +614,12 @@ fn attr(a: &GlesAttrib, staged: Option<u32>) -> Result<attr71::Attr, Refusal> {
         GLES_ATTRIBF_SHORT => attr71::GL_SHORT,
         GLES_ATTRIBF_USHORT => attr71::GL_UNSIGNED_SHORT,
         GLES_ATTRIBF_FIXED => attr71::GL_FIXED,
-        f => return Err(Refusal { module: "attr71", reason: attr71::Refusal71::Type(u32::from(f)).message().into() }),
+        f => {
+            return Err(Refusal {
+                module: "attr71",
+                reason: reason(format_args!("{}", attr71::Refusal71::Type(u32::from(f)).message())),
+            })
+        }
     };
     let buffer_addr = match (a.cpu.is_null(), staged) {
         (true, _) => addr32(a.buffer_gpu.checked_add(u64::from(a.offset)).ok_or_else(|| refuse(REF_ADDRESS))?)?,
@@ -624,19 +656,55 @@ pub struct DrawInputs<'a> {
     pub indices: Option<IndexPlace>,
 }
 
+/// One GlesDraw's operations: at most a clear and a draw, in GL order.
+#[derive(Clone, Debug)]
+pub struct Ops71<'a> {
+    items: [Option<fill71::Op<'a>>; 2],
+}
+
+impl<'a> Ops71<'a> {
+    fn push(&mut self, op: fill71::Op<'a>) {
+        let slot = if self.items[0].is_none() { 0 } else { 1 };
+        self.items[slot] = Some(op);
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.iter().flatten().count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items[0].is_none()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &fill71::Op<'a>> {
+        self.items.iter().flatten()
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = fill71::Op<'a>> {
+        let [a, b] = self.items;
+        a.into_iter().chain(b)
+    }
+}
+
 /// One GlesDraw as fill71's operations, in GL order: its clear (fused or
 /// alone), then its geometry when it draws (`index_count` > 0). `input` is
 /// read only for a draw.
-pub fn ops<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Result<Vec<fill71::Op<'a>>, Refusal> {
+pub fn ops_inline<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Result<Ops71<'a>, Refusal> {
     if let Some(r) = refusal(d) {
         return Err(r);
     }
     mapped(d, fr, input)
 }
 
+/// [`ops_inline`] as a `Vec` (host tests).
+#[cfg(feature = "host-test")]
+pub fn ops<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Result<Vec<fill71::Op<'a>>, Refusal> {
+    Ok(ops_inline(d, fr, input)?.into_iter().collect())
+}
+
 /// The operations of a GlesDraw [`refusal_of`] let through.
-fn mapped<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Result<Vec<fill71::Op<'a>>, Refusal> {
-    let mut out = Vec::with_capacity(2);
+fn mapped<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Result<Ops71<'a>, Refusal> {
+    let mut out = Ops71 { items: [None, None] };
     if let Some(c) = clear(d) {
         out.push(fill71::Op::Clear(c));
     }
@@ -644,7 +712,7 @@ fn mapped<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Res
         let Some(i) = input else {
             return Err(refuse(REF_NO_PROGRAM));
         };
-        out.push(fill71::Op::Draw(Box::new(fill71::DrawIn {
+        out.push(fill71::Op::Draw(fill71::boxed(fill71::DrawIn {
             state: draw_state(d, fr)?,
             line_width: d.line_width,
             blend_color: d.blend_color.map(|c| c.clamp(0.0, 1.0)),
@@ -663,8 +731,10 @@ fn mapped<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Res
 /* ---- textured draws (P10) ------------------------------------------------------- */
 
 /// The refusals of [`ops_textured`] (module `glue71`).
+#[cfg(feature = "host-test")]
 pub const GLUE71_TEX_REFUSALS: [&str; 1] = [REF_TEX_BINDINGS];
 
+#[cfg(feature = "host-test")]
 const REF_TEX_BINDINGS: &str =
     "V3D 7.1: the draw's TMU tables are not its sampler bindings (one entry per bound unit and stage)";
 
@@ -674,6 +744,7 @@ const REF_TEX_BINDINGS: &str =
 /// places them from texglue71 and texfill71), one entry per
 /// `GlesDraw::textures` (`fs`) and `vs_textures` (`vs`) binding, the same
 /// units. Empty: a draw that samples nothing.
+#[cfg(feature = "host-test")]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TexInputs<'a> {
     pub fs: &'a [ffi71::V3dJob71Tmu],
@@ -684,6 +755,7 @@ pub struct TexInputs<'a> {
 /// and one TMU table pair per [`fill71::Op::Draw`] among them (none for a
 /// clear alone). A table concatenates both lists over the GlesDraws of a
 /// flush. `'a` is the draw inputs' lifetime, `'t` the TMU tables'.
+#[cfg(feature = "host-test")]
 #[derive(Clone, Debug)]
 pub struct TexOps<'a, 't> {
     pub ops: Vec<fill71::Op<'a>>,
@@ -691,6 +763,7 @@ pub struct TexOps<'a, 't> {
 }
 
 /// The tables name exactly the units the GlesDraw binds.
+#[cfg(feature = "host-test")]
 fn same_units(binds: &[crate::backend::GlesTextureBind], table: &[ffi71::V3dJob71Tmu]) -> bool {
     binds.len() == table.len() && binds.iter().all(|b| table.iter().any(|t| t.unit == u32::from(b.unit)))
 }
@@ -700,6 +773,7 @@ fn same_units(binds: &[crate::backend::GlesTextureBind], table: &[ffi71::V3dJob7
 /// and every operation are [`ops`]'s. The tables must name the units the
 /// GlesDraw binds, stage by stage ([`GLUE71_TEX_REFUSALS`]); fill71 checks
 /// the words the program reads against them (`fill71::tmu_word`).
+#[cfg(feature = "host-test")]
 pub fn ops_textured<'a, 't>(
     d: &GlesDraw,
     fr: &Frame71,
@@ -716,7 +790,7 @@ pub fn ops_textured<'a, 't>(
             return Err(refuse(REF_TEX_BINDINGS));
         }
     }
-    let ops = mapped(d, fr, input)?;
+    let ops: Vec<fill71::Op<'a>> = mapped(d, fr, input)?.into_iter().collect();
     let draws = ops.iter().filter(|o| matches!(o, fill71::Op::Draw(_))).count();
     Ok(TexOps { ops, tmu: vec![fill71::DrawTmu { fs: tex.fs, vs: tex.vs }; draws] })
 }
