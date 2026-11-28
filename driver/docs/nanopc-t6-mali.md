@@ -801,8 +801,15 @@ milestones (Zephyr booted by U-Boot), as on every board.
   reset through PSCI; the watchdog proof image came back through WDT0 alone;
   `t6_gpu` powered PD_GPU, read `GPU_ID` 0xa8670005, soft reset the GPU and
   brought its L2 up (below, "Z1" and "The GPU power-on"). The sign-off form
-  (U-Boot starting the image) has not run; the 2026-11 t6-uboot sessions
-  stopped before the prompt (see "Open").
+  (U-Boot starting the image by itself) has not run. By U-Boot's `go`, the
+  tool typing the commands at the prompt, `t6_hello` and `t6_gpu` passed on
+  2026-11-24 (records `20261124-103406-t6-uboot-go`,
+  `20261124-103839-t6-uboot-go`; tools/cts/RESULTS.md, "by U-Boot's `go`"),
+  a development result whose hand-over lines are in no committed log. Plan
+  #408's sessions stopped before the prompt (log slices
+  `tools/cts/log/2026-11-t6-uboot-s1-cbb55860/` and
+  `tools/cts/log/2026-11-25-t6-uboot-65af54b5/`; uboot-s1c and uboot-s2c
+  left no t6-uboot log; see "Open").
 - **Z2**: AS0 page tables; a GPU cache flush round trip. Host side done
   2026-10-26 (design, builder, register sequence, the `t6_mmu` image and its
   gate row; below, "Z2: AS0 and a cache flush"). **PASS on the board
@@ -811,7 +818,8 @@ milestones (Zephyr booted by U-Boot), as on every board.
   of main `3aa24a68d` the same day: the first stopped in Z1's power-on,
   the second ran every Z2 step and stopped on its own reading of
   `MMU_INT_RAWSTAT`. The sign-off form (U-Boot starting the image) has
-  not run.
+  not run; by `go` typed at the prompt it passed on 2026-11-24 (record
+  `20261124-104043-t6-uboot-go`).
 - **Z3**: firmware loaded; the MCU boots; GLB version reads 1.5.0; a `PING` is
   acknowledged. Host side written 2026-10-28 ("The firmware (Z3)": the
   generator, the parser, the interface, the boot over a model of the MCU);
@@ -824,14 +832,18 @@ milestones (Zephyr booted by U-Boot), as on every board.
   (`VERDICT t6_fw PASS`, the image of main `988639752`; below, "Z3 board
   procedure", and `tools/cts/RESULTS.md`): a development result, by kexec
   out of Armbian. The sign-off form (U-Boot starting the image) has not
-  run.
+  run; by `go` typed at the prompt it passed on 2026-11-24 (record
+  `20261124-104930-t6-uboot-go`).
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. **The board run passed on 2026-11-12**
   (`VERDICT t6_submit PASS`, the image of main `ef86672bf`; below, "Z4
   board procedure", and `tools/cts/RESULTS.md`), after a first run the
   same day whose frame was right and whose record showed three
   predictions wrong (issue #4515): a development result, by kexec out of
-  Armbian. The sign-off form (U-Boot starting the image) has not run.
+  Armbian. The sign-off form (U-Boot starting the image) has not run;
+  by `go` typed at the prompt it passed on 2026-11-24 (record
+  `20261124-105135-t6-uboot-go`). gl_test and dEQP-GLES2 have not run
+  from U-Boot (plan #408's uboot-s2c left no t6-uboot log).
   From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
 
@@ -2909,11 +2921,18 @@ What is left needs a run from U-Boot or a job from Zephyr:
   the serial adapter's one slot held by the farm's console server at 115200
   where the console runs at 1500000; docs/notes/nanopc-t6-uboot-handover.md,
   section 5, "Board sessions"). Session uboot-s1b (2026-11-26) ran
-  `console-check.sh` (exit 6) and stopped before any reboot; the farm's
-  "never reboot" rule for the T6 and a missing `T6_HAND` are open. No
-  `t6-uboot-go` record exists, so keep, move or refuse, the supply read,
-  PD_GPU and the WDT0 gates (`CLKGATE_CON(15)`, `GLB_RST_CON` against
-  Armbian's 0xffdf) remain unmeasured from an image start.
+  `console-check.sh` (exit 6) and stopped before any reboot. Sessions
+  uboot-s1c and uboot-s2c stopped before any board change too and left no
+  `tools/cts/log/*-t6-uboot-s1c-*/` or `*-t6-uboot-s2c-*/` slice: the
+  adapter's slot held by the lease's console server, no `T6_HAND`, no
+  fetch access to `origin`. The seven `t6-uboot-go` records of 2026-11-24
+  (t6_hello to t6_submit, t6_cold, triangle; verdict PASS each) show that
+  `gpu_up` passes from U-Boot's state, but their hand-over lines are in no
+  committed log, so keep, move or refuse, the supply read, PD_GPU, the WDT0
+  gates (`CLKGATE_CON(15)`, `GLB_RST_CON` against Armbian's 0xffdf), the
+  UART2 reads, the WDT0 arm and feed and `CNTFRQ_EL0` remain unrecorded
+  from an image start (docs/notes/nanopc-t6-uboot-handover.md, section 4
+  (d)).
 - **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
   holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the

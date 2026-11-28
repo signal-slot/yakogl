@@ -28,9 +28,23 @@ Status:
   sessions"). `console-check.sh` ("Before a session: the console") now
   finds either cause before anything is rebooted; it ran once on the
   board (uboot-s1b, 2026-11-26): exit 6, slot busy, the board read as a
-  T6 with `/dev/ttyS2` at 1500000. No session has reached the prompt since
-  2026-11-12; the farm's "never reboot" rule for the T6 and a missing
-  `T6_HAND` are the next blockers.
+  T6 with `/dev/ttyS2` at 1500000. No session of plan #408 has reached
+  the prompt. uboot-s1c stopped before any board change (one connect to
+  the adapter answered busy), uboot-s2c did not start without s1c, and
+  neither left a `tools/cts/log/*-t6-uboot-*` slice. The causes, still open: the adapter's slot is held by the lease's
+  own console server (so the measured console route is the same as on
+  2026-11-25: busy, exit 40 or `console-check.sh` 6), no `T6_HAND` in the
+  environment, and no `origin/main` ref for `preflight.sh` check (c) on a
+  task machine without fetch access to `origin`.
+- Measured, and still predicted: the 2026-11-24 runs above passed by `go`,
+  but their records' hand-over lines (keep, move or refuse; the supply read;
+  `T6:A`'s `CNTFRQ_EL0`; `T6:A3`'s WDT0 arm and the first feed; whether the
+  image came back by PSCI or by WDT0) are in no committed log. The WDT0
+  gate words, `GLB_RST_CON`/`GLB_RST_ST` and the UART2 reads have never
+  been read at the prompt. So the WDT0 return route ("What the image does
+  itself", "The watchdog") and the console route are still as this README
+  predicts them; docs/notes/nanopc-t6-uboot-handover.md, section 4 (d),
+  lists what is open and the records it would rest on.
 - `stage.sh` stages a file under its own name: copy each build's
   `zephyr.bin` to `<probe>.bin` before `stage.sh stage`, and give
   `prompt-go.sh` that file.
