@@ -26,7 +26,7 @@ use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend};
 use yakogl::gl::buffer::glBindBuffer;
 use yakogl::gl::consts::*;
 use yakogl::gl::draw::*;
-use yakogl::gl::es3::{glClearBufferfi, glClearBufferfv, glClearBufferiv};
+use yakogl::gl::es3::{glClearBufferfi, glClearBufferfv, glClearBufferiv, glClearBufferuiv};
 use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
@@ -65,6 +65,16 @@ struct Seen {
     draws: bool,
     /// `GlesDraw::samples`.
     samples: u8,
+    do_clear: bool,
+    do_clear_depth: bool,
+    do_clear_stencil: bool,
+    clear_rgba: [f32; 4],
+    clear_depth: f32,
+    clear_stencil: u8,
+    clear_color_mask: u8,
+    clear_target_mask: u8,
+    scissor: bool,
+    scissor_rect: [i32; 4],
 }
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
@@ -77,7 +87,20 @@ const RESOLVED: [u8; 4] = [0x40, 0x80, 0xc0, 0xff];
 
 unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     let d = &*d;
-    SEEN.lock().unwrap().push(Seen { draws: d.index_count != 0, samples: d.samples });
+    SEEN.lock().unwrap().push(Seen {
+        draws: d.index_count != 0,
+        samples: d.samples,
+        do_clear: d.do_clear,
+        do_clear_depth: d.do_clear_depth,
+        do_clear_stencil: d.do_clear_stencil,
+        clear_rgba: d.clear_rgba,
+        clear_depth: d.clear_depth,
+        clear_stencil: d.clear_stencil,
+        clear_color_mask: d.clear_color_mask,
+        clear_target_mask: d.clear_target_mask,
+        scissor: d.scissor,
+        scissor_rect: d.scissor_rect,
+    });
     if d.samples > 1 {
         PENDING.lock().unwrap().push((d.target_gpu, d.target_w, d.target_h));
     }
@@ -748,4 +771,261 @@ fn delete_attached_4x_renderbuffer() {
     assert_eq!((v, err()), (GL_NONE as GLint, GL_NO_ERROR));
     assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT);
     assert_eq!((geti(GL_SAMPLE_BUFFERS), geti(GL_SAMPLES)), (0, 0));
+}
+
+/* ---- clear values, errors, masks (gl-msaa-clear-tests2) ---------------- */
+
+/// The kicks of a clear: every one is 4x, and the last that clears carries `f`.
+fn last_clear(f: impl Fn(&Seen) -> bool) -> Seen {
+    let seen = take_seen();
+    assert!(!seen.is_empty() && seen.iter().all(|s| !s.draws && s.samples == 4), "{seen:?}");
+    seen.into_iter().rev().find(|s| f(s)).expect("a kick carried the clear")
+}
+
+/// glClear of colour, depth and stencil together on a 4x colour + 4x
+/// depth-stencil framebuffer: one 4x kick carries all three clear values.
+#[test]
+fn glclear_all_buffers_carries_values_at_4_samples() {
+    let _g = context_ms4();
+    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let (e, ds) = storage(4, GL_DEPTH24_STENCIL8);
+    assert_eq!(e, GL_NO_ERROR);
+    // SAFETY: plain GL calls on names made here.
+    unsafe {
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, ds);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        glClearColor(0.25, 0.5, 0.75, 1.0);
+        glClearDepthf(0.5);
+        glClearStencil(9);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    finish();
+    let s = last_clear(|s| s.do_clear);
+    assert_eq!(s.clear_rgba, [0.25, 0.5, 0.75, 1.0]);
+    assert!(s.do_clear_depth && s.do_clear_stencil, "{s:?}");
+    assert_eq!((s.clear_depth, s.clear_stencil), (0.5, 9));
+    // SAFETY: names made here.
+    unsafe {
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glDeleteRenderbuffers(1, &ds);
+    }
+    let px = resolved(&src);
+    assert!(px.iter().all(|p| *p == RESOLVED), "{px:?}");
+}
+
+/// glClearBufferfv colour carries its value and leaves the context's clear
+/// colour alone; the kick is 4x.
+#[test]
+fn glclearbufferfv_value_and_state_restored() {
+    let _g = context_ms4();
+    let _src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let v = [0.0f32, 1.0, 0.0, 1.0];
+    // SAFETY: plain GL calls; four floats.
+    unsafe {
+        glClearColor(0.1, 0.2, 0.3, 0.4);
+        glClearBufferfv(GL_COLOR, 0, v.as_ptr());
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    finish();
+    assert_eq!(last_clear(|s| s.do_clear).clear_rgba, v);
+    let mut cc = [0.0f32; 4];
+    // SAFETY: four floats.
+    unsafe { glGetFloatv(GL_COLOR_CLEAR_VALUE, cc.as_mut_ptr()) };
+    assert_eq!(cc, [0.1, 0.2, 0.3, 0.4]);
+}
+
+/// glClearBufferuiv / glClearBufferiv colour on a 4x RGBA8 attachment: the
+/// buffer is a fixed-point one, so ES 3.0 4.2.3 gives GL_INVALID_OPERATION
+/// and nothing reaches the back end.
+#[test]
+fn glclearbufferuiv_iv_on_fixed_point_4x_is_invalid_operation() {
+    let _g = context_ms4();
+    let _src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let u = [1u32, 2, 3, 4];
+    let i = [1i32, 2, 3, 4];
+    // SAFETY: four words each.
+    unsafe {
+        glClearBufferuiv(GL_COLOR, 0, u.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_OPERATION, "uiv");
+        glClearBufferiv(GL_COLOR, 0, i.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_OPERATION, "iv");
+    }
+    finish();
+    assert!(take_seen().is_empty());
+}
+
+/// glClearBufferfi: the combined clear on a 4x depth-stencil attachment
+/// carries both values; buffer other than GL_DEPTH_STENCIL is
+/// GL_INVALID_ENUM and a drawbuffer other than 0 is GL_INVALID_VALUE.
+#[test]
+fn glclearbufferfi_on_4x_values_and_errors() {
+    let _g = context_ms4();
+    let _src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let (e, ds) = storage(4, GL_DEPTH24_STENCIL8);
+    assert_eq!(e, GL_NO_ERROR);
+    // SAFETY: plain GL calls on names made here.
+    unsafe {
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, ds);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        glClearBufferfi(GL_DEPTH_STENCIL, 0, 0.75, 5);
+        assert_eq!(glGetError(), GL_NO_ERROR);
+    }
+    finish();
+    let s = last_clear(|s| s.do_clear_depth);
+    assert!(s.do_clear_stencil);
+    assert_eq!((s.clear_depth, s.clear_stencil), (0.75, 5));
+    // SAFETY: plain GL calls.
+    unsafe {
+        glClearBufferfi(GL_COLOR, 0, 0.0, 0);
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "buffer GL_COLOR");
+        glClearBufferfi(GL_DEPTH, 0, 0.0, 0);
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "buffer GL_DEPTH");
+        glClearBufferfi(GL_DEPTH_STENCIL, 1, 0.0, 0);
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "drawbuffer 1");
+        glClearBufferfi(GL_DEPTH_STENCIL, -1, 0.0, 0);
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "drawbuffer -1");
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glDeleteRenderbuffers(1, &ds);
+    }
+}
+
+/// The errors of the fv/iv/uiv forms on a 4x framebuffer: a buffer the form
+/// does not take is GL_INVALID_ENUM, a drawbuffer index at or above
+/// GL_MAX_DRAW_BUFFERS (or negative) is GL_INVALID_VALUE, and depth/stencil
+/// take drawbuffer 0 only. Nothing reaches the back end.
+#[test]
+fn glclearbuffer_errors_on_4x_fbo() {
+    let _g = context_ms4();
+    let _src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let max = geti(GL_MAX_DRAW_BUFFERS);
+    assert!(max >= 4);
+    let f = [0.0f32; 4];
+    let i = [0i32; 4];
+    let u = [0u32; 4];
+    // SAFETY: arrays of four words.
+    unsafe {
+        glClearBufferfv(GL_STENCIL, 0, f.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "fv stencil");
+        glClearBufferfv(GL_DEPTH_STENCIL, 0, f.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "fv depth_stencil");
+        glClearBufferiv(GL_DEPTH, 0, i.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "iv depth");
+        glClearBufferuiv(GL_DEPTH, 0, u.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "uiv depth");
+        glClearBufferuiv(GL_STENCIL, 0, u.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "uiv stencil");
+        glClearBufferfv(GL_COLOR, max, f.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "fv color max");
+        glClearBufferfv(GL_COLOR, -1, f.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "fv color -1");
+        glClearBufferiv(GL_COLOR, max, i.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "iv color max");
+        glClearBufferuiv(GL_COLOR, max, u.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "uiv color max");
+        glClearBufferfv(GL_DEPTH, 1, f.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "fv depth 1");
+        glClearBufferiv(GL_STENCIL, 1, i.as_ptr());
+        assert_eq!(glGetError(), GL_INVALID_VALUE, "iv stencil 1");
+    }
+    finish();
+    assert!(take_seen().is_empty(), "no refused clear reached the back end");
+}
+
+/// glClearBufferfv on a drawbuffer above 0 of a 4x two-target framebuffer
+/// clears that target alone (`clear_target_mask` bit 1), at 4 samples.
+#[test]
+fn glclearbufferfv_drawbuffer_1_on_4x_mrt() {
+    let _g = context_ms4();
+    let _src = framebuffer(4, &[GL_RGBA8, GL_RGBA8]).unwrap();
+    let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+    let v = [1.0f32, 0.0, 0.0, 1.0];
+    // SAFETY: two enums; four floats.
+    unsafe {
+        glDrawBuffers(2, bufs.as_ptr());
+        glClearBufferfv(GL_COLOR, 1, v.as_ptr());
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    finish();
+    let s = last_clear(|s| s.do_clear);
+    assert_eq!(s.clear_target_mask, 0b10, "{s:?}");
+    assert_eq!(s.clear_rgba, v);
+}
+
+/// A scissored glClear on a 4x framebuffer: the kick carries the scissor
+/// rectangle and 4 samples, and the resolve afterwards still works.
+#[test]
+fn scissored_clear_reaches_back_end_with_rect() {
+    let _g = context_ms4();
+    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    // SAFETY: plain GL calls.
+    unsafe {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(2, 1, 3, 4);
+        glClearColor(0.0, 0.0, 1.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    finish();
+    let s = last_clear(|s| s.do_clear);
+    assert!(s.scissor, "{s:?}");
+    assert_eq!(s.scissor_rect, [2, 1, 3, 4]);
+    let px = resolved(&src);
+    assert!(px.iter().all(|p| *p == RESOLVED), "{px:?}");
+}
+
+/// A colour-masked glClear on a 4x framebuffer keeps its mask (R and B off)
+/// in `clear_color_mask`, at 4 samples; an unmasked clear after it carries
+/// every channel.
+#[test]
+fn colour_masked_clear_keeps_mask_on_4x() {
+    let _g = context_ms4();
+    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    // SAFETY: plain GL calls.
+    unsafe {
+        glColorMask(0, 1, 0, 1);
+        glClearColor(1.0, 1.0, 1.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glColorMask(1, 1, 1, 1);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    finish();
+    let s = last_clear(|s| s.do_clear);
+    assert_eq!(s.clear_color_mask, 0b1010, "{s:?}");
+    // SAFETY: plain GL calls.
+    unsafe { glClear(GL_COLOR_BUFFER_BIT) };
+    assert_eq!(err(), GL_NO_ERROR);
+    finish();
+    let m = last_clear(|s| s.do_clear).clear_color_mask;
+    assert!(m == 0 || m == 0xf, "unmasked clear carries every channel: {m:#x}");
+    let px = resolved(&src);
+    assert!(px.iter().all(|p| *p == RESOLVED), "{px:?}");
+}
+
+/// glClear with a bad bit is GL_INVALID_VALUE on a 4x framebuffer, and an
+/// incomplete one (mixed sample counts) is GL_INVALID_FRAMEBUFFER_OPERATION;
+/// neither reaches the back end.
+#[test]
+fn glclear_refused_cases_on_4x() {
+    let _g = context_ms4();
+    let _src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    // SAFETY: plain GL calls.
+    unsafe {
+        glClear(0x8000_0000);
+        assert_eq!(glGetError(), GL_INVALID_VALUE);
+    }
+    let (e, rb1) = storage(0, GL_DEPTH_COMPONENT16);
+    assert_eq!(e, GL_NO_ERROR);
+    // SAFETY: plain GL calls on names made here.
+    unsafe {
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb1);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE);
+        glClear(GL_COLOR_BUFFER_BIT);
+        assert_eq!(glGetError(), GL_INVALID_FRAMEBUFFER_OPERATION);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glDeleteRenderbuffers(1, &rb1);
+    }
+    finish();
+    assert!(take_seen().is_empty());
 }
