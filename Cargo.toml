@@ -146,11 +146,11 @@ test-knobs = []
 # ES 3.0 multisample renderbuffers (docs/notes/es3-msaa-renderbuffers.md).
 # The capability is the back end table's `max_samples` (src/backend.rs),
 # which the GL core reads (src/gl/msaa.rs): with this feature the PowerVR
-# (src/pvr/backend.rs), the GC7000UL (src/vivante/backend.rs, msaa_fbo.rs)
-# and the Mali (src/mali/backend.rs) report 4 and draw into 4x framebuffer
-# objects, host-tested and BOARD-UNVERIFIED; without it they report 0, as
-# before. The V3D tables (src/v3d/backend.rs, table71.rs) still say 0
-# whatever this says (the V3D item is in review). Off by default; CMake's
+# (src/pvr/backend.rs), the GC7000UL (src/vivante/backend.rs, msaa_fbo.rs),
+# the Mali (src/mali/backend.rs) and the V3D 4.2 (src/v3d/backend.rs) report
+# 4 and draw into 4x framebuffer objects, host-tested and BOARD-UNVERIFIED;
+# without it they report 0, as before. The V3D 7.1 table (src/v3d/table71.rs)
+# still says 0 whatever this says. Off by default; CMake's
 # YAKOGL_MSAA_FBO names it (capi/yakogl_capi.cmake) and the Zephyr option
 # CONFIG_YAKOGL_MSAA_FBO (zephyr/Kconfig, the samples' msaa-fbo.conf) turns it on.
 msaa-fbo = []
