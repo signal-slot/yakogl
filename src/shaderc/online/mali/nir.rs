@@ -4793,8 +4793,23 @@ enum Step {
     LoopBegin(ir::Range, u32),
     /// The loop's head test, `if (c) {} else break;` (`Lower::break_unless`).
     Head(ir::Src),
-    /// The end of a loop's body: the index of its [`Step::LoopBegin`].
+    /// The end of a loop's body: the index of its [`Step::LoopBegin`] or
+    /// [`Step::JLoop`].
     LoopEnd(u32),
+    /// A loop of [`vs_put_jloop`]'s form, unrolled with its jumps: the
+    /// index of its [`Step::LoopEnd`]. Its body's steps follow.
+    JLoop(u32),
+    /// An `if` holding a `break` or `continue` in a [`Step::JLoop`] body,
+    /// whose condition folds in each pass: the index of its else side's
+    /// first step. Its then side follows, ended by a [`Step::JElse`].
+    JIf(ir::Src, u32),
+    /// The end of a [`Step::JIf`]'s then side: the index after its else
+    /// side.
+    JElse(u32),
+    /// A `break` of the innermost unrolled loop.
+    Brk,
+    /// A `continue` of the innermost unrolled loop.
+    Cont,
 }
 
 /// A loop body the vertex walk takes (plan #367 lower-int-loops,
@@ -4860,6 +4875,269 @@ fn put_loop(m: &Module<'_>, body: ir::Range, steps: &mut [Step], k: &mut usize) 
     }
     steps[*k] = Step::LoopEnd(begin as u32);
     *k += 1;
+}
+
+/// Node list `nodes` jumps in the loop it is in: a `break` or a `continue`
+/// outside a nested loop.
+fn vs_jumps(m: &Module<'_>, nodes: &[IrNode]) -> bool {
+    nodes.iter().any(|nd| match *nd {
+        IrNode::Break | IrNode::Continue => true,
+        IrNode::If { then_, else_, .. } => vs_jumps(m, m.nodes_of(then_)) || vs_jumps(m, m.nodes_of(else_)),
+        _ => false,
+    })
+}
+
+/// How many `if`s deep the deepest jump of `nodes` stands ([`vs_jumps`]),
+/// `None` with no jump.
+fn vs_jump_depth(m: &Module<'_>, nodes: &[IrNode]) -> Option<usize> {
+    nodes
+        .iter()
+        .filter_map(|nd| match *nd {
+            IrNode::Break | IrNode::Continue => Some(0),
+            IrNode::If { then_, else_, .. } => {
+                vs_jump_depth(m, m.nodes_of(then_)).max(vs_jump_depth(m, m.nodes_of(else_))).map(|d| d + 1)
+            }
+            _ => None,
+        })
+        .max()
+}
+
+/// Calls `f` on each node of `nodes` and of the lists under it, but the
+/// body `skip` of a loop.
+fn vs_visit(m: &Module<'_>, nodes: &[IrNode], skip: Option<ir::Range>, f: &mut dyn FnMut(&IrNode)) {
+    for nd in nodes {
+        f(nd);
+        match *nd {
+            IrNode::If { then_, else_, .. } => {
+                vs_visit(m, m.nodes_of(then_), skip, f);
+                vs_visit(m, m.nodes_of(else_), skip, f);
+            }
+            IrNode::Loop { body } if Some(body) != skip => vs_visit(m, m.nodes_of(body), skip, f),
+            _ => {}
+        }
+    }
+}
+
+/// A loop `nir_opt_dead_cf` removes (nir_opt_dead_cf.c:172-240,
+/// `node_is_dead`): its body stores no output, discards nothing and holds
+/// no `return`, and nothing after it reads a value it makes or a local it
+/// stores (no phi follows it). deqp_vsloop_uni_only_continue's `do {
+/// continue; } while (++i < ui_three);`: the bound is never read. A local
+/// read anywhere outside the body counts as read after it.
+fn vs_dead_loop(m: &Module<'_>, body: ir::Range) -> bool {
+    let mut effect = false;
+    let (mut lo, mut hi) = (u32::MAX, 0u32);
+    vs_visit(m, m.nodes_of(body), None, &mut |nd| match *nd {
+        IrNode::Instr(id) => {
+            (lo, hi) = (lo.min(id.0), hi.max(id.0));
+            effect |= matches!(m.instr(id), Some(IrOp::StoreOutput { .. } | IrOp::Discard) | None);
+        }
+        IrNode::Return => effect = true,
+        _ => {}
+    });
+    if effect {
+        return false;
+    }
+    let inside = |v: ir::ValueId| -> bool {
+        if v.0 < lo || v.0 > hi {
+            return false;
+        }
+        let mut found = false;
+        vs_visit(m, m.nodes_of(body), None, &mut |nd| found |= *nd == IrNode::Instr(ir::InstrId(v.0)));
+        found
+    };
+    let stored = |l: ir::LocalId| -> bool {
+        let mut found = false;
+        vs_visit(m, m.nodes_of(body), None, &mut |nd| {
+            if let IrNode::Instr(id) = *nd {
+                found |= matches!(m.instr(id), Some(IrOp::StoreLocal { local, .. }) if *local == l);
+            }
+        });
+        found
+    };
+    let mut read = false;
+    vs_visit(m, m.nodes_of(m.body), Some(body), &mut |nd| match *nd {
+        IrNode::Instr(id) => {
+            if let Some(op) = m.instr(id) {
+                op.for_each_src(|s| read |= inside(s.val));
+                if let IrOp::LoadLocal { local, .. } = *op {
+                    read |= stored(local);
+                }
+            }
+        }
+        IrNode::If { cond, .. } => read |= inside(cond.val),
+        _ => {}
+    });
+    !read
+}
+
+/// The locals IR value `v` reads, through the operations it is made of,
+/// set in `out`.
+fn vs_cond_locals(m: &Module<'_>, v: ir::ValueId, depth: u32, out: &mut dyn FnMut(ir::LocalId)) {
+    match m.def(v) {
+        Some(&IrOp::LoadLocal { local, .. }) => out(local),
+        Some(&IrOp::Alu(a, s)) if depth < 16 => {
+            for x in s.iter().take(super::nir_fs::ir_arity(a)) {
+                vs_cond_locals(m, x.val, depth + 1, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A loop whose jumps' conditions read a local an earlier loop of the same
+/// list stores (deqp_loops3_vs_fn_after_seq: `for (; i < 10; i++)` after
+/// `for (i = 0; i < 6; i++)`): Mesa's loop analysis finds no constant start
+/// for its counter before the first loop is unrolled, so it keeps the
+/// second (fitted to that reference, not derived from a Mesa pass).
+fn vs_counter_after_loop(m: &Module<'_>, before: &[IrNode], body: ir::Range) -> bool {
+    let mut after = false;
+    for nd in m.nodes_of(body) {
+        let IrNode::If { cond, then_, else_ } = *nd else { continue };
+        if !vs_jumps(m, m.nodes_of(then_)) && !vs_jumps(m, m.nodes_of(else_)) {
+            continue;
+        }
+        vs_cond_locals(m, cond.val, 0, &mut |l| {
+            for b in before {
+                let IrNode::Loop { body: earlier } = *b else { continue };
+                vs_visit(m, m.nodes_of(earlier), None, &mut |n| {
+                    if let IrNode::Instr(id) = *n {
+                        after |= matches!(m.instr(id), Some(IrOp::StoreLocal { local, .. }) if *local == l);
+                    }
+                });
+            }
+        });
+    }
+    after
+}
+
+/// Writes `s` at `steps[*k]` when `steps` has room (an empty `steps`
+/// counts), and moves `k` on.
+fn vs_put(steps: &mut [Step], k: &mut usize, s: Step) {
+    if let Some(x) = steps.get_mut(*k) {
+        *x = s;
+    }
+    *k += 1;
+}
+
+/// The steps of a vertex loop [`vs_loop_shape`] does not take, at
+/// `steps[*k..]` (with an empty `steps`, only counted in `k`): unrolled
+/// with its jumps, as `simple_unroll` and `complex_unroll` leave it once
+/// every jump's condition has folded (nir_opt_loop_unroll.c; plan #402
+/// lower-vsloop, docs/notes/mali-deqp-vsloop.md). Its body holds
+/// instructions, `break`, `continue`, `if`s and nested loops; an `if` that
+/// holds a jump is a [`Step::JIf`], whose condition must fold in each pass
+/// (one that does not is a loop Mesa keeps, refused where the walk meets
+/// it); another `if` is flattened as at the top ([`vs_side`]). `before`
+/// is the list's nodes before the loop ([`vs_counter_after_loop`]).
+///
+/// Two forms are refused here as loops Mesa keeps: a `return` in the body,
+/// and a jump three or more `if`s deep (deqp_loops3_vs_fn_mixed's `if ..
+/// continue; else if .. {} else if .. break; else return`; fitted to that
+/// reference). A body whose first jump is its head test `if (c) {} else
+/// break;` and whose next one an unconditional `break` is one pass
+/// (`wrapper_unroll`, then `nir_opt_if` and `nir_opt_peephole_select`):
+/// `if (c) { .. }`, flattened ([`vs_side`]; deqp_vsmix_dyn_unconditional_break).
+fn vs_put_jloop(m: &Module<'_>, before: &[IrNode], body: ir::Range, steps: &mut [Step], k: &mut usize) {
+    let nodes = m.nodes_of(body);
+    let mut ret = false;
+    vs_visit(m, nodes, None, &mut |nd| ret |= *nd == IrNode::Return);
+    if ret || vs_jump_depth(m, nodes).is_some_and(|d| d >= 3) || vs_counter_after_loop(m, before, body) {
+        return vs_put(steps, k, Step::Refuse(MaliError::LoopVertex));
+    }
+    /* the one guarded pass */
+    let jump = |nd: &IrNode| match *nd {
+        IrNode::Break | IrNode::Continue => true,
+        IrNode::If { then_, else_, .. } => vs_jumps(m, m.nodes_of(then_)) || vs_jumps(m, m.nodes_of(else_)),
+        _ => false,
+    };
+    let mut js = nodes.iter().enumerate().filter(|(_, nd)| jump(nd)).map(|(j, _)| j);
+    if let (Some(h), Some(b)) = (js.next(), js.next()) {
+        let head = match nodes[h] {
+            IrNode::If { cond, then_, else_ } if then_.is_empty() && m.nodes_of(else_) == [IrNode::Break] => Some(cond),
+            _ => None,
+        };
+        if let (Some(cond), IrNode::Break) = (head, nodes[b]) {
+            if nodes[..h].iter().all(|nd| matches!(nd, IrNode::Instr(_))) {
+                let rest = ir::Range { first: body.first + h as u32 + 1, len: (b - h - 1) as u32 };
+                for nd in &nodes[..h] {
+                    if let IrNode::Instr(id) = *nd {
+                        vs_put(steps, k, Step::Instr(id));
+                    }
+                }
+                match vs_side(m, rest, 1) {
+                    Ok(n) if steps.is_empty() => *k += n + 3,
+                    Ok(_) => {
+                        vs_put(steps, k, Step::If(cond));
+                        vs_put_side(m, rest, steps, k);
+                        vs_put(steps, k, Step::Else);
+                        vs_put(steps, k, Step::EndIf);
+                    }
+                    Err(e) => vs_put(steps, k, Step::Refuse(e)),
+                }
+                return;
+            }
+        }
+    }
+    let begin = *k;
+    vs_put(steps, k, Step::JLoop(0));
+    vs_put_jnodes(m, nodes, steps, k);
+    vs_put(steps, k, Step::LoopEnd(begin as u32));
+    if let Some(x) = steps.get_mut(begin) {
+        *x = Step::JLoop((*k - 1) as u32);
+    }
+}
+
+/// The steps of node list `nodes` of a [`vs_put_jloop`] body.
+fn vs_put_jnodes(m: &Module<'_>, nodes: &[IrNode], steps: &mut [Step], k: &mut usize) {
+    for (j, nd) in nodes.iter().enumerate() {
+        match *nd {
+            IrNode::Instr(id) => vs_put(steps, k, Step::Instr(id)),
+            IrNode::Break => vs_put(steps, k, Step::Brk),
+            IrNode::Continue => vs_put(steps, k, Step::Cont),
+            IrNode::Return => vs_put(steps, k, Step::Refuse(MaliError::LoopVertex)),
+            IrNode::Loop { body } if vs_dead_loop(m, body) => {}
+            IrNode::Loop { body } if vs_loop_shape(m, body) => {
+                if steps.is_empty() {
+                    *k += vs_loop_steps(m, body);
+                } else {
+                    put_loop(m, body, steps, k);
+                }
+            }
+            IrNode::Loop { body } => vs_put_jloop(m, &nodes[..j], body, steps, k),
+            IrNode::If { cond, then_, else_ } => {
+                let jumps = vs_jumps(m, m.nodes_of(then_)) || vs_jumps(m, m.nodes_of(else_));
+                match vs_const_cond(m, cond) {
+                    Some(t) => vs_put_jnodes(m, m.nodes_of(if t { then_ } else { else_ }), steps, k),
+                    None if jumps => {
+                        let at = *k;
+                        vs_put(steps, k, Step::JIf(cond, 0));
+                        vs_put_jnodes(m, m.nodes_of(then_), steps, k);
+                        let e = *k;
+                        vs_put(steps, k, Step::JElse(0));
+                        vs_put_jnodes(m, m.nodes_of(else_), steps, k);
+                        if let Some(x) = steps.get_mut(at) {
+                            *x = Step::JIf(cond, (e + 1) as u32);
+                        }
+                        if let Some(x) = steps.get_mut(e) {
+                            *x = Step::JElse(*k as u32);
+                        }
+                    }
+                    None => match (vs_side(m, then_, 1), vs_side(m, else_, 1)) {
+                        (Ok(a), Ok(b)) if steps.is_empty() => *k += a + b + 3,
+                        (Ok(_), Ok(_)) => {
+                            vs_put(steps, k, Step::If(cond));
+                            vs_put_side(m, then_, steps, k);
+                            vs_put(steps, k, Step::Else);
+                            vs_put_side(m, else_, steps, k);
+                            vs_put(steps, k, Step::EndIf);
+                        }
+                        (Err(e), _) | (_, Err(e)) => vs_put(steps, k, Step::Refuse(e)),
+                    },
+                }
+            }
+        }
+    }
 }
 
 /// How deep the vertex walk nests `if`s ([`vs_side`]): ideas vs 51b2's
@@ -5032,14 +5310,20 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s mut [Step], M
         vs_const_cond(m, cond).map(|t| if t { then_ } else { else_ })
     };
     let mut n = 0;
-    for nd in nodes {
+    for (j, nd) in nodes.iter().enumerate() {
         n += match *nd {
             IrNode::If { cond, then_, else_ } if taken(cond, then_, else_).is_some() => {
                 let r = taken(cond, then_, else_).unwrap_or(then_);
                 vs_side_at(m, r, &mut 0, None).map_or(1, |k| k.max(1))
             }
             IrNode::If { then_, else_, .. } => flat(then_, else_).map_or(1, |k| k + 3),
+            IrNode::Loop { body } if vs_dead_loop(m, body) => 0,
             IrNode::Loop { body } if vs_loop_shape(m, body) => vs_loop_steps(m, body),
+            IrNode::Loop { body } => {
+                let mut c = 0;
+                vs_put_jloop(m, &nodes[..j], body, &mut [], &mut c);
+                c
+            }
             _ => 1,
         };
     }
@@ -5056,9 +5340,13 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s mut [Step], M
             IrNode::Instr(id) => put!(Step::Instr(id)),
             IrNode::Return if j + 1 == nodes.len() => {}
             /* a counted or uniform-bounded `for` ([`vs_loop_shape`]) */
+            /* a loop with no effect is removed ([`vs_dead_loop`]) */
+            IrNode::Loop { body } if vs_dead_loop(m, body) => {}
             IrNode::Loop { body } if vs_loop_shape(m, body) => put_loop(m, body, steps, &mut k),
-            /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
-            IrNode::Loop { .. } => put!(Step::Refuse(MaliError::LoopVertex)),
+            /* any other loop is unrolled with its jumps ([`vs_put_jloop`]);
+             * one Mesa keeps is refused there or in the walk
+             * (intloop_loop_nested_vs: Mesa keeps the loops as blocks) */
+            IrNode::Loop { body } => vs_put_jloop(m, &nodes[..j], body, steps, &mut k),
             /* an `if` of a constant condition is its taken side, inline
              * ([`vs_const_cond`]): no select and no peephole limit */
             IrNode::If { cond, then_, else_ } if taken(cond, then_, else_).is_some() => {
@@ -5097,7 +5385,19 @@ fn vs_ir_dead(m: &Module<'_>, steps: &[Step], scratch: &Arena<'_>, dead: &mut [b
     const DEPTH: usize = 16;
     if m.instrs.len() > dead.len()
         || m.locals.len() > MAX_LOCALS
-        || steps.iter().any(|s| matches!(s, Step::LoopBegin(..) | Step::Head(_) | Step::LoopEnd(_)))
+        || steps.iter().any(|s| {
+            matches!(
+                s,
+                Step::LoopBegin(..)
+                    | Step::Head(_)
+                    | Step::LoopEnd(_)
+                    | Step::JLoop(_)
+                    | Step::JIf(..)
+                    | Step::JElse(_)
+                    | Step::Brk
+                    | Step::Cont
+            )
+        })
     {
         return Ok(());
     }
@@ -5162,7 +5462,15 @@ fn vs_ir_dead(m: &Module<'_>, steps: &[Step], scratch: &Arena<'_>, dead: &mut [b
                     });
                 }
             }
-            Step::Refuse(_) | Step::LoopBegin(..) | Step::Head(_) | Step::LoopEnd(_) => {}
+            Step::Refuse(_)
+            | Step::LoopBegin(..)
+            | Step::Head(_)
+            | Step::LoopEnd(_)
+            | Step::JLoop(_)
+            | Step::JIf(..)
+            | Step::JElse(_)
+            | Step::Brk
+            | Step::Cont => {}
         }
     }
     if depth != 0 {
@@ -6154,6 +6462,51 @@ fn walk<'s>(
                      * loop (`complex_unroll`) has no vertex reference */
                     _ => return Err(MaliError::LoopVertex),
                 }
+                continue;
+            }
+            /* a loop unrolled with its jumps ([`vs_put_jloop`]): pass after
+             * pass, each jump's condition folded, until a `break` leaves it */
+            Step::JLoop(end) => {
+                if !matches!(lp, VsLoop::None) {
+                    if matches!(lp, VsLoop::Kept) || nouter == outer.len() {
+                        return Err(MaliError::LoopVertex);
+                    }
+                    outer[nouter] = lp;
+                    nouter += 1;
+                }
+                lp = VsLoop::Unroll { end: end as usize, pass: 0, first: vs.n, guess: None };
+                continue;
+            }
+            /* a jump's condition that does not fold in a pass: a loop Mesa
+             * keeps (`complex_unroll` takes none of these; step 2) */
+            Step::JIf(src, at) => {
+                match lane(w, src, 0) {
+                    Val::Const(0) => k = at as usize,
+                    Val::Const(_) => {}
+                    _ => return Err(MaliError::LoopVertex),
+                }
+                continue;
+            }
+            Step::JElse(at) => {
+                k = at as usize;
+                continue;
+            }
+            Step::Brk => {
+                let VsLoop::Unroll { end, first, .. } = lp else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                if vs.n - first > super::nir_fs::LOOP_UNROLL_LIMIT * super::nir_fs::MAX_UNROLL_ITERATIONS {
+                    return Err(MaliError::LoopVertex);
+                }
+                lp = VsLoop::None;
+                if nouter > 0 {
+                    nouter -= 1;
+                    lp = outer[nouter];
+                }
+                k = end + 1;
+                continue;
+            }
+            Step::Cont => {
+                let VsLoop::Unroll { end, .. } = lp else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                k = end;
                 continue;
             }
             Step::LoopEnd(begin) => {

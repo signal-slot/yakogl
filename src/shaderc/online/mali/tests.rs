@@ -1252,7 +1252,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * 0.5; }", MaliError::MixedPrecision),
         /* the compare is lowered (vs-cmp-clamp); the `if` is not */
         (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::ControlFlow),
-        (VS, "attribute vec4 p; void main(){ while (true) { gl_Position = p; break; } }", MaliError::LoopVertex),
+        /* a `break` behind a run-time condition: a loop Mesa keeps (an
+         * unconditional one is one pass since plan #402 lower-vsloop) */
+        (VS, "attribute vec4 p; void main(){ vec4 v = p; while (true) { if (v.x > 1.0) break; v = v * 0.5; } gl_Position = v; }", MaliError::LoopVertex),
         /* a mediump `if` with a look-up under it keeps its branch
          * (cflow_148_texbranch, nir_fs.rs `kept16`): one over a varying,
          * or whose look-up reads a varying, has no reference there

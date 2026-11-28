@@ -12,7 +12,10 @@
 //! today with "a loop in a vertex shader" (`MaliError::LoopVertex`). It is
 //! `#[ignore]`d with that refusal. `refusals_pinned` (not ignored) holds
 //! the exact text, so the lowering that takes the loop moves its pin in the
-//! same commit.
+//! same commit. Since plan #402's `lower-vsloop` (step 1) the one guarded
+//! pass compiles; it differs from Mesa's words only in the fp16 narrowing
+//! (ours fp32 `CSEL.u32`s, Mesa's `V2F32_TO_V2F16` and `MUX.v2i16`), so it
+//! is in [`DIFFERS`], its compare still `#[ignore]`d.
 //!
 //! The shapes, HOST-ONLY at `22c5fc5f` (`tools/mali/deqp-host-measure.sh
 //! --cases` over the 196 cases whose `refusals.tsv` text in the four slices
@@ -46,12 +49,13 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The refusal every reference here is refused with today.
-const LOOP_VERTEX: &str = "Valhall: a loop in a vertex shader is not lowered yet";
-
 /// Every refused reference with its whole `MaliError` message, without the
-/// `deqp_vsmix_` prefix.
-const REFUSED: &[(&str, &str)] = &[("dyn_unconditional_break", LOOP_VERTEX)];
+/// `deqp_vsmix_` prefix. None since plan #402 `lower-vsloop`.
+const REFUSED: &[(&str, &str)] = &[];
+
+/// The references that compile with other words than Mesa's: only the
+/// fp16 narrowing differs (plan #402 `lower-vsloop`).
+const DIFFERS: &[&str] = &["dyn_unconditional_break"];
 
 fn reference(name: &str) -> mali_ref::Reference {
     mali_ref::Reference::load(&format!("deqp_vsmix_{name}"))
@@ -76,7 +80,8 @@ fn refusals_pinned() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> = REFUSED.iter().map(|(n, _)| n.to_string()).collect();
+    let mut listed: Vec<String> =
+        REFUSED.iter().map(|(n, _)| n.to_string()).chain(DIFFERS.iter().map(|n| n.to_string())).collect();
     listed.sort();
     assert_eq!(on_disk, listed, "every deqp_vsmix_* reference has a test and a pin");
     let mut changed = Vec::new();
@@ -91,6 +96,15 @@ fn refusals_pinned() {
     assert!(changed.is_empty(), "{}", changed.join("\n"));
 }
 
+#[test]
+fn differences_pinned() {
+    for name in DIFFERS {
+        let r = reference(name);
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; move it to a MATCHED list");
+    }
+}
+
 /// `for (mediump int i = 0; i < one*ui_three; i++) { res = res.yzwx; break; }`
 /// with `mediump int one = int(a_one + 0.5)`. Mesa unrolls it to one pass
 /// under `0 < one*ui_three`: `F16_TO_S32` of the fp16 `a_one + 0.5`, an
@@ -100,9 +114,12 @@ fn refusals_pinned() {
 /// the first difference is instruction 1 (ours `FADD_IMM.f32` and
 /// `F32_TO_S32`, Mesa's fp16 `FADD.f32 r0.h0` and `F16_TO_S32`; 19 words
 /// ours). So past the loop it meets no int-uniform refusal. The work left is
-/// the mediump narrowing.
+/// the mediump narrowing. Since plan #402 `lower-vsloop` the loop itself is
+/// that guarded pass: 19 words ours against Mesa's 25, the first difference
+/// at instruction 1 as above (ours fp32 `CSEL.u32.eq` selects, Mesa's
+/// `MUX.v2i16` of the fp16 lanes).
 #[test]
-#[ignore = "refused: a loop in a vertex shader (one guarded pass of an attribute-scaled int-uniform bound), lowered by lower-vsloop"]
+#[ignore = "compiles but differs: vs.varying instruction 1 (FADD_IMM.f32 and F32_TO_S32 against fp16 FADD and F16_TO_S32; our f32 CSEL.u32 tree against Mesa's MUX.v2i16)"]
 fn dyn_unconditional_break() {
     assert_matches("dyn_unconditional_break");
 }
