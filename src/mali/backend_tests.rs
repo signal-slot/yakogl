@@ -557,7 +557,21 @@ fn a_draw_submits_the_frame_the_builder_makes_at_the_osal_s_vas() {
             };
             let mut open = frame::begin_frame(&mut a.desc, &mut cs).unwrap();
             let attrs = MaliShader::of(vs).unwrap().attributes;
-            add_gl_draw(&mut open, &d, progs, attrs, &ctx, &target, false, None, None, &mut a, &mut cs).unwrap();
+            add_gl_draw(
+                &mut open,
+                &d,
+                progs,
+                attrs,
+                &ctx,
+                &target,
+                false,
+                None,
+                None,
+                &DepthViews::NONE,
+                &mut a,
+                &mut cs,
+            )
+            .unwrap();
             frame::end_frame(&open, &mut a.desc, &mut cs, &ctx, &target, d.clear_rgba, None).unwrap();
             n = cs.words().len();
         }

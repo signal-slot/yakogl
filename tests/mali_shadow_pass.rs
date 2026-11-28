@@ -251,6 +251,10 @@ fn context() -> MutexGuard<'static, ()> {
             let mut b: YakoglBackend = core::ptr::read(&yakogl::mali::backend::yakogl_backend_mali);
             b.draw = Some(b_draw);
             backend::g_backend = Box::leak(Box::new(b));
+            /* the R32F texels `mali_depth_resolve` fills are what these
+             * tests check: the draw samples them, not the depth buffer in
+             * place (tests/mali_depth_in_place.rs checks that path) */
+            yakogl::mali::backend::DEPTH_IN_PLACE.store(false, Ordering::Relaxed);
             assert_eq!(yakogl::mali::backend::mali_init(), 0);
             yakogl::shaderc::g_shaderc = &yakogl::shaderc::online::SHC_ONLINE;
             assert!(!yakogl::gl::context::gl_context_create(N as u32, N as u32).is_null());

@@ -2151,9 +2151,12 @@ pub fn narrow_la_texels() -> bool {
 /// `id` holds stored depth of that size, single-sampled. The PowerVR's
 /// (`pvr_depth_sampled`): yes when the buffer owned by `id` holds depth a
 /// submitted kick stored, single-sampled, at that size; the TPU reads the
-/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The Mali
-/// keeps the CPU resolve (its texture unit is not known to read its depth
-/// layout, `gl::texture::resolve_depth`). The GC7000 answers yes for a Live,
+/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The
+/// Mali's (`mali_depth_sampled`): yes when the attachment pair's linear
+/// D24S8 buffer holds the depth a submitted frame stored, at that size, on
+/// a row stride its texture unit reads; the draw's texture reads it as
+/// Z24X8 UNORM, as panfrost samples a depth resource and as the Mali's own
+/// depth preload reads the same buffer. The GC7000 answers yes for a Live,
 /// row-linear depth plane that covers the texture
 /// (`vivante::depth_sample::gc_depth_sampled`): its product default, dtpu
 /// mode 4, samples the surface in place as D24X8 behind a texture-cache
@@ -2182,7 +2185,11 @@ pub fn samples_rendered_depth(id: u32, w: u32, h: u32) -> bool {
     {
         crate::vivante::depth_sample::gc_depth_sampled(id, w, h)
     }
-    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-powervr", feature = "gpu-vivante")))]
+    #[cfg(feature = "gpu-mali")]
+    {
+        crate::mali::backend::mali_depth_sampled(id, w, h)
+    }
+    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-powervr", feature = "gpu-vivante", feature = "gpu-mali")))]
     {
         let _ = (id, w, h);
         false
