@@ -1913,8 +1913,12 @@ impl<'s> Fs<'s> {
              * `ffma %6.yy, (1.0, 0.0), %4` (unitype_166a.stderr) */
             (AluOp::Fmul, Rule::Zero) => Ok(Val::Const(0)),
             /* `fmul(b2f(a), b)` is `bcsel(a, b, 0.0)` (nir_opt_algebraic.py:1695;
-             * gm2_fsmisc_8's `step(0.5, x) * y`, `MUX.v2i16 r0, 0x0, r2^, r0^`) */
-            (AluOp::Fmul, _) if self.b2f16(x).is_some() || self.b2f16(y).is_some() => {
+             * gm2_fsmisc_8's `step(0.5, x) * y`, `MUX.v2i16 r0, 0x0, r2^, r0^`).
+             * By a constant the `b2f` stays and the product its own
+             * (deqp_fsint_step_float_lowp's `color * 0.5 + 0.25` of `color.x
+             * = step(..)`: `MUX.v2i16`, `U16_TO_U32`, then `FMA.v2f16 r0, r0^,
+             * 0x38000000.h11, 0x34000000.h11`) */
+            (AluOp::Fmul, _) if (self.b2f16(x).is_some() && !cy) || (self.b2f16(y).is_some() && !cx) => {
                 let (m, b) = match self.b2f16(x) {
                     Some(m) => (m, y),
                     None => (self.b2f16(y).ok_or(MaliError::Defect(Defect::IrIndex))?, x),
@@ -2855,6 +2859,8 @@ impl<'s> Fs<'s> {
     fn bool32(&self, v: Val) -> bool {
         match self.alu_of(v) {
             Some((Alu::Ior | Alu::Iand, [a, b, _])) if !self.mask16(v) => self.bool32(a) && self.bool32(b),
+            /* a 16-bit mask widened for a 32-bit `iand` ([`Fs::mask_op`]) */
+            Some((Alu::I2i32, [a, ..])) => self.mask16(a),
             _ => self.mask_lane(v) || self.fcmp32(v),
         }
     }
@@ -2963,6 +2969,28 @@ impl<'s> Fs<'s> {
         self.node(Alu::Iand, [p, q, u], at)
     }
 
+    /// The graph's fp16 compares read lanes of two or more loads (dEQP's
+    /// scalar varyings, which the link packs into one load).
+    fn cmp16_of_loads(&self) -> bool {
+        let mut first = None;
+        for nd in &self.nir.nodes[..self.nir.n] {
+            let NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: 16, src, .. } = *nd else { continue };
+            for s in &src[..2] {
+                let Val::Lane(n, _) = *s else { continue };
+                if !matches!(self.nir.nodes[n as usize].kind, Kind::Input { loc, .. } if (loc as usize) < MAX_VARYINGS)
+                {
+                    continue;
+                }
+                match first {
+                    None => first = Some(n),
+                    Some(x) if x != n => return true,
+                    _ => {}
+                }
+            }
+        }
+        false
+    }
+
     /// `op` (`ior`, `iand`) of two booleans of `any` / `all`: two constants
     /// folded, two 32-bit masks a 32-bit node, two 16-bit masks a 16-bit
     /// one (`pan_nir_lower_bool_to_bitsize` gives a bool its compare's
@@ -2973,6 +3001,24 @@ impl<'s> Fs<'s> {
             (Val::Const(x), Val::Const(y)) => Ok(Val::Const(if op == Alu::Ior { x | y } else { x & y })),
             _ if self.bool32(a) && self.bool32(b) => self.int32(op, [a, b, u], at),
             _ if self.mask16(a) && self.mask16(b) => self.node(op, [a, b, u], at),
+            /* a 32-bit mask, then a 16-bit one: the 16-bit one's `i2i32`
+             * (`pan_nir_lower_bool_to_bitsize` gives the `iand` its first
+             * source's width; a 16-bit mask first is another program, with
+             * no reference here), then the 32-bit node (deqp_fsint_conv_vec2_
+             * ivec2_to_bvec4's `bvec4(in0, in1) == ref_out0`: `ICMP_OR.v2u16
+             * .eq.m1 r2, r0.h11, u2.w1.h00, 0x0`, `S16_TO_S32 r2, r2^.h0`,
+             * `LSHIFT_AND.i32 r1, r1^, 0x0.b00, r2^`) */
+            /* (not when the fp16 compares read two or more loads, dEQP's
+             * scalar varyings: Mesa's `nir_opt_vectorize` pairs the
+             * compares of the lanes the link packed into one load, lanes
+             * swapped, which these nodes do not draw;
+             * deqp_fsint_conv_bool_float_int_to_bvec3's `FCMP_OR.v2f16.ne.m1
+             * r0, r0^.h10, 0x0, 0x0`) */
+            _ if self.bool32(a) && self.mask16(b) && self.cmp16_of_loads() => Err(MaliError::IntValue),
+            _ if self.bool32(a) && self.mask16(b) => {
+                let w = self.int32(Alu::I2i32, [b, u, u], at)?;
+                self.int32(op, [a, w, u], at)
+            }
             _ => Err(MaliError::IntValue),
         }
     }
@@ -3079,11 +3125,28 @@ impl<'s> Fs<'s> {
             AluOp::Bnot | AluOp::Inot if self.mask16(p) => match self.alu_of(p) {
                 Some((Alu::Fcmp(Cmpf::Lt), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Ge), [a, b, u], at),
                 Some((Alu::Fcmp(Cmpf::Ge), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Lt), [a, b, u], at),
+                /* `inot(ieq(a, b))` is `ine(a, b)` and the reverse, at the
+                 * masks' 16 bits (deqp_fsint2_fn_bvec2_ne's `!(a.x == a.y)`:
+                 * `ICMP_OR.v2u16.ne.m1 r0, r0^.h00, r0^.h11, 0x0`) */
+                Some((Alu::Icmp(Cmpf::Eq), [a, b, _])) => self.node(Alu::Icmp(Cmpf::Ne), [a, b, u], at),
+                Some((Alu::Icmp(Cmpf::Ne), [a, b, _])) => self.node(Alu::Icmp(Cmpf::Eq), [a, b, u], at),
                 _ => Err(MaliError::IntValue),
             },
             /* `b2f` of such a mask: one 16-bit node, which a product makes a
              * select ([`Fs::op`]); any other reader has no reference */
-            AluOp::B2f if self.mask16(p) => self.node(Alu::B2f, [p, u, u], at),
+            /* a compare of two varyings' lanes takes the late rule's fp32
+             * ([`Fs::varying_cmp16`]) where nothing else reads it yet, as
+             * [`Fs::and16`]'s does (deqp_fsint_step_float_lowp's lowp
+             * `step(v_in0.z, v_in1.x)`: `FCMP_OR.f32.ge.m1 r0, r4^, r2^, 0x0`,
+             * then `MUX.v2i16`) */
+            AluOp::B2f if self.mask16(p) => {
+                if let (Some(_), Val::Lane(n, 0)) = (self.varying_cmp16(p), p) {
+                    if !self.nir.nodes[..self.nir.n].iter().any(|nd| nd.src.contains(&p)) {
+                        self.nir.nodes[n as usize].bits = 32;
+                    }
+                }
+                self.node(Alu::B2f, [p, u, u], at)
+            }
             /* `float(b)` of a 32-bit boolean (dEQP's `vec4(RES, RES, RES,
              * 1.0)` of an int `isOk`, deqp_intval_reslib_int_fs): the
              * `bcsel_pan(b, 1.0, 0.0)` the colour's store folds into its
@@ -3190,6 +3253,13 @@ impl<'s> Fs<'s> {
                 self.int32(Alu::Isub, [p, b, u], at)
             }
             AluOp::Iadd if int(self, p) && int(self, q) => self.int32(Alu::Iadd, [p, q, u], at),
+            /* `--x` / `x--` of a run-time int: `iadd(x, -1)`, whose constant
+             * [`Fs::mask_lane`] takes for a `true` (deqp_fsint_predec_effect_
+             * ivec4_lowp: `IADD_IMM.i32 r0, r0^, #0xFFFFFFFF` per lane, at
+             * 32 bits for a lowp int too: lower_precision lowers no integer) */
+            AluOp::Iadd if int(self, p) && !self.mask_lane(p) && matches!(q, Val::Const(_)) => {
+                self.int32(Alu::Iadd, [p, q, u], at)
+            }
             /* the arithmetic of the operator suite (deqp_intval_opfs_mul_
              * ivec4_highp: `IMUL.i32` per lane; a `-i` alone `ISUB.s32 0, a`) */
             AluOp::Imul if int(self, p) && int(self, q) => self.int32(Alu::Imul, [p, q, u], at),
@@ -9760,10 +9830,13 @@ fn kept_whole(
      * `Fne` arm): the `f2fmp` of each operand is still read at the link.
      * Measured: deqp_arith_op_binary_not_equal_fs_mediump's `v_in0.z !=
      * v_in1.x` and op_float_notequal_fs_mediump's `notEqual(v_in0.wy,
-     * v_in1.yx)` load both varyings `.v4` */
+     * v_in1.yx)` load both varyings `.v4`; so does another fp32 compare
+     * of two lanes (the late rule's, [`Fs::varying_cmp16`]:
+     * deqp_fsint_step_float_lowp's lowp `step(v_in0.z, v_in1.x)` loads
+     * both `.v4`) */
     let fne = order.iter().any(|&id| {
         let nd = f.nir.nodes[id as usize];
-        nd.kind == Kind::Alu(Alu::Fcmp(Cmpf::Ne)) && nd.bits == 32 && reads(&nd.src[..2]) && reached(id, 1)
+        matches!(nd.kind, Kind::Alu(Alu::Fcmp(_))) && nd.bits == 32 && reads(&nd.src[..2]) && reached(id, 1)
     });
     /* an fp32 product or sum reads a lane as loaded (the walk's arm for an
      * integer's float beside a varying's lane): the vector's `f2fmp` is
@@ -10524,6 +10597,15 @@ enum Leaf {
         k: u8,
         c: u8,
     },
+    /// Lane `c` of load `k` as the load's fp32 word, not converted: an
+    /// operand of the fp32 compare of two varyings' lanes whose `b2f16`
+    /// a colour lane takes ([`lane_tree`]; deqp_fsint_step_float_lowp's
+    /// `FCMP_OR.f32.ge.m1 r0, r4^, r2^, 0x0`, then `MUX.v2i16 r0, 0x0,
+    /// 0x3C000000.h11, r0^.h00`).
+    Word {
+        k: u8,
+        c: u8,
+    },
     /// Half `h` of node `x`, an operation of two lanes, read by an operation
     /// of one ([`lane_tree`]; gm2_fsarith_1's `r2.h11` of the matrix
     /// product's x and y pair in the dot product).
@@ -10672,6 +10754,8 @@ impl Pairs {
             P::Leaf(Leaf::Frag | Leaf::FragLane(_)) => Form::Mk,
             /* read by its `exp2` alone, whose sources are not noted */
             P::Leaf(Leaf::Raw { .. } | Leaf::RawLane { .. }) => Form::Half,
+            /* read by its fp32 compare alone ([`op`]) */
+            P::Leaf(Leaf::Word { .. }) => Form::Half,
             P::Leaf(Leaf::Part { .. }) => Form::Half,
             /* a conversion's value, as a varying pair's */
             P::Leaf(Leaf::Wide { .. } | Leaf::IntWide { .. }) => Form::Half,
@@ -12287,6 +12371,28 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         /* an fneg of a uniform's component, a source modifier of its
          * reader (75: `FADD.v2f16 r1, 0x3C000000.h11, u2.w1.neg.h00`) */
         (Some((Alu::Fneg, s)), ..) => P::Op(Alu::Fneg, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
+        /* the `b2f16` of an fp32 compare of two varyings' lanes (the late
+         * rule `flt(f2fmp(a), f2fmp(b))` -> `flt(a, b)`, [`Fs::varying_cmp16`]):
+         * the compare of the loads' fp32 words ([`Leaf::Word`]), its mask's
+         * select of 1.0h and 0.0 (deqp_fsint_step_float_lowp's lowp
+         * `step(in0, in1)`: `FCMP_OR.f32.ge.m1 r0, r4^, r2^, 0x0`, `MUX.v2i16
+         * r0, 0x0, 0x3C000000.h11, r0^.h00`) */
+        (Some((Alu::B2f, [m @ Val::Lane(mn, 0), ..])), ..)
+            if matches!(v, Val::Lane(n, _) if f.nir.nodes[n as usize].bits == 16)
+                && f.nir.nodes[mn as usize].bits == 32
+                && matches!(f.alu_of(m), Some((Alu::Fcmp(_), [a, b, _]))
+                    if [a, b].iter().all(|&x| f.input_lane(x).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS))) =>
+        {
+            let Some((c @ Alu::Fcmp(_), s)) = f.alu_of(m) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let mut w = [0u8; 2];
+            for (o, x) in w.iter_mut().zip(s) {
+                let (loc, l) = f.input_lane(x).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let (k, c) = index(f, loc, l)?;
+                *o = lone_node(pr, P::Leaf(Leaf::Word { k, c }), place)?;
+            }
+            let mask = lone_node(pr, P::Op(c, [w[0], w[1], 0]), place)?;
+            P::Op(Alu::B2f, [mask, 0, 0])
+        }
         /* a mediump compare's `b2f16` ([`Fs::cmp_select`]): the compare of
          * one lane, its operands' trees, the select of 1.0h and 0.0 that
          * opt.rs folds into the compare's `.f1` result
@@ -13058,7 +13164,9 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             used[k as usize] |= 3 << (2 * h);
             continue;
         }
-        if let P::Leaf(Leaf::RawLane { k, c }) = *x {
+        /* a transcendental's word, or an fp32 compare's ([`Leaf::Word`]):
+         * read as loaded */
+        if let P::Leaf(Leaf::RawLane { k, c } | Leaf::Word { k, c }) = *x {
             used[k as usize] |= 1 << c;
             continue;
         }
@@ -15426,6 +15534,18 @@ fn reduction_order(f: &mut Fs<'_>, lanes: &[Val], accs: &[Val]) -> Result<(), Ma
             let to = f.nir.order[..f.nir.len - 1].iter().position(|&x| x == a).ok_or(defect)?;
             f.nir.order.copy_within(to..f.nir.len - 1, to + 1);
             f.nir.order[to] = e;
+            /* the `i2i32` that widens a 16-bit compare for the 32-bit
+             * merge ([`Fs::mask_op`]) follows it, right after it */
+            let widen = (0..f.nir.len).map(|j| f.nir.order[j]).find(|&w| {
+                matches!(f.nir.nodes[w as usize], NirNode { kind: Kind::Alu(Alu::I2i32), src: [Val::Lane(s, 0), ..], .. } if s == e)
+            });
+            if let Some(w) = widen {
+                let from = f.nir.order[..f.nir.len].iter().position(|&x| x == w).ok_or(defect)?;
+                if from < to {
+                    f.nir.order.copy_within(from + 1..=to, from);
+                    f.nir.order[to] = w;
+                }
+            }
         }
     }
     Ok(())
@@ -17206,6 +17326,9 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
         }
         /* read by its `exp2` alone ([`op`]) */
         P::Leaf(Leaf::Raw { .. } | Leaf::RawLane { .. }) => return Err(MaliError::Defect(Defect::IrIndex)),
+        P::Leaf(Leaf::Word { k, c }) => {
+            Src::ssa(lv.raw.get(k as usize).and_then(|r| r[c as usize & 3]).ok_or(MaliError::Defect(Defect::IrIndex))?)
+        }
         P::Leaf(Leaf::Part { x, h }) => {
             val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(if h == 0 { Swz::H00 } else { Swz::H11 })
         }
@@ -17242,6 +17365,15 @@ fn op(
     rows: &mut u128,
 ) -> Result<(), MaliError> {
     let P::Op(a, srcs) = pr.nodes[x as usize] else { return Err(MaliError::Defect(Defect::IrIndex)) };
+    /* the fp32 compare of two loads' words ([`Leaf::Word`]): one 32-bit
+     * row, its mask read by the `b2f16` through its low half */
+    if let (Alu::Fcmp(_), P::Leaf(Leaf::Word { .. }), P::Leaf(Leaf::Word { .. })) =
+        (a, pr.nodes[srcs[0] as usize], pr.nodes[srcs[1] as usize])
+    {
+        let s = [operand(pr, srcs[0], lv, val)?, operand(pr, srcs[1], lv, val)?];
+        val[x as usize] = Some(Src::ssa(row(p, rows, Row { op: a, bits: 32, width: 1 }, &s)?));
+        return Ok(());
+    }
     /* `exp2` of a load's two fp32 words ([`Leaf::Raw`]): each lane's
      * expansion, then one narrowing of the two (gm2_fsmisc_5) */
     if let P::Leaf(Leaf::Raw { k, h }) = pr.nodes[srcs[0] as usize] {

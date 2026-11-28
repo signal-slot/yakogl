@@ -45,6 +45,9 @@ const LOWERED: &[&str] = &[
     "reslib_int_to_bool_fs",
     "reslib_ivec4_to_bvec4_fs",
     "rsg_sconv55_fs",
+    /* plan #402 item lower-fsint: `iadd(x, -1)` of a run-time int */
+    "opfs_post_decrement_effect_ivec2_highp",
+    "opfs_pre_decrement_result_int_mediump",
 ];
 
 /// The references that compile with other words than Mesa's.
@@ -58,6 +61,9 @@ const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before t
 /// dead (`nir_fs.rs` `ir_live`).
 const FRAGCOLOR: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+/// `rsg_exp76_fs` past its dead `int(varying)` (plan #402 item
+/// lower-fsint): the `exp2`.
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 const FS_UNIFORM: &str = "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message (all 22 were
@@ -66,18 +72,18 @@ const REFUSED: &[(&str, &str)] = &[
     ("cond_complex_fs", INT_VALUE),
     ("cond_compound_fs", INT_VALUE),
     ("idx_tmp_vec3_dynwrite_fs", INT_VALUE),
-    ("opfs_post_decrement_effect_ivec2_highp", INT_VALUE),
-    ("opfs_pre_decrement_result_int_mediump", INT_VALUE),
     /* the sequence's first operand is dead: the colour's lanes next */
     ("opfs_sequence_bool_vec2_mediump", FRAGCOLOR),
-    ("opfs_step_float_vec2_mediump", INT_VALUE),
-    ("opfs_step_vec3_highp", INT_VALUE),
+    /* past the `b2f` by a constant (plan #402 item lower-fsint): the
+     * colour's lanes next */
+    ("opfs_step_float_vec2_mediump", FRAGCOLOR),
+    ("opfs_step_vec3_highp", FRAGCOLOR),
     ("reslib_const_int_vs", INT_VALUE),
     ("reslib_func_bool_fs", INT_VALUE),
     ("reslib_inout_int_fs", INT_VALUE),
     ("rsg_cond12_fs", INT_VALUE),
     ("rsg_condcomb80_fs", CONTROL_FLOW),
-    ("rsg_exp76_fs", INT_VALUE),
+    ("rsg_exp76_fs", ARITH),
     ("rsg_sconv72_fs", INT_VALUE),
     /* every int and bool value dead: the uniform's form next */
     ("rsg_swizzle12_fs", FS_UNIFORM),
@@ -162,7 +168,6 @@ fn opfs_notequal_ivec3_mediump() {
 /// `shaders.operator.unary_operator.post_decrement_effect.highp_ivec2_fragment`:
 /// `res--` is `IADD_IMM.i32 #0xFFFFFFFF` per lane.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_post_decrement_effect_ivec2_highp() {
     mali_ref::assert_matches("deqp_intval3_opfs_post_decrement_effect_ivec2_highp");
 }
@@ -170,7 +175,6 @@ fn opfs_post_decrement_effect_ivec2_highp() {
 /// `shaders.operator.unary_operator.pre_decrement_result.mediump_int_fragment`:
 /// `--in0` of a mediump int.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_pre_decrement_result_int_mediump() {
     mali_ref::assert_matches("deqp_intval3_opfs_pre_decrement_result_int_mediump");
 }
@@ -186,7 +190,7 @@ fn opfs_sequence_bool_vec2_mediump() {
 /// `shaders.operator.common_functions.step.mediump_float_vec2_fragment`:
 /// `step` is `FCMP_OR.v2f16.ge.f1` (a 1.0/0.0 result).
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn opfs_step_float_vec2_mediump() {
     mali_ref::assert_matches("deqp_intval3_opfs_step_float_vec2_mediump");
 }
@@ -194,7 +198,7 @@ fn opfs_step_float_vec2_mediump() {
 /// `shaders.operator.common_functions.step.highp_vec3_fragment`: `step` at
 /// highp is `FCMP_OR.f32.ge.m1` and a `MUX.v2i16` to 1.0/0.0.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn opfs_step_vec3_highp() {
     mali_ref::assert_matches("deqp_intval3_opfs_step_vec3_highp");
 }
@@ -256,7 +260,7 @@ fn rsg_condcomb80_fs() {
 /// `shaders.random.exponential.fragment.76`: a dead `int(varying)` and
 /// `exp2(float(uniform int))` as `LDEXP.f32 1.0, u`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: arithmetic other than +, -, * and abs (the exp2); pinned by refusals_pinned"]
 fn rsg_exp76_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_exp76_fs");
 }
