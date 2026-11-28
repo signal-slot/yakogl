@@ -205,6 +205,29 @@ python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "
 [ "$(awk -F'\t' '$1 == 2 {print $4}' "$tmp/mixbout")" = imx8mp:rows00-02+x2:rows03-04 ] || fail "the both-board rate source: $(awk -F'\t' '$1 == 2 {print $4}' "$tmp/mixbout")"
 grep -q '^# rate functional.shaders = 7.5000 s/case (imx8mp:rows00-02+x2:rows03-04' "$tmp/mixbout" || fail "header lacks the both-board rate label"
 [ "$(awk -F'\t' '$1 == 0 {print $4}' "$tmp/mixbout")" = imx8mp:rows00-02 ] || fail "the Verdin-only group lost its label: $(awk -F'\t' '$1 == 0 {print $4}' "$tmp/mixbout")"
+# Armadillo-X2 forms of board.sh x2 (made-up): a refused kexec jump ('rc=3 verdict=refused', meta.txt has jump=refused,
+# refused_rc and refused, no t_reboot/back/rc_cycle, back_after=?s) is a row that did not run: no rate, no pass, no
+# crash; a return seen only over ssh (lost=, back=1, timeline 'ping n/a') is an ordinary return read from back_after
+sxr="$tmp/x2r/2026-11-imx8mp-gles3-x2-05769bf2-rows00-02"
+mkdir -p "$sxr/e00" "$sxr/e02"
+cat > "$sxr/verdicts.txt" <<EOF
+# synthetic Armadillo-X2 slice with a refused jump and a ping-less return
+board.sh x2 e00 rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none resets=absent record=absent back_after=?s
+board.sh x2 e02 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=ok back_after=21s lost=1
+EOF
+printf 'jump=refused (exit 3)\nrefused_rc=3\nrefused=kexec_zephyr refused (exit 3): made-up loader line\n' > "$sxr/e00/meta.txt"
+printf 'lost=7\nback=1\ntimeline=jump 0s, ping n/a (no reply; a new boot_id over ssh is the return), ssh back 21s, route --crash\n' > "$sxr/e02/meta.txt"
+printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tnames\n0\tx\t-\t0\t0\t0\t0\t-\t-\n2\tx\t-\t3\t0\t0\t0\t-\t-\n' > "$sxr/results.tsv"
+runxr() { python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+          --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/x2r/*" "$@"; }
+runxr > "$tmp/outxr.tsv" 2> "$tmp/errxr.txt" || fail "the refused/ping-less x2 run exited nonzero: $(cat "$tmp/errxr.txt")"
+grep -q 'Traceback\|ValueError' "$tmp/errxr.txt" && fail "the refused/ping-less x2 run raised: $(cat "$tmp/errxr.txt")"
+rowxr() { awk -F'\t' -v i="$1" '$1 == i' "$tmp/outxr.tsv" | cut -f"$2"; }
+rowxr 0 4 | grep -q '^assumed:\|^pi4:' || fail "a refused x2 row gave a measured rate: $(rowxr 0 4)"
+[ "$(rowxr 0 3)" != 0.0 ] || fail "a refused x2 row measured 0 s"
+[ "$(rowxr 2 3)" = 21.0 ] || fail "a ping-less x2 return is read from back_after: $(rowxr 2 3)"
+[ "$(rowxr 2 4)" = x2:rows00-02 ] || fail "the ping-less x2 return's rate source: $(rowxr 2 4)"
+grep -q '^# note: skipped' "$tmp/outxr.tsv" && fail "the refused/ping-less x2 slice was skipped"
 # --rows: only the named entries are listed, with the numbers they have without --rows; ranges stay inside
 run --rows 1..3 | grep -v '^#' | awk -F'\t' '$1 ~ /^[0-9]+$/ {printf "%s ", $1}' | grep -qx '1 2 3 ' || fail "--rows 1..3 lists other entries"
 [ "$(run --rows 3 | awk -F'\t' '$1 ~ /^[0-9]+$/' | cut -f1-4)" = "$(row 3 | cut -f1-4)" ] || fail "--rows 3 changes entry 3's numbers"
