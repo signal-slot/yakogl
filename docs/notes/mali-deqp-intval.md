@@ -1045,3 +1045,89 @@ refusals at de2f2c10, before the later lowerings moved some of them.
 - `||` of two fp32 compares (`FCMP_OR.f32` with a third source) and `&&`
   of two 32-bit integer compares outside `all()` are not taken: no
   reference.
+
+## 10. The fragment `&&` / `||`, an int's `-1`, and the uniform `bool(float)` (report-draft-2), done
+
+Plan #377 item report-draft-2 (HOST-ONLY). It redoes the read-only spike
+spike-intval-rest2, first at b6280bdd and again at 9c29a448, past plan
+#367's BOOL_AND (`Fs::and16`, `resized_and_order`,
+`docs/notes/mali-bool-and.md`). The tip already held M1 of
+`docs/notes/mali-intval-rest-lowering.md` (`!=` and `bool()` of run-time
+ints), which took part of that spike's result. All the changes are in
+`nir_fs.rs` (`Fs::int_lane`, `Fs::and16`, `Fs::mask_op`,
+`resized_and_order`). Each step
+takes Mesa's form from the `deqp_intval3/4/5_*` references
+(`mali-intval-rest-lowering.md` sections 4.4, 7 and 12):
+
+- **`||` of two fp16 compares** (M2): `Fs::logic_masks`. With the
+  constant first, `flt(c, a) | flt(c, b)` is `flt(c, fmax(a, b))`; with
+  it second, `flt(fmin(a, b), c)`, the mirror of `Fs::and_masks`. The `&&`
+  forms (the shared first operand's `fmin`, two `==` / `!=` left a plain
+  16-bit `iand`) were taken by plan #367's lower-train-2 (a27396fa) in
+  BOOL_AND's `Fs::and16` and `Fs::and_masks` before this landed, so this
+  step adds none of its own. Of two 32-bit booleans (int compares, bool
+  words), `&&` / `||` is a 32-bit `iand` / `ior`, which `va_fuse_cmp`
+  makes the `ICMP_AND` accumulator or `LSHIFT_AND.i32`.
+- **A 16-bit mask `&&` a 32-bit compare of two ints**:
+  `LSHIFT_AND.v2i16 r0, m16.h00, 0x0.b00, m32` (`deqp_intval5_mask1632`).
+  Its two compares are in the order BOOL_AND's `resized_and_order` gives
+  a 16-bit `iand` of a 16-bit and a 32-bit fp compare (the 32-bit one
+  first: `pan_nir_lower_bool_to_bitsize`'s `i2i16` keeps the compile's
+  `nir_move_comparisons` from moving it); that function now takes a
+  32-bit `icmp` in that place too. A 32-bit side of another kind (a compare of booleans,
+  a bool word) and the `||` of the mix are still refused.
+  `deqp_fsint_conv_*_to_bvec*` would compile with other words than
+  Mesa's, so they stay refused. The unit test's gap probe is now the `||`.
+- **`!=` / `==` of two bool uniforms' words**: `ICMP_OR.u32.ne.m1` of the
+  two words.
+- **`inot(fneu)` is `feq`, and the reverse**, for a 16-bit mask
+  (`reslib_func_bool_fs`).
+- **A constant is an int operand**. The `~0` of `in0 - 1` is no boolean,
+  so it becomes `IADD_IMM.i32 #0xFFFFFFFF` (pre- and post-decrement).
+  `imul(a, -1)` is `ineg(a)` and `imul(a, 1)` is `a` (`ISUB.s32 0, a`,
+  `reslib_inout_int_fs`).
+- **`bool(uniform float)`** of a mediump shader is the fp16 compare of the
+  uniform's lane (`FCMP_OR.v2f16.ne.f1 r0, u2.w0.h00`, `rsg_sconv72_fs`).
+
+Byte-equal now, with their `#[ignore]` dropped
+(`deqp_intval3_opfs_logical_and_bool` was already, by plan #367):
+
+- `deqp_intval3`: `opfs_post_decrement_effect_ivec2_highp`,
+  `opfs_pre_decrement_result_int_mediump`, `reslib_func_bool_fs`,
+  `reslib_inout_int_fs`, `rsg_sconv72_fs`.
+- `deqp_intval4`: `and_icmp_fs`, `logical_or_fs`.
+- `deqp_intval5`: `mask1632`.
+- `deqp_fsint`: `postdec_result_ivec3_mediump`, `predec_effect_ivec4_lowp`.
+
+Ignored across intval3, intval4 and intval5: 43 before, 34 after.
+
+These moved to a later refusal and were re-pinned:
+
+- To control flow: intval3 `rsg_cond12_fs`; intrnd
+  `bool_uniform_select_comb`.
+- Past the `if` that BOOL_AND's `walk_if16` flattens: intval3
+  `cond_complex_fs` stays at the integer text, now at the `b2f` of `RES &&
+  isOk(..)`'s select of two masks. (gm2_ideas_2 and gm2_ideas_3 had
+  already moved by plan #367: `tests/mali_int_value_ideas.rs`.)
+- To arithmetic: intval3 `idx_tmp_vec3_dynwrite_fs`, `rsg_exp76_fs`;
+  intrnd `trunc_atan_fs`; fsint2 `rnd_trig93`.
+- To the gl_FragColor lane text: intval4 `uni_bool_and_or_fs`; intval5
+  `c_bool3`, `c_bool_not`, `c_int3`, `c_int_two`; intrnd `trunc_lane_fs`.
+  These need fclane's `float(mask32) * varying` form, with `v_vtxOut`
+  folded by the link.
+
+`tools/mali/corpus-verdicts.txt` does not move (264 ok before and after;
+BOOL_AND had already moved `cond_complex.frag`, `loop_full.frag` and
+`tri_discard.frag`), nor does `tests/fixtures/mali_glmark2_verdicts.txt`
+(plan #367 had already moved ideas fs 1aca and c565 past the integer
+text).
+
+Not taken here:
+
+- The integer select (`deqp_intval4_sel_int_fs`, `sel_ivec2_fs`: M4,
+  `CSEL.u32.eq` of the widened mask). With a 32-bit `bcsel` of the int arms,
+  the colour path (`int_colour16`) still refuses the fp16 compare of a
+  varying lane, and letting that through reaches a `Defect(IrIndex)`.
+- `step`, `cond_compound_fs`, `reslib_const_int_vs` (the link's constant
+  varying), `rsg_swizzle12_fs` (a uniform form), `light_amount_0_16`
+  (UBO), `bvec4_cmp_fs` (IrIndex), and the colour-lane references.

@@ -17,7 +17,8 @@
 //! `#[ignore]`d and `refusals_pinned` holds the refusal ([`REFUSED`]): the
 //! integer/boolean text, or for the three `dead_*` references the next one,
 //! since the walk builds nothing for the dead int and bool values
-//! (`nir_fs.rs` `ir_live`). The lowering step that lifts one moves it to
+//! (`nir_fs.rs` `ir_live`); three moved past it with report-draft-2's `&&`
+//! and `-1` (the later text is pinned). The lowering step that lifts one moves it to
 //! [`LOWERED`] (byte-equal) or [`DIFFERS`] (compiles with other words than
 //! Mesa's) in the same commit and drops its `#[ignore]`. `references_parse`
 //! checks every file: the pair is there, each region's words are 64-bit hex,
@@ -50,9 +51,15 @@ const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a p
 const FRAGCOLOR: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 
+/// Past the `&&` / `-1` the intval-rest steps lowered (report-draft-2):
+/// `bool_uniform_select_comb`'s `if`, `trunc_atan_fs`'s `atan` (and
+/// `trunc_lane_fs`'s lane, [`FRAGCOLOR`]).
+const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
+
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    ("bool_uniform_select_comb", INT_VALUE),
+    ("bool_uniform_select_comb", CONTROL_FLOW),
     ("bool_varying_lane_fs", INT_VALUE),
     /* the pair of a computed lane then a constant asked for again
      * (mali-deqp-defects.md fix C) */
@@ -60,8 +67,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("dead_cond_fs", FS_OPERAND),
     ("dead_ivec_uniform_fs", FRAGCOLOR),
     ("int_uniform_lanes_fs", INT_VALUE),
-    ("trunc_atan_fs", INT_VALUE),
-    ("trunc_lane_fs", INT_VALUE),
+    ("trunc_atan_fs", ARITH),
+    ("trunc_lane_fs", FRAGCOLOR),
 ];
 
 /// The words of each reference's `fs.fragment` region (Mesa's fragment
@@ -83,7 +90,7 @@ const FS_WORDS: &[(&str, usize)] = &[
 /// (the inner `0 <= h - int(-5.0)` and the `else if` fold). The vertex
 /// shader is random too; the fragment shader has no varying left.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: control flow (if, a loop, a return before the end); pinned by refusals_pinned"]
 fn bool_uniform_select_comb() {
     mali_ref::assert_matches("deqp_intrnd_bool_uniform_select_comb");
 }
@@ -142,7 +149,7 @@ fn int_uniform_lanes_fs() {
 /// `atan` of the lanes at fp32 (`FRCP`, the polynomial `FMA.f32` chain,
 /// `CSEL.u32.eq`, the sign put back with `LSHIFT_AND/OR.i32`).
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: fragment arithmetic other than +, -, * and abs; pinned by refusals_pinned"]
 fn trunc_atan_fs() {
     mali_ref::assert_matches("deqp_intrnd_trunc_atan_fs");
 }
@@ -152,7 +159,7 @@ fn trunc_atan_fs() {
 /// fp32 varying, narrowed by `FADD.f32 .h0`; every earlier write, the int
 /// globals and the `if`s are dead or fold.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn trunc_lane_fs() {
     mali_ref::assert_matches("deqp_intrnd_trunc_lane_fs");
 }

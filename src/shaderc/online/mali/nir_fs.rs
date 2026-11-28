@@ -2809,6 +2809,36 @@ impl<'s> Fs<'s> {
         self.mask_op(Alu::Iand, a, b, at)
     }
 
+    /// `ior` of two 16-bit masks of a `||`: the constant first, `flt(c, a)
+    /// | flt(c, b)` is `flt(c, fmax(a, b))` (deqp_intval4_logical_or_fs:
+    /// `FMAX.v2f16`, then `FCMP_OR.v2f16.lt`); the constant second, `flt(a,
+    /// c) | flt(b, c)` is `flt(fmin(a, b), c)`, the mirror of
+    /// [`Fs::and_masks`] (nir_opt_algebraic.py:1158-1165). Else the 16-bit
+    /// `ior` ([`Fs::mask_op`]).
+    fn logic_masks(&mut self, op: Alu, a: Val, b: Val, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        if op == Alu::Iand {
+            return self.and_masks(a, b, at);
+        }
+        if let (Some((Alu::Fcmp(Cmpf::Lt), [c @ Val::Const(_), x, _])), Some((Alu::Fcmp(Cmpf::Lt), [d, y, _]))) =
+            (self.alu_of(a), self.alu_of(b))
+        {
+            if c == d && !matches!(x, Val::Const(_)) && !matches!(y, Val::Const(_)) {
+                let m = self.node(Alu::Fmax, [x, y, u], at)?;
+                return self.node(Alu::Fcmp(Cmpf::Lt), [c, m, u], at);
+            }
+        }
+        if let (Some((Alu::Fcmp(Cmpf::Lt), [x, c @ Val::Const(_), _])), Some((Alu::Fcmp(Cmpf::Lt), [y, d, _]))) =
+            (self.alu_of(a), self.alu_of(b))
+        {
+            if c == d {
+                let m = self.node(Alu::Fmin, [x, y, u], at)?;
+                return self.node(Alu::Fcmp(Cmpf::Lt), [m, c, u], at);
+            }
+        }
+        self.mask_op(op, a, b, at)
+    }
+
     /// The `b2f` of the product of two compare selects `x` and `y`
     /// ([`Fs::cmp_select`]), its masks in Mesa's order. Measured with
     /// NIR_DEBUG=print_fs on the drm-shim (deqp_mixprec_cmpv4, Mesa
@@ -2917,8 +2947,9 @@ impl<'s> Fs<'s> {
     /// 0x0.b00, r0^`), or of two 16-bit masks (gm2_nbshrf_2). The first
     /// compare's being fp32 makes a 32-bit `iand`, and two compares that
     /// share an operand in the same place are nir_opt_algebraic.py:1158-
-    /// 1165's `fmin` / `fmax` ([`Fs::and_masks`] folds the one with a
-    /// constant): forms no reference draws, refused.
+    /// 1165's `fmin` / `fmax` ([`Fs::and_masks`]: the constant second, or
+    /// the first operand shared); two `==` / `!=` have no rule (a plain
+    /// `iand`); the other forms no reference draws, refused.
     fn and16(&mut self, p: Val, q: Val, at: usize) -> Result<Val, MaliError> {
         let u = Val::Undef;
         if self.varying_cmp16(p).is_some() {
@@ -2973,8 +3004,25 @@ impl<'s> Fs<'s> {
             (Val::Const(x), Val::Const(y)) => Ok(Val::Const(if op == Alu::Ior { x | y } else { x & y })),
             _ if self.bool32(a) && self.bool32(b) => self.int32(op, [a, b, u], at),
             _ if self.mask16(a) && self.mask16(b) => self.node(op, [a, b, u], at),
+            /* a 16-bit mask with a 32-bit compare of two ints: a 16-bit
+             * node, the 16-bit mask first (deqp_intval5_mask1632's `(v.x >
+             * 0.0) && (i < 1)`: `LSHIFT_AND.v2i16 r0, r0^.h00, 0x0.b00, r1^`).
+             * A 32-bit mask of another kind (a compare of booleans, a bool
+             * word: deqp_fsint_conv_bool_float_int_to_bvec3's `bvec3(..) ==
+             * ref`) has other words in Mesa's program: refused */
+            _ if op == Alu::Iand && self.mask16(a) && self.int_compare(b) => self.node(op, [a, b, u], at),
+            _ if op == Alu::Iand && self.int_compare(a) && self.mask16(b) => self.node(op, [b, a, u], at),
             _ => Err(MaliError::IntValue),
         }
+    }
+
+    /// `v` is a mediump shader's 32-bit compare of two integers, neither a
+    /// boolean ([`Fs::mask_lane`]; a constant counts as an integer).
+    fn int_compare(&self, v: Val) -> bool {
+        let int = |x: Val| matches!(x, Val::Const(_)) || !self.mask_lane(x);
+        matches!(v, Val::Lane(n, 0) if self.nir.nodes[n as usize].bits == 32)
+            && matches!(self.alu_of(v), Some((Alu::Icmp(_), [x, y, _])) if int(x) && int(y))
+            && !self.prec.highp
     }
 
     /// A 32-bit integer node of a mediump shader ([`Fs::int_lane`]),
@@ -3043,7 +3091,11 @@ impl<'s> Fs<'s> {
                 NirNode { kind: Kind::Uniform { dword, .. }, bits: 32, .. } if !bool_dword(dword)),
             _ => false,
         };
-        let int = |f: &Self, v: Val| !f.mask_lane(v) || int_word(f, v);
+        /* a constant is an int operand too: `in0 - 1` is `iadd(in0, -1)`,
+         * whose ~0 is no boolean (deqp_intval3_opfs_pre_decrement_result_int_
+         * mediump, `IADD_IMM.i32 r0, r0^, #0xFFFFFFFF`); the boolean
+         * readers of 0 and ~0 are the arms above */
+        let int = |f: &Self, v: Val| matches!(v, Val::Const(_)) || !f.mask_lane(v) || int_word(f, v);
         let has32 = |f: &Self, op: Alu, src: [Val; 3]| {
             let nd = NirNode { kind: Kind::Alu(op), src, bits: 32, width: 1 };
             f.nir.nodes[..f.nir.n].contains(&nd)
@@ -3079,6 +3131,11 @@ impl<'s> Fs<'s> {
             AluOp::Bnot | AluOp::Inot if self.mask16(p) => match self.alu_of(p) {
                 Some((Alu::Fcmp(Cmpf::Lt), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Ge), [a, b, u], at),
                 Some((Alu::Fcmp(Cmpf::Ge), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Lt), [a, b, u], at),
+                /* `inot(fneu(a, b))` is `feq(a, b)` and the reverse
+                 * (deqp_intval3_reslib_func_bool_fs's `!bool(v_in0)`:
+                 * `FCMP_OR.v2f16.eq.m1 r0, r0^.h00, 0x0, 0x0`) */
+                Some((Alu::Fcmp(Cmpf::Ne), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Eq), [a, b, u], at),
+                Some((Alu::Fcmp(Cmpf::Eq), [a, b, _])) => self.node(Alu::Fcmp(Cmpf::Ne), [a, b, u], at),
                 _ => Err(MaliError::IntValue),
             },
             /* `b2f` of such a mask: one 16-bit node, which a product makes a
@@ -3117,7 +3174,14 @@ impl<'s> Fs<'s> {
              * (deqp_intval_reslib_bvec_fs's `bvec3(v_in0)`, `FCMP_OR.v2f16
              * .ne.m1 r1, r1^.h00, 0x0, 0x0` of the narrowed lane,
              * [`convert_inputs16`]); of an fp32 value, the fp32 one */
-            AluOp::F2b if self.input_lane(p).is_some() || self.is_f16(p) => {
+            /* of a mediump float uniform, its fp16 lane (deqp_intval3_
+             * rsg_sconv72_fs's `bool(b)`: `FCMP_OR.v2f16.ne.f1 r0, u2.w0.h00,
+             * 0x0, 0x0`) */
+            AluOp::F2b
+                if self.input_lane(p).is_some()
+                    || self.is_f16(p)
+                    || (!self.prec.highp && self.uniform_dword(p).is_some() && !int_word(self, p)) =>
+            {
                 self.node(Alu::Fcmp(Cmpf::Ne), [p, Val::Const(0), u], at)
             }
             AluOp::F2b if self.fp32_lane(p) => self.op32(Alu::Fcmp(Cmpf::Ne), [p, Val::Const(0), u], at),
@@ -3139,9 +3203,27 @@ impl<'s> Fs<'s> {
             /* `&&` of two fp32 compares' masks ([`Fs::and_fcmp32`]): a
              * 32-bit `iand`, `FCMP_AND.f32` once fused */
             AluOp::Iand if self.and_fcmp32(p, q) => self.mask_op(Alu::Iand, p, q, at),
+            /* `&&` of a 16-bit mask and a 32-bit compare of two ints
+             * ([`Fs::mask_op`]; deqp_intval5_mask1632) */
+            AluOp::Iand if (self.mask16(p) && self.int_compare(q)) || (self.int_compare(p) && self.mask16(q)) => {
+                self.mask_op(Alu::Iand, p, q, at)
+            }
             /* `&&` of a mediump compare's 16-bit mask and another
-             * ([`Fs::and16`], BOOL_AND) */
+             * ([`Fs::and16`], BOOL_AND; the shared-operand forms are
+             * [`Fs::and_masks`]) */
             AluOp::Iand if self.mask16(p) && self.mask16(q) => self.and16(p, q, at),
+            /* `||` of two fp16 compares' masks: the `fmax` / `fmin` rules
+             * of nir_opt_algebraic.py ([`Fs::logic_masks`];
+             * deqp_intval4_logical_or_fs) */
+            AluOp::Ior if self.mask16(p) && self.mask16(q) => self.logic_masks(Alu::Ior, p, q, at),
+            /* of two 32-bit booleans (int compares, bool words): a 32-bit
+             * `iand` / `ior`, `va_fuse_cmp`'s `ICMP_AND` accumulator or
+             * `LSHIFT_AND.i32` (deqp_intval4_and_icmp_fs,
+             * deqp_intval5_c_int3, deqp_intval5_c_bool3) */
+            AluOp::Iand | AluOp::Ior if self.bool32(p) && self.bool32(q) && !self.fcmp32(p) && !self.fcmp32(q) => {
+                let op = if a == AluOp::Iand { Alu::Iand } else { Alu::Ior };
+                self.int32(op, [p, q, u], at)
+            }
             /* `int(b)` of an fp16 compare's mask: `b2i32` keeps its 16-bit
              * source (no arm of `lower_alu_instr` resizes it), `MUX.i32 0,
              * 1, b` reading the mask replicated into a word
@@ -3160,6 +3242,13 @@ impl<'s> Fs<'s> {
             }
             AluOp::Ieq | AluOp::Ine if self.mask_lane(q) && matches!(p, Val::Const(0 | u32::MAX)) => {
                 self.int_lane(m, a, srcs, [q, p, u], at)
+            }
+            /* `!=` / `==` of two bool uniforms' words: the 32-bit compare of
+             * the words (deqp_intval4_uni_bool_and_or_fs's `u_a != u_b`,
+             * `ICMP_OR.u32.ne.m1 r0, u2.w0, u2.w1, r0^`) */
+            AluOp::Ieq | AluOp::Ine if bool_word(self, p) && bool_word(self, q) => {
+                let c = if a == AluOp::Ieq { Cmpf::Eq } else { Cmpf::Ne };
+                self.int32(Alu::Icmp(c), [p, q, u], at)
             }
             AluOp::Ilt => self.int32(Alu::Icmp(Cmpf::Lt), [p, q, u], at),
             /* GLSL's `a <= b` is `ige(b, a)`, a constant on the left as it
@@ -3190,6 +3279,21 @@ impl<'s> Fs<'s> {
                 self.int32(Alu::Isub, [p, b, u], at)
             }
             AluOp::Iadd if int(self, p) && int(self, q) => self.int32(Alu::Iadd, [p, q, u], at),
+            /* `imul(a, -1)` is `ineg(a)` and `imul(a, 1)` is `a`
+             * (nir_opt_algebraic.py; deqp_intval3_reslib_inout_int_fs's `f *
+             * in0` of `f = -1`: `ISUB.s32 r0, 0x0, r0^`) */
+            AluOp::Imul
+                if int(self, p)
+                    && int(self, q)
+                    && matches!((p, q), (Val::Const(1 | u32::MAX), _) | (_, Val::Const(1 | u32::MAX))) =>
+            {
+                let (c, x) = if matches!(p, Val::Const(_)) { (p, q) } else { (q, p) };
+                if c == Val::Const(1) {
+                    Ok(x)
+                } else {
+                    self.int32(Alu::Ineg, [x, u, u], at)
+                }
+            }
             /* the arithmetic of the operator suite (deqp_intval_opfs_mul_
              * ivec4_highp: `IMUL.i32` per lane; a `-i` alone `ISUB.s32 0, a`) */
             AluOp::Imul if int(self, p) && int(self, q) => self.int32(Alu::Imul, [p, q, u], at),
@@ -14047,7 +14151,9 @@ pub fn mask_colour(f: &Fs<'_>) -> bool {
 /// link's run swaps the two, the compile's would swap them back). The two
 /// runs above model no conversion: their `a, b, iand` is made `b, a,
 /// iand` (gm2_nbshrf_1: `FCMP_OR.f32.lt.m1` before `FCMP_OR.v2f16.lt.m1`,
-/// then the `LSHIFT_AND.v2i16`).
+/// then the `LSHIFT_AND.v2i16`). A 32-bit compare of two ints in that
+/// place ([`Fs::mask_op`]) is the same (deqp_intval5_mask1632's `(v.x >
+/// 0.0) && (i < 1)`: `ICMP_OR.s32.lt.m1`, then `FCMP_OR.v2f16.lt.m1`).
 fn resized_and_order(f: &mut Fs<'_>) {
     for k in 2..f.nir.len {
         let n = f.nir.order[k] as usize;
@@ -14056,7 +14162,7 @@ fn resized_and_order(f: &mut Fs<'_>) {
         else {
             continue;
         };
-        let cmp = |x: u16, bits: u8| matches!(f.nir.nodes[x as usize], NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: w, .. } if w == bits);
+        let cmp = |x: u16, bits: u8| matches!(f.nir.nodes[x as usize], NirNode { kind: Kind::Alu(Alu::Fcmp(_) | Alu::Icmp(_)), bits: w, .. } if w == bits);
         if cmp(a, 16) && cmp(b, 32) && f.nir.order[k - 2] == a && f.nir.order[k - 1] == b {
             f.nir.order.swap(k - 2, k - 1);
         }

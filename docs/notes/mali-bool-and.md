@@ -105,6 +105,9 @@ are in source order, and the select feeds `FMA.v2f16 r1, r0.h00, r1^,
   refusal).
 
 Left: a 32-bit `iand` (the fp32 compare first); `&&` chains; two selects
-on one mask; the shared-operand rules; the same fp32 rule for a compare of
+on one mask; the shared-operand rules other than the first operand's
+`fmin` (plan #367 lower-train-2) and the `||` forms of plan #377's
+report-draft-2 (`docs/notes/mali-deqp-intval.md` section 10); the same
+fp32 rule for a compare of
 two varyings' lanes outside an `&&` (the walk still makes `if (sc.x <
 sc.z)` alone an fp16 compare; no reference yet).
