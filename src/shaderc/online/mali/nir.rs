@@ -1806,7 +1806,13 @@ impl<'s> Nir<'s> {
     /// cleared for each. Measured: cflow_71_deadloop.expect.json, whose
     /// ladder has `FCMP_OR.v2f16.ge` for the last pass and `.lt` for the
     /// seven before it (docs/notes/mali-control-flow.md).
-    pub fn invert_ladder(&mut self, inots: &mut [bool; MAX_IFS]) -> Result<(), MaliError> {
+    ///
+    /// `partial`: the guards are those of a mediump loop unrolled by the
+    /// local array it reads (nir_fs.rs `read_trips`). `partial_unroll`
+    /// clones no lcssa values into the last pass's `if`, so every guard,
+    /// the pass past the array's included, reaches the selects as `ilt`
+    /// (deqp_loops2_fs_idx_tmp_float_dldl's five `ICMP_OR.s32.lt`).
+    pub fn invert_ladder(&mut self, inots: &mut [bool; MAX_IFS], partial: bool) -> Result<(), MaliError> {
         let mut inv = [false; MAX_IFS];
         for i in 0..self.nifs {
             let r = self.ifs[i];
@@ -1814,7 +1820,7 @@ impl<'s> Nir<'s> {
                 continue;
             }
             inots[i] = false;
-            inv[i] = self.ifs[..self.nifs].iter().any(|x| x.live && x.single && self.inside(&r, x.before));
+            inv[i] = partial || self.ifs[..self.nifs].iter().any(|x| x.live && x.single && self.inside(&r, x.before));
         }
         self.invert_guards(&inv)
     }
