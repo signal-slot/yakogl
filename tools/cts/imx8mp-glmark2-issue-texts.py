@@ -30,6 +30,8 @@ VERDICTS = ("right", "wrong", "seen without a value")
 ROUTES = ("dump", "photograph", "photograph+probes", "both")
 RECORD = re.compile(r"records/imx8mp/([0-9]{8})-([0-9]{4})-[^ |/]+-[0-9a-f]{8}/?")
 SHA = re.compile(r"[0-9a-f]{7,40}")
+PI4 = ("#17's Pi 4 part stays by value only: there is no camera or KVM on the "
+       "Pi 4, so its pictures are not looked at by eye.")
 NOTE = "docs/notes/imx8mp-glmark2-pictures-by-eye.md"
 REDACT = re.compile(
     r"([0-9]{1,3}\.){3}[0-9]{1,3}|/dev/tty|ttyUSB|ttyACM|ts\.net|password")
@@ -100,8 +102,7 @@ def board_words(board):
     owner's rule of 2026-11-27); any other value names the board as given."""
     if board == "x2":
         return {
-            "paren": ("measured on the Armadillo-X2 — same i.MX 8M Plus SoC and "
-                      "GC7000UL GPU; the Verdin iMX8M Plus is away"),
+            "paren": "measured on the Armadillo-X2 (same i.MX8MP SoC and GC7000UL)",
             "where": ("board: Armadillo-X2 (measured on the X2, not on the away "
                       "Verdin iMX8M Plus; owner's rule of 2026-11-27)"),
             "eye": " on the Armadillo-X2",
@@ -140,14 +141,38 @@ def wrong_titles(text, wrong):
     return res
 
 
+def templates():
+    """RESULTS.md / STATUS.md lines for plan #387, X2 wording, placeholders."""
+    w = board_words("x2")
+    print("== RESULTS.md 'Common set', i.MX8MP row: replace '(not looked at by eye)' ==")
+    print(f"looked at by eye ({w['paren']}; commit <COMMIT>, record "
+          f"<RECORD>; <N> right, <N> wrong, <N> seen without a value, of {TOTAL}; "
+          f"wrong scenes: <WRONG-SCENES or none>; `{NOTE}`)")
+    print()
+    print("== STATUS.md (Japanese), the two imx8mp picture sentences ==")
+    for head in ("imx8mp 列は", "i.MX8MP の絵は"):
+        print(f"{head} 33 シーンを目で見た（{w['jp']}同じ i.MX8MP SoC・GC7000UL、"
+              "commit <COMMIT>、record <RECORD>、正しい <N>、間違い <N>、"
+              f"値なしで見た <N>。間違いのシーン: <WRONG-SCENES または なし>。{NOTE}）。")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--note", required=True)
+    ap.add_argument("--note")
+    ap.add_argument("--templates", action="store_true",
+                    help="print the RESULTS.md and STATUS.md line templates "
+                    "with <COMMIT>, <RECORD> and <WRONG-SCENES> placeholders "
+                    "(X2 wording; no note needed)")
     ap.add_argument("--board", default=None, metavar="BOARD",
                     help="the board the pictures were measured on: x2, verdin, "
                     "or free text naming it; without it the board is derived "
                     "from the note (default Armadillo-X2)")
     a = ap.parse_args()
+    if a.templates:
+        templates()
+        return
+    if not a.note:
+        die("--note PATH is required (or --templates)")
     try:
         with open(a.note, encoding="utf-8") as f:
             text = f.read()
@@ -188,9 +213,9 @@ def main():
              f"route(s): {routes}")
 
     print("== 1. Comment for issue #17 ==")
-    print(f"i.MX8MP ({bw['paren']}) glmark2-es2 pictures looked at by "
+    print(f"i.MX8MP, {bw['paren']}: glmark2-es2 pictures looked at by "
           f"eye: {counts}. {wtxt}. Built from {where}. Method and per-scene "
-          f"table: `{NOTE}`.")
+          f"table: `{NOTE}`. {PI4}")
     print()
     print("== 2. Comment for issue #1196 ==")
     print("The i.MX8MP part of 'Pictures by eye' (glmark2-es2, 33 scenes) is "

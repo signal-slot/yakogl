@@ -135,6 +135,19 @@ grep -q "redaction" "$d/e10" || bad "--board address refusal names no redaction"
 if python3 "$tool" --note "$td/note-x2.md" --board "/dev/ttyUSB3" >/dev/null 2>&1; then bad "--board with a tty path accepted"; fi
 if python3 "$tool" --note "$td/note-x2.md" --board "" >/dev/null 2>&1; then bad "empty --board accepted"; fi
 
+# X2 provenance: exact phrase in the #17 comment, Pi 4 limit, templates
+c17=$(sed -n '/^== 1\. /,/^== 2\. /p' <<<"$outx")
+grep -qF "measured on the Armadillo-X2 (same i.MX8MP SoC and GC7000UL)" <<<"$c17" || bad "x2 #17 comment: provenance phrase"
+grep -qF "0123abcd" <<<"$c17" || bad "x2 #17 comment: commit"
+grep -qF "records/imx8mp/" <<<"$c17" || bad "x2 #17 comment: record"
+grep -qF "Pi 4 part stays by value only" <<<"$c17" || bad "x2 #17 comment: Pi 4 limit"
+grep -qF "no camera or KVM on the Pi 4" <<<"$c17" || bad "x2 #17 comment: Pi 4 limit reason"
+outt=$(python3 "$tool" --templates 2>"$d/et") || bad "--templates refused: $(cat "$d/et")"
+for ph in '<COMMIT>' '<RECORD>' '<WRONG-SCENES' 'Armadillo-X2' 'Armadillo-X2 で測定'; do
+  grep -qF -- "$ph" <<<"$outt" || bad "--templates lacks $ph"
+done
+if python3 "$tool" >/dev/null 2>&1; then bad "no --note and no --templates accepted"; fi
+
 if printf '%s\n' "$outx" "$outf" "$outv" "$outn" "$outb" | grep -En '([0-9]{1,3}\.){3}[0-9]{1,3}|/dev/tty|ttyUSB|ttyACM|ts\.net|password'; then
   bad "forbidden text in board-wording output"
 fi
