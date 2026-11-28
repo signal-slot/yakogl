@@ -964,6 +964,11 @@ agree with `layout.rs`. It does not show what the hardware does.
     depth texture), so it waits for W12.
   - Coordination: mip-one-kick (ready) records the chain in one kick. W11b
     goes after it.
+  - Landed, unwired: `tex_layout::tiled_chain` (each level's size, offset,
+    pitch and span from `tex_words`) and `Chain::untile_level` /
+    `tile_level`, the CPU untile through `layout::offset`
+    (`tests/gc_tiled_chain.rs`). `record_level` and
+    `gc_return_mipmap_chain` do not call them yet.
   - Host tests: `tests/gc_mipmap_gpu.rs` with tiled levels (the target
     addresses step through the tiled chain, `PE_LOGIC_OP` SINGLE_BUFFER 2);
     glReadPixels of level 2 after the chain returns the box filter's pixels
