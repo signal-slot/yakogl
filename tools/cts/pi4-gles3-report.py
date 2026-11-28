@@ -5,6 +5,7 @@
 
   pi4-gles3-report.py [--table T] [--mustpass M] [--date YYYY-MM-DD] [--commit SHA]
                       [--root R] [--apply R] <session dir>...
+  pi4-gles3-report.py --fold-sublabels [--mustpass M] <session dir>...
   pi4-gles3-report.py --self-test
 
 The session directories are what the board sessions write,
@@ -41,6 +42,21 @@ accepted only when stated: --mixed-commit SHA, once per commit, full 40-digit sh
     a label's case filters minus its tally total;
   - the drafts name each commit and the labels recorded at it (the commit with the
     most labels as 'all the other labels').
+Fold mode (--fold-sublabels). pi4-gles3-tree.txt splits aborted labels into sub-labels
+(S03a -> S03a1.., T17a -> T17aaaa, ...), so a parent's record and its sub-labels'
+records overlap. This mode works on case names, not labels: it reads every
+<LABEL>.console.txt of the session directories (in the ORDER OF THE ARGUMENTS, earliest
+first; inside one directory by label name), and a case's result is the one of the newest
+record that holds the case name. Each case of the mustpass list is then counted exactly
+once; the 'none' cases of an aborted parent that a later sub-label ran are therefore
+dropped (superseded), cases held by more than one record are listed as duplicates, and
+names no mustpass line has are listed and not counted. QualityWarning and
+CompatibilityWarning fall in 'other'. It prints the per-family and TOTAL figure and a
+check line: the sum of the columns must equal the mustpass count (42,810 for
+gles3-mustpass.txt, the default of --mustpass; NOT pi4-gles3-tree.txt, which is the
+label/image table and is refused here as a mustpass). No commit is checked and no
+draft is written; exit 1 when the check fails. The command for the whole tree:
+  python3 -I tools/cts/pi4-gles3-report.py --fold-sublabels <session dirs, earliest first>
 check-pi4-gles3-log.py is run once per commit group (its missing/aborted/duplicate
 findings are resolved here instead); gles3-notpass.py --pi4 is not run in this mode.
 """
@@ -598,6 +614,89 @@ def report(args, out):
     return 0 if ok else 1
 
 
+CASE_NAME = re.compile(r'^dEQP-GLES3\.[^\s*,]+$')
+
+
+def fold_report(args, out):
+    """The whole-tree figure with every case counted once, the newest record holding it deciding."""
+    uart = load('deqp-uart-tally')
+    names = [l.strip() for l in read(args.mustpass).splitlines() if l.strip() and not l.startswith('#')]
+    badl = [l for l in names if not CASE_NAME.match(l)]
+    if not names or badl:
+        print('pi4-gles3-report: --mustpass %s is not a list of case names (first bad line: %s); '
+              'the default is gles3-mustpass.txt' % (os.path.basename(args.mustpass), badl[0][:60] if badl else 'empty'),
+              file=sys.stderr)
+        return 2
+    must = set(names)
+    seen = {}      # case -> (status, record)
+    held = {}      # case -> [records holding it, in order]
+    recs = []
+    for d in args.dirs:
+        if not os.path.isdir(d):
+            print('pi4-gles3-report: %s: no such session directory' % d, file=sys.stderr)
+            return 2
+        for fn in sorted(os.listdir(d)):
+            if fn.endswith('.console.txt'):
+                lab = fn[:-len('.console.txt')]
+                got = uart.scan(read(os.path.join(d, fn)))['got']
+                rec = '%s/%s' % (os.path.basename(os.path.normpath(d)), lab)
+                recs.append((lab, rec, got))
+                for c, st in got.items():
+                    held.setdefault(c, []).append(rec)
+                    seen[c] = (st, rec)
+    labs = {r[0] for r in recs}
+
+    def parent(lab):
+        ps = [l for l in labs if l != lab and lab.startswith(l)]
+        return max(ps, key=len) if ps else lab
+
+    def kind(c):
+        s = seen[c][0] if c in seen else None
+        return 'none' if s is None else {'Pass': 'pass', 'Fail': 'fail', 'NotSupported': 'ns'}.get(s, 'other')
+    cols = ['pass', 'fail', 'ns', 'other', 'none']
+    fam = {}
+    for c in names:
+        p = c.split('.')
+        g = fam.setdefault('info' if p[1] == 'info' else p[2] if len(p) > 3 else c, dict.fromkeys(cols, 0))
+        g[kind(c)] += 1
+    tot = {k: sum(g[k] for g in fam.values()) for k in cols}
+    total = sum(tot.values())
+    dup = sorted(c for c, r in held.items() if len(r) > 1 and c in must)
+    outside = sorted(c for c in held if c not in must)
+    # records' own share: the cases each record decides, under its parent label
+    won = {}
+    for c in names:
+        if c in seen:
+            won.setdefault(seen[c][1], 0)
+            won[seen[c][1]] += 1
+    P = lambda s='': print(s, file=out)
+    P('=== pi4-gles3-report --fold-sublabels: %d records in %d session directories ===' % (len(recs), len(args.dirs)))
+    P('%-34s %-8s %7s %7s' % ('record', 'parent', 'cases', 'counted'))
+    for lab, rec, got in recs:
+        P('%-34s %-8s %7d %7d' % (rec, parent(lab), len(got), won.get(rec, 0)))
+    P()
+    P('%-28s %7s %6s %6s %6s %6s' % (('family',) + tuple(cols)))
+    for g in sorted(fam):
+        P('%-28s %7d %6d %6d %6d %6d' % ((g,) + tuple(fam[g][k] for k in cols)))
+    P('%-28s %7d %6d %6d %6d %6d' % (('TOTAL',) + tuple(tot[k] for k in cols)))
+    P()
+    P('superseded: %d case results of older records replaced by a newer record holding the same case; %d cases '
+      'held by more than one record%s' % (sum(len(held[c]) - 1 for c in dup), len(dup),
+                                          (' (first: %s)' % dup[0]) if dup else ''))
+    for c in dup[:20]:
+        P('  duplicate %s: %s -> %s' % (c, ' '.join(held[c][:-1]), held[c][-1]))
+    if len(dup) > 20:
+        P('  ... %d more' % (len(dup) - 20))
+    P('outside the mustpass list, not counted: %d%s' % (len(outside), (' (first: %s)' % outside[0]) if outside else ''))
+    ok = total == len(names) and len(set(names)) == len(names)
+    P('mustpass %s names: %s' % (n(len(names)), 'OK' if ok else 'FAIL (duplicate names in the list)'))
+    P('check: sum %s == mustpass %s%s: %s' % (n(total), n(len(names)),
+      '' if len(names) == 42810 else ' (not the 42,810 of gles3-mustpass.txt)', 'OK' if ok else 'FAIL'))
+    P('whole tree: %s pass / %s fail / %s NotSupported / %s other / %s without a result, of %s'
+      % (*(n(tot[k]) for k in cols), n(total)))
+    return 0 if ok else 1
+
+
 def self_test():
     fails = []
     cases = []
@@ -831,6 +930,48 @@ def self_test():
         rc, out = rep(td, *(['--mixed-commit', sha, '--mixed-commit', sha_b[:8]] + [old, r1, r2]))
         expect('mixed: a short sha is refused', rc == 1 and 'not a full 40-digit sha' in out, out)
 
+    # fold mode: a parent label that aborted plus two sub-labels that covered the rest, each case once
+    with tempfile.TemporaryDirectory() as td:
+        names = ['dEQP-GLES3.shaders.p.%d' % i for i in range(1, 7)] + ['dEQP-GLES3.texture.t.1', 'dEQP-GLES3.texture.t.2']
+        with open(os.path.join(td, 'mustpass.txt'), 'w') as f:
+            f.write('\n'.join(names) + '\n')
+
+        def fsession(name, entries):
+            d = os.path.join(td, name)
+            os.makedirs(d)
+            for lab, lines in entries.items():
+                with open(os.path.join(d, lab + '.console.txt'), 'w') as f:
+                    f.write(''.join('deqp: %s %s\n' % l for l in lines))
+            return d
+        P_ = lambda i: ('Pass', 'dEQP-GLES3.shaders.p.%d' % i)
+        old = fsession('old', {'S1': [P_(1), P_(2), ('ResourceError', 'dEQP-GLES3.shaders.p.3')],
+                               'T1': [('Pass', 'dEQP-GLES3.texture.t.1'), ('NotSupported', 'dEQP-GLES3.texture.t.2')]})
+        new = fsession('new', {'S1a': [('Fail', 'dEQP-GLES3.shaders.p.3'), P_(4)],
+                               'S1b': [P_(5), P_(6), ('QualityWarning', 'dEQP-GLES3.shaders.p.2')]})
+
+        def frep(*dirs, mp='mustpass.txt'):
+            p = subprocess.run([sys.executable, '-I', me, '--fold-sublabels', '--mustpass', os.path.join(td, mp)]
+                               + list(dirs), capture_output=True, text=True)
+            return p.returncode, p.stdout + p.stderr
+        rc, out = frep(old, new)
+        expect('fold: parent S1 aborted, S1a and S1b ran the rest: each case once, 8 of 8, exit 0',
+               rc == 0 and 'check: sum 8 == mustpass 8 (not the 42,810 of gles3-mustpass.txt): OK' in out
+               and '4 pass / 1 fail / 1 NotSupported / 2 other / 0 without a result, of 8' not in out
+               and '4 pass / 1 fail / 1 NotSupported / 1 other / 1 without' not in out, out)
+        expect('fold: the newest record decides (p.2 QualityWarning -> other, p.3 Fail replaces ResourceError), one duplicate each',
+               '5 pass / 1 fail / 1 NotSupported / 1 other / 0 without a result, of 8' in out
+               and 'duplicate dEQP-GLES3.shaders.p.2: old/S1 -> new/S1b' in out
+               and 'duplicate dEQP-GLES3.shaders.p.3: old/S1 -> new/S1a' in out
+               and '2 cases held by more than one record' in out, out)
+        expect('fold: sub-labels listed under their parent label', 'new/S1a' in out and ' S1 ' in out, out)
+        rc, out = frep(old)
+        expect('fold: the parent alone leaves the unrun cases without a result, sum still 8',
+               rc == 0 and '1 other / 3 without a result, of 8' in out and 'check: sum 8 == mustpass 8' in out, out)
+        with open(os.path.join(td, 'tree.txt'), 'w') as f:
+            f.write('# image S1: x\ndEQP-GLES3.shaders.*,dEQP-GLES3.texture.*\n')
+        rc, out = frep(old, new, mp='tree.txt')
+        expect('fold: a table file given as --mustpass is refused', rc == 2 and 'not a list of case names' in out, out)
+
     print('pi4-gles3-report self-test: %d of %d cases ok' % (len(cases) - len(fails), len(cases)))
     return 1 if fails else 0
 
@@ -846,6 +987,9 @@ def main():
                          'argument order, a later one supersedes an earlier record of a label (see the module doc)')
     ap.add_argument('--root', default=ROOT, help='tree whose docs the anchors are read from')
     ap.add_argument('--apply', metavar='ROOT', help='rewrite the anchored texts in the tree ROOT (all or nothing)')
+    ap.add_argument('--fold-sublabels', action='store_true',
+                    help='count every mustpass case once over the console records of all the sessions, the newest '
+                         'record holding it deciding (re-split sub-labels under their parent; see the module doc)')
     ap.add_argument('--self-test', action='store_true')
     ap.add_argument('dirs', nargs='*', help='session directories (tools/cts/log/*-pi4-gles3-*/)')
     args = ap.parse_args()
@@ -853,6 +997,8 @@ def main():
         return self_test()
     if not args.dirs:
         ap.error('at least one session directory is required')
+    if args.fold_sublabels:
+        return fold_report(args, sys.stdout)
     return report(args, sys.stdout)
 
 
