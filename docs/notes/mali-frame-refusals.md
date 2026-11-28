@@ -81,7 +81,7 @@ listed.
 | attribute in a buffer object of 4 GiB or more | `NOT_BUILT_ATTRIBUTE_BUFFER_SIZE` | `src/mali/backend.rs:253` | `src/mali/backend.rs:2556` |
 | texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (`stage_texture()`) | `NOT_BUILT_TEXTURE_FORMAT` | `src/mali/backend.rs:261` | `src/mali/backend.rs:2299`, `src/mali/backend.rs:2306`, `src/mali/backend.rs:2316` |
 | texture type other than 2D, cube, 2D array or 3D | `NOT_BUILT_TEXTURE_TYPE` | `src/mali/backend.rs:263` | `src/mali/backend.rs:2305` |
-| mip chain of a non-power-of-two texture | `NOT_BUILT_TEXTURE_NPOT_CHAIN` | `src/mali/backend.rs:268` | `src/mali/backend.rs:2307` |
+| mip chain of a non-power-of-two cube map or 2D array | `NOT_BUILT_TEXTURE_NPOT_CHAIN` | `src/mali/backend.rs:268` | `src/mali/backend.rs:2307` |
 | draw samples the texture its own frame renders into (`texture_ready_one()`) | `NOT_BUILT_TEXTURE_FEEDBACK` | `src/mali/backend.rs:275` | `src/mali/backend.rs:2167` |
 | cube look-up whose unit has no complete cube map | `NOT_BUILT_CUBE_INCOMPLETE` | `src/mali/backend.rs:286` | `src/mali/backend.rs:2234` |
 | frame without a colour clear and no preload program (`open_frame()`) | `NOT_BUILT_PRELOAD_PROGRAM` | `src/mali/backend.rs:291` | `src/mali/backend.rs:2891` |
