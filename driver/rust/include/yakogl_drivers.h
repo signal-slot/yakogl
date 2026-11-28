@@ -1958,6 +1958,7 @@ struct yd_pvr_render_cfg {
 	uint32_t verbose;               /* PVR_RENDER_VERBOSE */
 	uint32_t fl_grow_on_demand;     /* serve a freelist grow from the render pool */
 	uint32_t partial_render;        /* the firmware's partial render commands */
+	uint32_t pr_bgnd_placement;     /* probe: pds_pr_bgnd in the 3D_PR (0 none, 1 A, 2 B) */
 };
 
 struct yd_pvr_render_ops {
@@ -2880,7 +2881,7 @@ _Static_assert(sizeof(struct yd_pvr_hwrt) == 176, "struct yd_pvr_hwrt");
 _Static_assert(offsetof(struct yd_pvr_hwrt, tpc) == 32, "yd_pvr_hwrt.tpc");
 _Static_assert(offsetof(struct yd_pvr_hwrt, mlist) == 128, "yd_pvr_hwrt.mlist");
 _Static_assert(offsetof(struct yd_pvr_hwrt, next) == 168, "yd_pvr_hwrt.next");
-_Static_assert(sizeof(struct yd_pvr_render_cfg) == 52, "struct yd_pvr_render_cfg");
+_Static_assert(sizeof(struct yd_pvr_render_cfg) == 56, "struct yd_pvr_render_cfg");
 _Static_assert(sizeof(struct yd_pvr_render_ops) == 16, "struct yd_pvr_render_ops");
 _Static_assert(offsetof(struct yd_pvr_render, ops) == 56, "yd_pvr_render.ops");
 _Static_assert(offsetof(struct yd_pvr_render, gen_b) == 68, "yd_pvr_render.gen_b");

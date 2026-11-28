@@ -181,7 +181,9 @@ pub struct PvrRenderFragPr {
     /// The PR EOT program's PDS DATA segment: heap offset and bytes.
     pub eot_pds_data: u32,
     pub eot_pds_data_bytes: u32,
-    /// CR_PDS_PR_BGRND0/1/3: the PR background-object PDS.
+    /// CR_PDS_PR_BGRND0/1/3: the PR background-object PDS. Written into
+    /// the 3D_PR only at a probe placement (`cfg.pr_bgnd_placement`,
+    /// [`pr_bgnd_dw`]); at [`PR_BGND_PLACEMENT_NONE`], the default, not.
     pub pds_pr_bgnd: [u64; 3],
     /// The 3D_PR's CR_ISP_ZLSCTL: the frame's with the depth/stencil stores
     /// on (src/pvr/pr_zs.rs, docs/notes/pvr-pr-zs.md). 0: the 3D's word.
@@ -213,6 +215,47 @@ impl PvrRenderFragPr {
 /// the vendored headers, so driver/tools/offsetof cannot pin it (as
 /// src/pvr/backend.rs's FRAG_FLAGS_GETVISRESULTS of the same flag set).
 const FRAG_FLAGS_SPMSCRATCHBUFFER: u32 = 0x0008_0000;
+
+/// `cfg.pr_bgnd_placement` (`CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT`
+/// 0, the default): the 3D_PR carries no `frag_pr.pds_pr_bgnd`, every word
+/// is what it was before the option existed.
+pub const PR_BGND_PLACEMENT_NONE: u32 = 0;
+/// Placement A (1, to try first): `pds_pr_bgnd[0..3]` at 3D_PR dwords
+/// 64..=69, just before `pds_bgnd` (dwords 70..=75): eight PBE slots of
+/// PBE_STRIDE_DW (dwords 30..=61), the 64-bit tpu_border_colour_table
+/// (62-63), then the PR words.
+pub const PR_BGND_PLACEMENT_A: u32 = 1;
+/// Placement B (2): `pds_pr_bgnd[0..3]` at 3D_PR dwords 62..=67, right
+/// after eight PBE slots (dwords 30..=61), the border table after them.
+pub const PR_BGND_PLACEMENT_B: u32 = 2;
+
+/// The first dword of `pds_pr_bgnd[0]` (lo/hi pairs, three words) in the
+/// 3D_PR at placement `p`; `None` at [`PR_BGND_PLACEMENT_NONE`] and at any
+/// value Kconfig's range refuses. Neither candidate is measured: the
+/// firmware reads the PR background words from RGXFWIF_CMD3D's register
+/// block, a DDK user-mode struct (rgx_fwif_client.h) that the vendored
+/// headers name only in rgx_fwif_alignchecks.h (sizeof and the offset of
+/// s3DRegs), so driver/tools/offsetof pins neither. Case 217 on the AM62P
+/// decides (tools/cts/pr-configs/gl_test-217-bgnd{A,B}-on.conf). Both lie in
+/// the dwords the 3D command leaves zero (past the four PBE slots, dwords
+/// 30..=45, and before `pds_bgnd` at 70).
+pub const fn pr_bgnd_dw(p: u32) -> Option<usize> {
+    match p {
+        PR_BGND_PLACEMENT_A => Some(64),
+        PR_BGND_PLACEMENT_B => Some(62),
+        _ => None,
+    }
+}
+
+const _: () = {
+    // Both placements clear the PBE slots and end before pds_bgnd (dw70).
+    let mut p = PR_BGND_PLACEMENT_A;
+    while p <= PR_BGND_PLACEMENT_B {
+        let Some(o) = pr_bgnd_dw(p) else { panic!("a placement without a dword") };
+        assert!(o >= 30 + EOT_MAX_RT * PBE_STRIDE_DW && o + 6 <= 70);
+        p += 1;
+    }
+};
 
 const _: () = {
     assert!(size_of::<PvrRenderKick>() == 352);
@@ -307,6 +350,12 @@ pub struct YdPvrRenderCfg {
     /// "Design: the firmware's partial render"). Without it every command
     /// and word is what it was without the knob.
     pub partial_render: u32,
+    /// A board probe under `partial_render`: where a filled `frag_pr`'s
+    /// `pds_pr_bgnd` goes in the 3D_PR ([`PR_BGND_PLACEMENT_NONE`] 0: not
+    /// at all, [`PR_BGND_PLACEMENT_A`] 1, [`PR_BGND_PLACEMENT_B`] 2;
+    /// [`pr_bgnd_dw`]). Never the 3D command
+    /// (`CONFIG_YAKOGL_DRV_GPU_PVR_PR_BGND_PLACEMENT`).
+    pub pr_bgnd_placement: u32,
 }
 
 /// `struct yd_pvr_render_ops`: what the render side borrows from the C.
@@ -400,9 +449,9 @@ const _: () = {
     assert!(offset_of!(YdPvrHwrt, mlist) == 128);
     assert!(offset_of!(YdPvrHwrt, tpc_alloc) == 152);
     assert!(offset_of!(YdPvrHwrt, next) == 168);
-    // cfg is 52 bytes, so `ops` (a pointer) starts at 56 with the 4 bytes of
-    // alignment after it on any target this crate is built for (lp64).
-    assert!(size_of::<YdPvrRenderCfg>() == 52);
+    // cfg is 56 bytes, so `ops` (a pointer) starts at 56 on any target this
+    // crate is built for (lp64).
+    assert!(size_of::<YdPvrRenderCfg>() == 56);
     assert!(size_of::<YdPvrRenderOps>() == 16);
     assert!(offset_of!(YdPvrRender, ops) == 56);
     assert!(offset_of!(YdPvrRender, inited) == 64);
@@ -1566,6 +1615,13 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
             }
             if p.isp_zlsctl != 0 {
                 lohi(&mut dk_pr, 24, p.isp_zlsctl);
+            }
+            // The PR background PDS at the probe's placement (none by
+            // default): the 3D_PR only, never the 3D command.
+            if let Some(o) = pr_bgnd_dw(r.cfg.pr_bgnd_placement) {
+                for (j, &w) in p.pds_pr_bgnd.iter().enumerate() {
+                    lohi(&mut dk_pr, o + 2 * j, w);
+                }
             }
         }
         if r.cfg.verbose != 0 {
@@ -4615,6 +4671,107 @@ mod submit_tests {
         assert_eq!(submit(&mut z.k, &mut z.r, &base, &mut fz), 0, "log:\n{}", z.log());
         assert_eq!(t.cmds(FCCCB, t.r.fwo), z.cmds(FCCCB, z.r.fwo), "knob off: the fragment CCB");
         assert_eq!(t.cmds(GCCCB, t.r.gwo), z.cmds(GCCCB, z.r.gwo), "knob off: the geometry CCB");
+    }
+
+    /// `filled_frag_pr` with `pds_pr_bgnd` words whose high halves are not
+    /// zero, so a lo/hi swap or a one-dword shift shows.
+    fn filled_frag_pr_bgnd() -> PvrRenderKick {
+        let mut c = filled_frag_pr();
+        c.frag_pr.pds_pr_bgnd = [0xD0D0_0001_D000_0010, 0xD1D1_0002_D100_0020, 0xD2D2_0003_D200_0030];
+        c
+    }
+
+    /// One kick of `c` on a knob-on rig at `placement`: (the 3D, the 3D_PR,
+    /// the fragment ring, the geometry ring).
+    #[allow(clippy::type_complexity)]
+    fn bgnd_run(
+        knob: u32,
+        placement: u32,
+        c: &PvrRenderKick,
+    ) -> (Vec<u32>, Option<Vec<u32>>, Vec<(u32, u32, Vec<u32>)>, Vec<(u32, u32, Vec<u32>)>) {
+        let mut t = rig(knob);
+        t.r.cfg.pr_bgnd_placement = placement;
+        let mut f = 0u32;
+        assert_eq!(submit(&mut t.k, &mut t.r, c, &mut f), 0, "log:\n{}", t.log());
+        let (d3, pr) = threed_bodies(&t);
+        assert_eq!(t.r.last_frag_cmd.to_vec(), d3, "the driver's record is the 3D's");
+        (d3, pr, t.cmds(FCCCB, t.r.fwo), t.cmds(GCCCB, t.r.gwo))
+    }
+
+    /// G6 (pr-bgnd-knob): at placement none (the default, 0, and any value
+    /// out of Kconfig's range) a filled `frag_pr` builds G3's 3D_PR: no
+    /// `pds_pr_bgnd` word anywhere, dwords 62..=69 zero, and both rings the
+    /// bytes of a rig whose option was never set.
+    #[test]
+    fn g6_at_placement_none_the_3d_pr_is_todays() {
+        let c = filled_frag_pr_bgnd();
+        assert_eq!(rig(1).r.cfg.pr_bgnd_placement, PR_BGND_PLACEMENT_NONE, "the rig's default");
+        assert_eq!(pr_bgnd_dw(PR_BGND_PLACEMENT_NONE), None);
+        let (d3, pr, fring, gring) = bgnd_run(1, PR_BGND_PLACEMENT_NONE, &c);
+        let pr = pr.expect("a 3D_PR with the knob");
+        assert_eq!(pr[62..70], [0; 8], "no pds_pr_bgnd word in the 3D_PR");
+        assert_eq!(d3[62..70], [0; 8], "nor in the 3D");
+        let words: Vec<u32> = c.frag_pr.pds_pr_bgnd.iter().flat_map(|&w| [w as u32, (w >> 32) as u32]).collect();
+        for w in words {
+            assert!(!pr.contains(&w) && !d3.contains(&w), "{w:#x} written");
+        }
+        // G3's 3D_PR: the frame's words but the PR EOT data and PBE array.
+        let pbe = 30..30 + EOT_MAX_RT * PBE_STRIDE_DW;
+        for i in (0..80).filter(|&i| i != 15 && !pbe.contains(&i)) {
+            assert_eq!(pr[i], d3[i], "3D_PR dw{i}");
+        }
+        for p in [3, 7, u32::MAX] {
+            assert_eq!(pr_bgnd_dw(p), None, "placement {p}");
+            let (_, _, f, g) = bgnd_run(1, p, &c);
+            assert_eq!((f, g), (fring.clone(), gring.clone()), "placement {p} is none");
+        }
+    }
+
+    /// G7 (pr-bgnd-knob): at placement A (dwords 64..=69) or B (62..=67) a
+    /// filled `frag_pr` puts its three `pds_pr_bgnd` words, lo/hi, at those
+    /// dwords of the 3D_PR; every other 3D_PR word, the whole 3D command,
+    /// the fragment ring's command types and sizes and the geometry ring
+    /// are as at placement none. A zero block (the 3D_PR a byte copy of the
+    /// 3D) and the knob off change no byte of either ring at either
+    /// placement.
+    #[test]
+    fn g7_placements_a_and_b_put_pds_pr_bgnd_at_their_dwords_of_the_3d_pr_only() {
+        let c = filled_frag_pr_bgnd();
+        let (n3, npr, nf, ng) = bgnd_run(1, PR_BGND_PLACEMENT_NONE, &c);
+        let npr = npr.expect("a 3D_PR with the knob");
+        let w = c.frag_pr.pds_pr_bgnd;
+        let want_words =
+            [w[0] as u32, (w[0] >> 32) as u32, w[1] as u32, (w[1] >> 32) as u32, w[2] as u32, (w[2] >> 32) as u32];
+        for (p, dw) in [(PR_BGND_PLACEMENT_A, 64usize), (PR_BGND_PLACEMENT_B, 62)] {
+            assert_eq!(pr_bgnd_dw(p), Some(dw), "placement {p}");
+            let (d3, pr, f, g) = bgnd_run(1, p, &c);
+            let pr = pr.expect("a 3D_PR with the knob");
+            assert_eq!(d3, n3, "placement {p}: the 3D command is untouched");
+            assert_eq!(g, ng, "placement {p}: the geometry ring");
+            let shape = |r: &[(u32, u32, Vec<u32>)]| r.iter().map(|x| (x.0, x.1)).collect::<Vec<_>>();
+            assert_eq!(shape(&f), shape(&nf), "placement {p}: the fragment ring's commands and sizes");
+            assert_eq!(pr[dw..dw + 6], want_words, "placement {p}: pds_pr_bgnd at dw{dw}");
+            for i in (0..80).filter(|&i| !(dw..dw + 6).contains(&i)) {
+                assert_eq!(pr[i], npr[i], "placement {p}: 3D_PR dw{i}");
+            }
+            // Only the 3D_PR body differs in the fragment ring.
+            for (a, b) in f.iter().zip(&nf) {
+                if a.0 != CCB_CMD_TYPE_3D_PR {
+                    assert_eq!(a, b, "placement {p}: command type {:#x}", a.0);
+                }
+            }
+            // A zero block: the 3D_PR stays the byte copy of the 3D.
+            let zero = kick(1);
+            let (z3, zpr, zf, zg) = bgnd_run(1, p, &zero);
+            let (_, _, zfn, zgn) = bgnd_run(1, PR_BGND_PLACEMENT_NONE, &zero);
+            assert_eq!(zpr.as_ref(), Some(&z3), "placement {p}, zero block: the 3D_PR is the 3D's copy");
+            assert_eq!((zf, zg), (zfn, zgn), "placement {p}, zero block: both rings");
+            // The knob off: the option changes no byte either.
+            let (_, opr, of, og) = bgnd_run(0, p, &c);
+            let (_, _, ofn, ogn) = bgnd_run(0, PR_BGND_PLACEMENT_NONE, &c);
+            assert!(opr.is_none(), "knob off: no 3D_PR");
+            assert_eq!((of, og), (ofn, ogn), "placement {p}, knob off: both rings");
+        }
     }
 
     /// Without the knob, none of that is written: the sRTACtl words and the
