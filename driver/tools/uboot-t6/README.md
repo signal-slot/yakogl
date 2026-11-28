@@ -249,6 +249,36 @@ left the prompt and started Linux.
 The run on 2026-11-12 (record `20261112-184729-t6-uboot-reads`): 27 commands
 answered, Linux's login 19 s after `reset`, exit 0.
 
+### The lease console route
+
+On the farm the lease's console server holds the adapter's one client slot,
+so `--go` cannot open the UART: the agent types through the lease's serial
+tools instead, and `prompt-reads.py` still decides every byte typed. Save the
+console so far as plain text (`=> <cmd>` echo lines and their answers; CR,
+NUL and ANSI escapes are dropped) and ask:
+
+```sh
+driver/tools/uboot-t6/prompt-reads.py next <transcript>     # the one command to type next
+driver/tools/uboot-t6/prompt-reads.py record <transcript> <record dir>
+```
+
+`next` walks the transcript against `run`'s plan and decisions (the same
+`first_commands` and `later_commands`) and prints on stdout only the next
+command, `reset` when the plan is done; why goes to stderr. Exit 0 a command
+printed; 3 an answer is an error or cannot be read, `reset` printed; 4
+nothing may be typed (a command that is not the plan's next, text past
+`Starting kernel`, no prompt yet, the last answer not complete: wait for
+`=> ` and ask again, or `reset` already entered); 2 usage. Type exactly what
+it prints, one line, and nothing when it prints nothing.
+
+`record` writes `answers.txt` in `run`'s form and `uart.log` (the transcript
+under the line "lease route: typed through the lease console tools, no
+typed.log"). Exit 0 the plan, `reset` and Linux's login; 3 an error answer
+(written as read); 5 stopped before `reset`; 6 `reset`, no login in the
+transcript; 4 refused, nothing written; 2 usage. The self-test replays the
+2026-11-12 console through `next` and requires the same commands `run` typed
+and the same `answers.txt`.
+
 ## What the prompt answered
 
 U-Boot 2026.07_armbian, `bootdelay=1`, `bootcmd=bootflow scan -lb`, console

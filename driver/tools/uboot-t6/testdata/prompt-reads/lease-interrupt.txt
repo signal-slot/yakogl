@@ -1,0 +1,12 @@
+# Lease-route fixture for prompt-reads.py --self-test (next, record).
+# SYNTHETIC: a made-up console transcript, not a measurement. A line dropped
+# with ctrl-c and an empty prompt line are passed over: version was entered,
+# help is the plan's next.
+# expect next=0 cmd=help record=5
+U-Boot 2026.07
+
+=> vers<INTERRUPT>
+=> 
+=> version
+U-Boot 2026.07
+=> 
