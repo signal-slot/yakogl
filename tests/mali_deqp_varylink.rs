@@ -49,10 +49,11 @@ fn op_abs_vec2() {
 }
 
 /// Shape U: the program's fragment shader takes the unwritten `var` as an
-/// undef and is Mesa's; the fragment shader alone, which selects its colour
-/// under the boolean uniform `u_false`, is refused (control flow).
+/// undef and is Mesa's. The fragment shader alone, which selects its colour
+/// under the boolean uniform `u_false`, is refused for control flow, but
+/// compiles with its varyings unwritten, so the refusal waits for the link
+/// (backend.rs `or_at_link`), which compiles it with the undef.
 #[test]
-#[ignore = "refused: control flow, the fragment shader alone's colour select under a boolean uniform (shape U's program is Mesa's); pinned by refusals_pinned"]
 fn unwritten() {
     mali_ref::assert_matches("deqp_varylink_unwritten");
 }
@@ -80,8 +81,7 @@ fn gm2_ideas_equal_uniform_lanes() {
 #[test]
 fn refusals_pinned() {
     const DISCARD: &str = "Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet";
-    const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
-    let pins = [("discard", DISCARD), ("unwritten", CONTROL_FLOW)];
+    let pins = [("discard", DISCARD)];
     for (name, text) in pins {
         mali_ref::assert_refused_ref(&format!("deqp_varylink_{name}"), text);
     }

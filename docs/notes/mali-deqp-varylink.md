@@ -937,6 +937,43 @@ of an `if` takes the other side's lane (`walk_if16`'s `agree`,
   that select under a 32-bit boolean mask, or a fragment-shader record
   whose refusal waits until the link. Neither has a reference here.
 
+**U, the dead read: the refusal waits for the link.** Both references are
+now byte-equal (`unwritten` in `tests/mali_deqp_varylink.rs`,
+`unwritten_declared_dead_read` in `tests/mali_deqp_posvary.rs`). Mesa
+compiles a fragment shader only for its program, so no code of the
+fragment shader alone is ever drawn and none has a reference; the second
+way above is taken, not a lowering of the select:
+
+- glCompileShader (backend.rs `or_at_link`): a fragment shader alone
+  refused for control flow, with no blend key and no zero list, is
+  compiled again with every varying lane it declares as an undef lane
+  (`mali::fs_undef_inputs`, the lanes a vertex shader that writes none
+  of them gives it). When that compiles, the compile succeeds and the
+  record keeps the refusal in `Compiled::pending` (Rust only; the C
+  `shc_shader` is unchanged). Every other refusal, and a control-flow one
+  that the undef compile does not lift, stands at glCompileShader with
+  its text unchanged.
+- the link (`link_by_sources`): for a record with `pending`, the vertex
+  shader's lanes (its undef lanes among them) replace the zero list, and
+  the program's fragment shader is compiled with them. If the link did
+  not compile it again (the vertex shader writes the varying, so there is
+  no undef to fold), the link refuses with the stored refusal, as the raw
+  link log (`online shaderc: the code generator refused this fragment
+  shader: ...`); `unwritten_dead_read_written_refused_at_link` pins it.
+  `vs_for_fragment` builds no program vertex shader for such a record
+  when the vertex shader gives no lanes.
+- Only `ControlFlow` waits. A record without `pending` still reads a
+  never-written varying as 0 through the zero list (the unit test
+  `a_varying_declared_and_never_written_reads_as_zero`: with `v` undef,
+  `v + const` would give undef colour lanes, which are refused). Widening
+  the deferral to other refusals would move glmark2 fixture lines into
+  the `link ...` form; it is not done.
+
+Moved beside them: no glmark2 verdict (69 shaders, 52 compiled, 23 of 33
+scenes compile-clean, as before), no `tools/mali/corpus-verdicts.txt` line,
+and no other `mali_deqp_*` reference's result or pin. `deqp_varylink_discard`
+stays ignored.
+
 **E1, `discard`: refused, unchanged.** Mesa rewrites `0.0 < x + y` to
 `-x < y` (nir_opt_algebraic.py:3663, `fadd(is_used_once)`). The compare's
 operands are then the two halves of the colour's own `V2F32_TO_V2F16 r0`

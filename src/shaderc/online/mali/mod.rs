@@ -2193,6 +2193,26 @@ pub fn fs_constants(
     })))
 }
 
+/// Every lane of every varying fragment shader `glsl` declares, as a lane
+/// its vertex shader never writes ([`link::VaryingConsts::push_undef`]):
+/// what the fragment shader alone is compiled with when its own compile is
+/// refused, to ask whether some link could lift the refusal (backend.rs
+/// `or_at_link`). None when it declares no varying, or more lanes than
+/// [`link::MAX_CONSTS`].
+pub fn fs_undef_inputs(glsl: &[u8], scratch: &Arena<'_>) -> Result<Option<link::FsConsts>, CompileError> {
+    let f = lower_source(SHC_STAGE_FRAGMENT, glsl, &[], scratch)?;
+    let mut c = link::VaryingConsts::NONE;
+    for io in f.module.inputs.iter().filter(|io| io.kind == ir_mod::IoKind::Varying) {
+        for comp in 0..io.components {
+            c.push_undef(io.location, comp);
+        }
+    }
+    if c.full() || c.as_slice().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(c.at_fragment(Some)))
+}
+
 /// A fragment shader for a program whose vertex shader stores `consts`
 /// ([`fs_constants`]): each read of one of those lanes is the constant, as
 /// after Mesa's link, and the varyings it reads are laid out without them
