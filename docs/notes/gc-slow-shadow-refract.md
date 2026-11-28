@@ -485,6 +485,16 @@ refract and the tip `b947cc22` were not run. Details:
 `x2-glmark2-slow-scenes.md`, "Stop, 2026-11-27 (plan #355, item
 x2-before-rerun)".
 
+Session A rerun, 2026-11-28 (item x2-session-a-rerun; measured on the
+Armadillo-X2 standing in for the Verdin iMX8MP): still empty for shadow and
+refract, off and on. Only one jump can be made a turn, because the task
+machine's key does not survive the run's reboot, and this turn's one jump
+was terrain with the knob off at `b947cc22`. That commit contains `25fa1a96`;
+the tip `f764ee20` does not build. That run ended `verdict=not_back`. No cause
+or gain is measured for either scene. The prediction stays 0 ms
+(`gc-slow-host-counts.md`, "Predicted effect of gc_tiled_rt"). Details:
+`x2-glmark2-slow-scenes.md`, "Session A rerun, 2026-11-28".
+
 ## glmark2 shadow, refract and terrain, before and after, measured on the Armadillo-X2 in place of the Verdin iMX8MP [plan #417]
 
 The Verdin iMX8MP is away (off the farm since 2026-11-16, no return date). The

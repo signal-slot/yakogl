@@ -545,3 +545,123 @@ one jump a turn, and board.sh can never read that jump's record.
 
 To run it next time: the same commands, with ssh that survives the run's
 reboot. The loader and the readiness checks no longer stop it.
+
+## Session A rerun, 2026-11-28 (plan #355, item x2-session-a-rerun): one jump, terrain off
+
+Measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), standing in for the
+Verdin iMX8MP. X2 numbers are development measurements (kexec-dev), never
+rows of `tools/cts/RESULTS.md`, `STATUS.md` or `README.md`. Record:
+`records/x2/20261128-0335-session-a-terrain-off-b947cc22/` (gitignored,
+redacted; its `meta.txt` says `board_measured=Armadillo-X2 (i.MX 8M Plus,
+GC7000UL), stands in for the Verdin iMX8MP`). Leases: `target:x2`,
+`target:x2-console` (read only, no character sent) and `target:x2-display`
+(observation only, nothing typed).
+
+**Which case applied: the task machine's key is not persisted.** Read only,
+before any jump: the key connected installed for this turn is in
+`/root/.ssh/authorized_keys` of the tmpfs overlay, but not in the overlay's
+lower directory (`/live/rootfs/root/.ssh/authorized_keys`, which holds only
+the farm nodes' and the owner's keys). Under the planner's rule this means
+**at most one jump a turn**: a jump ends with the SoC reset, the reboot drops
+the key, and `board.sh` cannot log in to read the record. Nothing was changed
+or persisted on the board.
+
+**Commit: `b947cc22`, not the tip.** The tip in this task's clone
+(`refs/connected/origin/remotes/origin/main`; `git fetch origin` failed here,
+access denied) is `f764ee20`. It does not build: `capi/Cargo.toml` declares
+the feature `vivante-st` twice (lines 41 and 85; `110080eb` and `75a7d901`
+each added it), so cargo refuses the workspace manifest (`error: duplicate
+key`) and the glmark2 image's `yakogl-drivers` step fails. So the item's
+fallback applies: `b947cc22`, the commit x2-before-rerun used for the tip.
+It is an ancestor of `origin/main`. It carries W1-W5 (`TS_COLOR_STATUS_BASE`
+in `src/vivante/regs.rs`, `gc_debug_set_tiled_rt` in both samples,
+`early_z::` in `src/vivante/backend.rs`, `tests/gc_tiled_rt.rs`), and **it
+contains `25fa1a96`** (the CPU depth resolve's wide aligned loads). The
+runner and the loader came from the tip `f764ee20`: `tools/board.sh` there
+has `e4add406` (the x2 lease on /tmp, the loader's refusal reported at once),
+and `kexec_zephyr` and `snvs_lpgpr` were built from the tip's
+`driver/tools/kexec-zephyr` (crash list `9c29a448`) with `clang
+--target=aarch64-none-elf -O2 -static -nostdlib -ffreestanding
+-fno-stack-protector` and the Zephyr SDK's `ld.bfd`.
+
+Before the jump: ssh as root logged in; `tools/board.sh x2 status` read
+`board lease: none`, runlevel `default`, uptime 2743 s, `kexec_loaded 0`,
+`kexec_crash_loaded 0`, crash window `268435456`; `podman ps` 0
+containers; the KVM showed Linux's boot console. LPGPR, read read-only at the
+turn's start: `0xdead0002 594b0909 00015555 00000000`. An earlier jump wrote
+it, not this item, so it is not a row.
+
+The run: `X2_STOP_APPS=1 tools/cts/x2-glmark2-scenes.sh --commit b947cc22
+<outdir> terrain`. Image sha256 `41e078a223c39868...`, footprint 168837120,
+`gc_wdog_arm: armed` present. The dry run of the same image passed first
+(rc 0 for the five runs). `board_state=openrc settled uptime 3122s kexec=0
+containers=0`, `jump=ok`, and the loader printed `crash: i.MX 8M Plus
+(fsl,imx8mp): gpio-mxc and irqsteer rows are let through`. The image ran
+terrain to `glmark2: PASS`. Then it reset the SoC, and the board came back
+to `login:` on the console. **ssh refused the key after the reboot**
+(`Permission denied (publickey,...)`), and `board.sh` ended at its limit:
+
+```
+board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s (kexec-dev: a development run, never a row)
+x2-glmark2-scenes: the board did not come back (rc 5): stopped, no retry; it needs a person
+```
+
+The board does not need a power cycle. It is on Linux, and it needs a login
+whose key survives the reboot, as on 2026-11-27. The next jump is the next
+case of the order (terrain with the knob on), made in the next turn after
+this jump's LPGPR record is read. It is not a retry.
+
+What the console showed (read only; an observation, not a board.sh row):
+
+```
+sample: build tree=b947cc22 table=6c5b8a70
+[terrain] <default>: FPS: 7 FrameTime: 162.798 ms
+glmark2-frame: [terrain] <default>: 62 frames; us per frame: gl 139468, swap 22589, show 89, other 1, frame 162147; gpu job times: absent
+glmark2-steps: [terrain] <default>: us per frame: program 6964, uniforms 8, attribs 13, textures 134, state 5, gc rest 47, gc ds 40, gc tiled copy 95, gc frame 131367, gc uniforms 25, gc vertex 20, gc emit 517; sum 139239; untimed laps 0
+glmark2-picture: [terrain] <default>: 800x600; probes c 6b7618ff, tl 525312ff, tr 6d8420ff, bl 6f7c1cff, br 8ab31cff; crc16 5378, crc16q e8e7; mean 119 129 45; black no
+glmark2: score 6: 1 scenes ran, 0 failed, 0 unsupported (1 list entries)
+glmark2: 800x600, shown yes, GPU resets 0, GL errors recorded 0
+yk-record: 594b120e fc3f0006 6104003f 00258320
+glmark2: PASS
+```
+
+There is no `glmark2: gc_tiled_rt=` line, as an off image should print. The
+image adopted the LCDIF at 1920x1080. The picture was not seen on the KVM
+(the board was already back on Linux when it was looked at), so the picture
+value above is the console's only.
+
+### Session A table (rerun)
+
+`x2-scene-table.py --before b947cc22` on the output directory prints the
+not_back row (image sha8 `41e078a2` in its commit column, `gc_tiled_rt
+absent`) and no pair. The ms a frame below is the console's FrameTime: an
+observation, not a board.sh row. Trust marks: `trusted` = verdict=done,
+resets=0 and (on rows) the picture matches; `untrusted` = a number without
+a board.sh verdict; `no number` = not run.
+
+| commit | gc_tiled_rt | scene | ms a frame | FPS | verdict line | picture | trust |
+|---|---|---|---|---|---|---|---|
+| b947cc22 | gc_tiled_rt off | terrain | - (console: FrameTime 162.798; frame 162147 us) | - (console: 7) | verdict= `board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s` | crc16 5378, crc16q e8e7, mean 119 129 45, black no (console) | untrusted: console only, record=absent |
+| b947cc22 | gc_tiled_rt on | terrain | - | - | verdict= not run yet (one jump a turn) | - | no number |
+| b947cc22 | gc_tiled_rt off | shadow | - | - | verdict= not run yet (one jump a turn) | - | no number |
+| b947cc22 | gc_tiled_rt on | shadow | - | - | verdict= not run yet (one jump a turn) | - | no number |
+| b947cc22 | gc_tiled_rt off | refract | - | - | verdict= not run yet (one jump a turn) | - | no number |
+| b947cc22 | gc_tiled_rt on | refract | - | - | verdict= not run yet (one jump a turn) | - | no number |
+| b947cc22 | gc_tiled_rt on | gl_test 3, 44, 169 | - | - | verdict= not run yet (one jump a turn) | - | no CASE record |
+
+The PERF pages (`0x1000`, `0x1001`, `0x1003`, `0x1004`) cannot be reached
+this way. `x2-glmark2-scenes.sh` makes its no-selector run first and stops
+at its `not_back`, so a scene call made from a task machine never gets to
+its selector runs. With one jump a turn, each scene's ms a frame comes from
+its console FrameTime and that jump's LPGPR words. The LPGPR words are read
+at the next turn's start and are not verdicted by board.sh.
+
+Picture comparison: not possible yet. There is no on picture.
+
+Per-scene cause and gain: not measured. The knob-off terrain figure is the
+only number this session has. The console FrameTime at `72972ba4` was 247.588
+ms (2026-11-27, x2-before-rerun). At `b947cc22` it is 162.798 ms: about 85 ms
+less a frame, with `gc frame` 213117 -> 131367 us of it. These two numbers
+are console observations at different commits, not session A's off/on gain.
+
+Session A verdict (2026-11-28): session A not green: not finished, 1 of 9 runs made (terrain off ended verdict=not_back because the task machine's ssh key does not survive the run's reboot; no on run, no picture match).

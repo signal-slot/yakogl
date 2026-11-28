@@ -410,8 +410,8 @@ image otherwise. Empty until a session runs.
 | row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
 |---|---|---|---:|---|---|
 | before | 72972ba4 | n/a (not built) | - (console only, not a row: FrameTime 247.588) | verdict= `board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s` | record=absent (console: `594b120e fc3f0004 6104003f 00258320`) |
-| tip | b947cc22 (stop 2026-11-27, not run) | off | - | verdict= stop: not run (the command stopped after terrain's not_back) | - |
-| tip | | on | | | |
+| tip | b947cc22 (session A rerun, 2026-11-28) | off | - (console only, not a row: FrameTime 162.798) | verdict= `board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s` | record=absent (console: `594b120e fc3f0006 6104003f 00258320`) |
+| tip | b947cc22 (not run yet: one jump a turn) | on | - | verdict= not run yet | - |
 | D (on minus off) | | | | | |
 
 Stop, 2026-11-24 (item x2-before-now): still empty. The board answered
@@ -440,3 +440,22 @@ the board's tmpfs only. The run therefore ended `verdict=not_back` (rc 5) and
 was not retried. The console figure is not a board.sh row. Shadow, refract
 and the tip `b947cc22` were not run. Details: `x2-glmark2-slow-scenes.md`,
 "Stop, 2026-11-27 (plan #355, item x2-before-rerun)".
+
+Session A rerun, 2026-11-28 (item x2-session-a-rerun; measured on the
+Armadillo-X2 standing in for the Verdin iMX8MP, record
+`records/x2/20261128-0335-session-a-terrain-off-b947cc22/`): one jump,
+terrain with the knob off, at `b947cc22`. The tip `f764ee20` does not build:
+`capi/Cargo.toml` declares `vivante-st` twice. `b947cc22` contains `25fa1a96`
+and W1-W5. The image ran to `glmark2: PASS`, and the console showed `FPS: 7
+FrameTime: 162.798 ms` (`gc frame 131367` us of `frame 162147`, swap 22589)
+and the picture `crc16 5378, crc16q e8e7; mean 119 129 45`. The run ended
+`verdict=not_back` (rc 5) because the reboot dropped the task machine's key,
+as on 2026-11-27. **Cause and gain of `gc_tiled_rt`: not measured**, because
+no on run exists yet, so D stays empty. Read against
+`gc-slow-host-counts.md`'s "Predicted effect of gc_tiled_rt" (net about -0.9
+to +2.3 ms by the order model), there is nothing to compare yet. The two
+console figures, 247.588 ms at `72972ba4` and 162.798 ms at `b947cc22`, say
+that about 85 ms a frame went between those commits, almost all of it in `gc
+frame` (213117 -> 131367 us). They are observations without a board.sh
+verdict. Details: `x2-glmark2-slow-scenes.md`, "Session A rerun,
+2026-11-28".
