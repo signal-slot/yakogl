@@ -1714,6 +1714,15 @@ fn compile_stage<'s>(
                 .map(|()| f.inputs16 = false)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
+        } else if nir_fs::read16(&f) {
+            /* a mediump shader's loop unrolled by the local array it reads
+             * (docs/notes/mali-deqp-loops.md section 14): the passes'
+             * guards flattened as a highp shader's regions, the varying
+             * lanes converted as `nir_lower_mediump_io` does */
+            let highp = |name: &str| fp32(name);
+            nir_fs::convert_inputs16(&mut f)
+                .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) || nir_fs::frag32(&f) {
             /* a mediump shader's unrolled loop with run-time guards: the
              * graph's regions flattened as a highp shader's, its fp16 nodes

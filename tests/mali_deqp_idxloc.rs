@@ -11,8 +11,9 @@
 //! from the dEQP generators (`es2fShaderIndexingTests.cpp`,
 //! `es2fShaderStructTests.cpp`), as each `.license` says.
 //!
-//! No reference compiles at the tip: [`refusals_pinned`] asserts each pair's
-//! exact first refusal, the loop text. The note gives the refusal measured
+//! [`refusals_pinned`] asserts each refused pair's exact first refusal;
+//! [`matched`] byte-compares [`MATCHED`], [`differences_pinned`] pins
+//! [`DIFFERS`]. The note gives the refusal measured
 //! after the loop (the loop folded by hand) per shape. The lowering that
 //! lifts one moves its entry from [`REFUSALS`] to [`MATCHED`] in the same
 //! commit. Mesa keeps a loop in eight of them (`fs_tmp_float_cd`,
@@ -62,7 +63,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_struct_nested_loop_assign", CTRL),
     ("fs_struct_uni_nested_array", LOOP_MEDIUMP),
     ("fs_tmp_float_cd", LOOP_MEDIUMP),
-    ("fs_tmp_vec3_sl_dl", LOOP_MEDIUMP),
     ("fs_uni_vec3", UNIFORM_INDEXED),
     ("fs_var_float_sd", ARITH),
     ("fs_var_vec3_sd", ARITH),
@@ -75,8 +75,11 @@ const REFUSALS: &[(&str, &str)] = &[
 ];
 
 /// References whose pair compiles and matches Mesa's words byte for byte
-/// (`mali_ref::assert_matches`). Empty until a lowering lifts a refusal.
-const MATCHED: &[&str] = &[];
+/// (`mali_ref::assert_matches`). `fs_tmp_vec3_sl_dl`: a mediump loop that
+/// reads a local array by its counter under a run-time bound, unrolled by
+/// the array's length (nir_fs.rs `read_trips`; docs/notes/mali-deqp-loops.md
+/// section 14).
+const MATCHED: &[&str] = &["fs_tmp_vec3_sl_dl"];
 
 fn refusal(name: &str) -> Result<(), String> {
     let r = mali_ref::Reference::load(&format!("deqp_idxloc_{name}"));
@@ -118,6 +121,13 @@ fn differences_pinned() {
         let r = mali_ref::Reference::load(&format!("deqp_idxloc_{name}"));
         let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
         assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; add it to MATCHED");
+    }
+}
+
+#[test]
+fn matched() {
+    for name in MATCHED {
+        mali_ref::assert_matches(&format!("deqp_idxloc_{name}"));
     }
 }
 

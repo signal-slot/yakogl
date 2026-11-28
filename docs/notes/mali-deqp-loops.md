@@ -1613,3 +1613,94 @@ vertex kept loop (`vs_for_uni`, `vs_float_uni`, `vs_dowhile_uni`,
 local carried from a run-time value), loops3 `vs_fn_*` (a loop that is not
 `vs_loop_shape`, `put_loop`), gaps `loops_fs_kept_for_index` (a local array
 read by the counter in a mediump kept loop, `array_read_by_counter`).
+
+## 14. The mediump loop that reads a local array by its counter (lower-fsloop-kept, at 349f989f)
+
+HOST-ONLY: compile and word comparisons, no board run. This lowers the
+`LoopMediump` shape that `array_read_by_counter` refused: a mediump
+fragment loop under a run-time bound (`i < ui_four`) whose body reads a
+local array at its counter (`res += arr[i]`). Mesa keeps no loop there.
+`nir_loop_analyze` guesses the trip count from the array's length
+(`guess_loop_limit`). `nir_opt_loop_unroll` unrolls that many passes, each
+behind its test on the bound, plus one pass past the end whose read is
+undefined. The result is a ladder of `ICMP_OR.s32.lt` of `0..=len` with the
+bound and `MUX.v2i16` selects. The innermost select's side is the fp16 NaN
+`0x7E00` (a FAU word): deqp_loops2_fs_idx_tmp_float_dldl has five guards
+for `arr[4]`.
+
+**Design** (`src/shaderc/online/mali/nir_fs.rs`, `nir.rs`, `mod.rs`,
+`select.rs`):
+
+1. `read_trips` (`array_trips` with `read`, the twin of `guessed_trips`):
+   the array's length for a body that reads it by the counter and writes
+   no array through the ladder. `kept_loop` does not keep such a loop in
+   a mediump shader, so `walk_loop` unrolls it.
+2. In each pass, the head test `if (i < x) {} else break;` is a guard
+   (`walk_guard`, then side the `break`, on the inverse compare). The rest
+   of the pass and the later passes form its continue side. The pass with
+   the counter at the array's length is the last (`Fs::past_end`). Its
+   float lanes stored from an array element are the NaN
+   (`past_end_lanes`, `stores_from_array`). The NaN is
+   `select::PAST_END_NAN`, a payload no folding makes, which `f16_exact`
+   alone turns into `0x7E00`. Any other NaN constant stays refused.
+3. The guards are `single` regions (merged-terminator ladders).
+   `invert_ladder(.., partial)` inverts every one of them, the last
+   included: `partial_unroll` clones no lcssa values, so every compare
+   reaches the selects as `ilt`.
+4. Route (`mod.rs`, `read16`): `convert_inputs16`, then `select_highp`.
+   `ladder_forms` and the lone-fp16-product refusal do not apply. A
+   guard's phi with a varying lane on a side is 16-bit (`Fs::phi`), and
+   `convert_inputs16` converts the lanes such phis read.
+5. Pairing (`vectorize16`):
+   - A lone product that only sums read is not paired with another
+     operation's (Mesa fuses it into the pass's `ffma` before it
+     vectorises: dldl's chain of three `FMA.v2f16` of `.h00` lanes).
+     Lanes of one IR operation in one pass still pair.
+   - A select pairs on its 32-bit integer mask (`lane_key`,
+     `MUX.v2i16 .., r9.h00`).
+   - The selects of one mask that read more than one pair of converted
+     varying lanes stay apart (a `vec4` local's level next to the varying
+     it starts as, deqp_loops2_fs_idx_tmp_vec4_sd: four `MUX.v2i16` of
+     `.h00`/`.h11` lanes, then the outer level's four and two `MKVEC`).
+     A `vec2` local's level pairs.
+   - The colour lanes are re-read from the stores after the pairing.
+6. `fmul(#a, fmul(b, #c))` puts its folded constant first in these shaders
+   (`FMA.v2f16 r2, 0x34000000.h11, r0.h00, r1.h00`). The mediump walk's
+   other shaders keep the order they had: their references were not
+   re-measured for this.
+7. `Fs::read16` is set from the module before the walk. It needs a loop
+   with `read_trips` and a non-constant bound (`constant_bound`), so a
+   constant-bound loop reading an array (deqp_fclane_vec3_local) keeps its
+   route and its refusal.
+
+**Results.** Byte-equal: `deqp_loops2_fs_idx_tmp_float_dldl`,
+`deqp_loops2_fs_idx_tmp_vec4_sd` and `deqp_idxloc_fs_tmp_vec3_sl_dl`
+(`MATCHED` in `tests/mali_deqp_loops2.rs` and `tests/mali_deqp_idxloc.rs`).
+Two more compile and differ:
+
+- `deqp_loops2_fs_idx_mat4_sd` (`COMPILED`, `false`).
+- `deqp_gaps_loops_fs_kept_for_index` (`DIFFERS`).
+
+Both have a swizzled vector product (`coords.yzwx * 0.5`). Mesa computes it
+as `vec2` products of each converted pair (`FMA.v2f16 r2, r0.h10, ..`,
+dead lanes included), then an `MKVEC.v2i16` and an unfused `FADD.v2f16`.
+Ours is scalar products fused into the sums.
+
+No other reference moved: every `deqp_*` and every other
+`tools/mali/testdata` pair compiled to the same state before and after.
+`mali_glmark2_corpus` passes, its fixture unchanged.
+
+**Left:**
+
+- The swizzled vector products above.
+- `deqp_loops2_fs_struct_local`, which reads one array and writes another
+  by the counter. Mesa has three guards and no pass past the end there, a
+  `CSEL.u32.eq` ladder of its int lanes. It stays `LoopMediump`
+  (`array_trips`' `ladder_store`).
+- `deqp_loops2_fs_idx_tmp_vec4_cd`: Mesa keeps the 40-element array in
+  scratch.
+- The nested and sequenced kept loops (S6).
+- The highp twin of this shape, still kept as a loop with the cap.
+- The NaN rule takes a lane only when its store reads an array element.
+  A body updating a float from the array and from something else in one
+  store would take NaN for both; no reference has one.

@@ -8,8 +8,8 @@
 //! `tools/mali/deqp_ref.sh` (the drm-shim instrument). One test per
 //! reference. Five compile byte-equal and run ([`MATCHED`]); one kept loop
 //! compiles to Mesa's words with the loop cap's ([`CAPPED`], compared in
-//! `src/shaderc/online/mali/tests.rs`). One compiles and differs
-//! ([`DIFFERS`]) and three are refused ([`REFUSED`], the whole
+//! `src/shaderc/online/mali/tests.rs`). Two compile and differ
+//! ([`DIFFERS`]) and the rest are refused ([`REFUSED`], the whole
 //! `MaliError` message): those tests are `#[ignore]`d, and
 //! `refusals_pinned` asserts each one's state now. The lowering that moves
 //! one moves its entry in the same commit.
@@ -33,7 +33,12 @@ const MATCHED: &[&str] = &[
 ];
 
 /// The references that compile and differ from their expect.json.
-const DIFFERS: &[&str] = &["mixprec_fs_varying_plain"];
+/// `loops_fs_kept_for_index` since a mediump loop reading a local array by
+/// its counter is unrolled by the array's length (nir_fs.rs `read_trips`):
+/// its `coords.yzwx * 0.5` is our scalar products where Mesa's are two
+/// `vec2` products then an `MKVEC.v2i16` and an unfused `FADD.v2f16`
+/// (docs/notes/mali-deqp-loops.md section 14).
+const DIFFERS: &[&str] = &["loops_fs_kept_for_index", "mixprec_fs_varying_plain"];
 
 /// The kept loops that compile: their words are Mesa's with the loop cap's
 /// (the pass counter, which the shared compare does not edit), compared in
@@ -42,10 +47,6 @@ const CAPPED: &[&str] = &["loops_fs_kept_while"];
 
 /// Every refused reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    (
-        "loops_fs_kept_for_index",
-        "Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet",
-    ),
     (
         "mixprec_fs_varying_other",
         "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet",
@@ -92,7 +93,7 @@ fn intval_other() {
 /// of a mediump fragment shader
 /// (`indexing.matrix_subscript.mat2_dynamic_loop_write_dynamic_loop_read_fragment`).
 #[test]
-#[ignore = "refused: a loop Mesa keeps in a mediump fragment shader; pinned by refusals_pinned"]
+#[ignore = "differs: the swizzled vector product's pairs; pinned by refusals_pinned"]
 fn loops_fs_kept_for_index() {
     mali_ref::assert_matches("deqp_gaps_loops_fs_kept_for_index");
 }
