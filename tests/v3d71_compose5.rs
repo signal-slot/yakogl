@@ -23,8 +23,10 @@
 //!
 //! Packets of the dumps the modules do not model are in
 //! [`KNOWN_WORD_GAPS`], each with its reason. `LINE_WIDTH`, `POINT_SIZE` and
-//! `BLEND_CCOLOR` have a `PacketSpec` in `draw71` (the `gap_*` tests assert
-//! it); the shape tests hold the reference's values. `draw71::translate`
+//! `BLEND_CCOLOR` have a `PacketSpec` in `draw71`; the `*_packet_matches_mesa`
+//! tests pack every one of the dumps' packets through it and compare the
+//! bytes (`draw71::translate` does not send them; fill71 hands them to the C
+//! job). `draw71::translate`
 //! packs `Z updates enable` 0 under GL_EQUAL, as Mesa does (3f499a50), so
 //! `depth_equal_z_updates_off` runs the draw with the depth mask on, as GL
 //! has it, and matches the reference.
@@ -833,7 +835,7 @@ fn gl_blendsub_equations() {
     // each draw has its own BLEND_CFG (the comparison above is of the last
     // one before each draw: this is that there are four)
     assert_eq!(named(&jobs[0], "BLEND_CFG").len(), 4, "one BLEND_CFG per draw");
-    // the KNOWN_WORD_GAPS entry: no glBlendColor in this shape, the
+    // blend_ccolor_packet_matches_mesa packs these: no glBlendColor in this shape, the
     // constant colour is 0 wherever Mesa sends it
     let cc = named(&jobs[0], "BLEND_CCOLOR");
     assert!(!cc.is_empty(), "the dump has BLEND_CCOLOR");
@@ -943,7 +945,7 @@ fn gl_primswide_points_and_wide_lines() {
         dc(gl(), prim71::Draw::arrays(prim71::GL_LINE_STRIP, 12, 4)),
     ];
     check_job("gl_primswide", &jobs[0], job([0.0, 0.0, 0.0, 1.0], window(), false), &draws, &std_attrs());
-    // the KNOWN_WORD_GAPS entries, as the reference has them: one LINE_WIDTH
+    // the values line_width/point_size_packet_matches_mesa pack: one LINE_WIDTH
     // and one POINT_SIZE before each draw; the width is glLineWidth's (1.0
     // at the points), the POINT_SIZE packet stays 1.0 because the 16.0 is
     // gl_PointSize's, written by the vertex shader
@@ -977,26 +979,79 @@ fn assert_modelled(packet: &str) {
     );
 }
 
-/// GAP (draw71, `LINE_WIDTH`): gl_primswide.clif has Line width 2.0, 4.0 and
-/// 2.0 at its three line draws; draw71 has no packet for it (the width goes
-/// from fill71's `DrawIn::line_width` to the C job's state).
+/// Every `name` packet of the three dumps, in file order.
+fn every(name: &str) -> Vec<Pk> {
+    SHAPES.into_iter().flat_map(parse_jobs).flat_map(|j| j.lists).filter(|p| p.name == name).collect()
+}
+
+fn field<'a>(p: &'a Pk, label: &str) -> &'a str {
+    &p.fields.iter().find(|f| f.0 == label).unwrap_or_else(|| panic!("{}: no {label}", p.name)).1
+}
+
+/// The packed bytes equal the opcode and the payload the reference's values
+/// make (v3d_packet.xml's layout), and they read back as the dump's packet.
+fn assert_packs(what: &str, got: &[u8], want_bytes: &[u8], want: &Pk) {
+    assert_eq!(got, want_bytes, "{what}: bytes");
+    assert_same(what, &decode(got), want);
+}
+
+/// (draw71, `LINE_WIDTH`, code 105, one float): gl_primswide.clif has Line
+/// width 1.0, 2.0, 4.0 and 2.0 at its four draws, gl_blendsub.clif 1.0;
+/// `draw71::LineWidth` packs each byte for byte (the f32's bits, little
+/// endian, as Mesa's packer writes a `float` field).
 #[test]
-fn gap_line_width_packet() {
+fn line_width_packet_matches_mesa() {
     assert_modelled("LINE_WIDTH");
+    let refs = every("LINE_WIDTH");
+    assert!(refs.len() >= 5, "the dumps' LINE_WIDTH packets");
+    for r in &refs {
+        let w: f32 = field(r, "Line width").parse().unwrap();
+        let mut want = vec![105];
+        want.extend_from_slice(&w.to_le_bytes());
+        assert_packs("LINE_WIDTH", &draw71::LineWidth { width: w }.pack(), &want, r);
+    }
 }
 
-/// GAP (draw71, `POINT_SIZE`): gl_primswide.clif has Point Size 1.0 at each
-/// draw (the 16.0 is the shader's gl_PointSize, which the 7.1 table refuses:
-/// backend71's "a vertex program writing gl_PointSize").
+/// (draw71, `POINT_SIZE`, code 104, one float): Point Size 1.0 at each draw
+/// of the dumps (gl_primswide's 16.0 is the shader's gl_PointSize, which
+/// the packet does not carry); `draw71::PointSize` packs it byte for byte.
 #[test]
-fn gap_point_size_packet() {
+fn point_size_packet_matches_mesa() {
     assert_modelled("POINT_SIZE");
+    let refs = every("POINT_SIZE");
+    assert!(refs.len() >= 4, "the dumps' POINT_SIZE packets");
+    for r in &refs {
+        let s: f32 = field(r, "Point Size").parse().unwrap();
+        let mut want = vec![104];
+        want.extend_from_slice(&s.to_le_bytes());
+        assert_packs("POINT_SIZE", &draw71::PointSize { size: s }.pack(), &want, r);
+    }
 }
 
-/// GAP (draw71, `BLEND_CCOLOR`): gl_blendsub.clif sends the constant colour
-/// (0 here); draw71 has no packet for it (fill71 passes the F16 words to
-/// the C job's state).
+/// (draw71, `BLEND_CCOLOR`, code 86, four F16 words, Red at bit 0 and Alpha
+/// at bit 48): the dumps send the constant colour 0 (no glBlendColor);
+/// `draw71::BlendCcolor` packs it byte for byte. A colour of four distinct
+/// halves (1.0, 0.5, 0.25, 2.0) pins each word's place, as v3d_packet.xml
+/// has it, since every reference word is 0.
 #[test]
-fn gap_blend_ccolor_packet() {
+fn blend_ccolor_packet_matches_mesa() {
     assert_modelled("BLEND_CCOLOR");
+    let refs = every("BLEND_CCOLOR");
+    assert!(!refs.is_empty(), "the dumps' BLEND_CCOLOR packets");
+    let half = |r: &Pk, l: &str| -> u16 { field(r, l).parse().unwrap() };
+    for r in &refs {
+        let c = draw71::BlendCcolor {
+            red: half(r, "Red (F16)"),
+            green: half(r, "Green (F16)"),
+            blue: half(r, "Blue (F16)"),
+            alpha: half(r, "Alpha (F16)"),
+        };
+        let mut want = vec![86];
+        for w in [c.red, c.green, c.blue, c.alpha] {
+            want.extend_from_slice(&w.to_le_bytes());
+        }
+        assert_packs("BLEND_CCOLOR", &c.pack(), &want, r);
+    }
+    let c = draw71::BlendCcolor { red: 0x3c00, green: 0x3800, blue: 0x3400, alpha: 0x4000 };
+    assert_eq!(c.pack(), [86, 0x00, 0x3c, 0x00, 0x38, 0x00, 0x34, 0x00, 0x40], "BLEND_CCOLOR word order");
 }
