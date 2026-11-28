@@ -297,7 +297,7 @@ ref-locals, drawn without `--uniform-values`), tested in
   | walk | cap 32 | cap 64 | cap 256 |
   |---|---|---|---|
   | copies on the stack (before) | 282 KiB | 411 KiB | 1187 KiB |
-  | copies in the arena (now) | | | 210 KiB |
+  | copies in the arena (now) | | | 220 KiB |
 
   Now `nir_fs.rs` `Fs::pool` holds the copies in the scratch arena, each
   `nl = Module::locals.len()` entries wide (not `MAX_LOCALS`): tables 0-7 are
@@ -313,13 +313,17 @@ ref-locals, drawn without `--uniform-values`), tested in
   (`KeptLoop::brk_locals`). The vertex loop references are now the second
   deepest pairs (162 KiB, `gm2_intloop_uniform_vs`); moving that copy too is
   left open.
-- Current figure: the deepest compile is 210 KiB
+- Current figure: the deepest compile is 220 KiB
   (`deqp_loops2_vs_for_dyn_nested`; it was 172 KiB at `fvg_filter_image` before
   more pairs were compiled), and
   `the_stack_of_a_compile_does_not_grow_with_the_cap` bounds it at 240 KiB
   (`a7252727`, which moved the bound from 200 KiB) against the 256 KiB a
-  compiling thread is given (`zephyr/Kconfig`); that leaves 46 KiB under the
-  thread size and 30 KiB under the test's bound.
+  compiling thread is given (`zephyr/Kconfig`); that leaves 36 KiB under the
+  thread size and 20 KiB under the test's bound. Measured on `152eebf4c`
+  (`cargo test --test mali_locals --no-default-features --features
+  host-test,gpu-mali,shaderc-online,no-shader-table -- --nocapture`, which
+  prints `deepest stack 220 KiB`); further Mali lowering work has about
+  20 KiB of headroom before `mali_locals` fails.
 
 ### The references, byte for byte
 
