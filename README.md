@@ -73,6 +73,11 @@ depth-texture fix of #40 (`tools/cts/RESULTS.md`):
 | Raspberry Pi 4 | 193 (`445c5653`, 2026-10-20) |
 | i.MX8MP | 42 (`445c5653`, 2026-10-20) |
 
+The Verdin iMX95 (Mali-G310, Zephyr) is not in this table: its first run
+(main `92344e4d`, 2026-11-28, 800x600 on the X12 panel) scores 46 over 32 scenes
+(23 ran, 9 refused by the online compiler; terrain is left out because it stops
+the image), `tools/cts/RESULTS.md`.
+
 Each scene's picture value and frame time are recorded on all three boards
 (`tools/cts/glmark2-pictures.txt`, columns `am62p`, `pi4` and `imx8mp`, 33
 scenes each from this commit; `tools/cts/RESULTS.md`). No scene is black. The

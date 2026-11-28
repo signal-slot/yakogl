@@ -721,6 +721,8 @@ the watchdog and a record, a console-less board strands on the first
 hang. B6 does not block B5: as on the T6, read-back carries the GL work
 until the display exists.
 
+First glmark2-es2 run on the board (2026-11-28, main `92344e4d`, X12 panel at 800x600, started by hand from U-Boot): score 46 over 32 scenes (terrain left out, it stops the image); 23 ran, 9 refused by the online compiler (`tools/cts/RESULTS.md`, "Mali: Verdin iMX95 glmark2-es2").
+
 Host state of B5 and B8 (2026-11-21): both images build with
 `-DYAKOGL_WERROR=ON` and wait for the board. gl_test is the T6's sample and
 main (`src/main_mali.c`) with the board layer's files and
