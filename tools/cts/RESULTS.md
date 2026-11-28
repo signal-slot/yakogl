@@ -619,6 +619,40 @@ kernel has no kexec; `fuse read 2 2 2` gives `00000000 00000080`; DRAM is
 0x90000000 + 0x70000000 and 0x100000000 + 0x180000000; the eMMC's boot
 areas are 31.5 MiB each.
 
+### Verdin iMX95: dEQP-GLES2, the whole tree
+
+The 76 rows of `tools/cts/mali-gles2-tree.txt` (the NanoPC-T6's rows), one
+image per row, built by `tools/cts/imx95-deqp-images.sh` from origin/main
+`92344e4d` (image build string `92344e4d`, `-DYAKOGL_WERROR=ON`, the pinned
+`MALI_CSFFW`, stage 1 `tools/cts/deps-env.sh --build DEQP_WORK --board
+verdin_imx95`). `92344e4d` holds the Mali compiler trains (intval-rest,
+fclane-lower-1, train 2, train 3a) and the same `src/shaderc/online/mali/`,
+`src/mali/` and deqp sample as main `20d1abf7`. It is the last main commit
+before `110080eb`, whose second `vivante-st` line in `capi/Cargo.toml` stops
+cargo from reading the manifest. Each image was staged by the module's Linux
+as `/var/yakogl/row.bin` on the eMMC's root file system (md5 against the
+host's, after dropping the page cache), and the module's U-Boot started it
+through the installed one-shot hook of `tools/board.sh imx95` (`yako_once`,
+`yako_src=mmc`: `ext4load mmc 0:2 0xd0000000`, `dcache off; icache flush; go
+0xd0000000`). There was one reboot per row, and the boot partitions and
+`bootcmd` were not written. The verdicts are from the UART_3 console (the
+BBM record cannot be read under the module's kernel). The previous whole
+tree, from images built at `e63ab28e` in six hand-typed sessions
+(2026-11-24/25), had 11,435 pass, 5,233 fail, 494 not supported and 3
+quality warnings (`tools/cts/log/*-imx95-gles2-S*-e63ab28e/`).
+
+| Step | Image | Result | Build | Run | Record |
+|---|---|---|---|---|---|
+| dEQP-GLES2, the whole tree: 76 rows, one image per row | `vi95_deqp` (`driver/samples/zephyr/deqp`, `verdin_imx95/mimx9596/a55`) | **76 of 76 images reached their `deqp: done` line** (`complete=1`, and `deqp: summary: N cases begun, N with a result, 0 without` in every row). Of the must-pass list's 17,165 cases, **12,393 pass, 4,324 fail, 445 are not supported and 3 end in a quality warning**. Every row reset the board itself (`verdin_imx95: board: run over: PSCI SYSTEM_RESET at N ms`; the longest was T6S2R06 at 58,558 ms of the 600 s lifetime), with `yakogl: draws refused 0`, `osal(mali): restarts 0` and `tiler OOMs 0 grown, 0 with no chunk` in every row. There was no WDOG3 reset and no hang, and the module came back to its Linux each time. The filters ran 17,368 cases (12,594 pass, 4,326 fail, 445 not supported, 3 warnings). The 203 cases outside the must-pass list are counted as they were at `e63ab28e` (201 pass, 2 fail: `random.all_features.fragment.16` and `.56` in T6S3R14), not re-read | origin/main `92344e4d` | 2026-11-28 11:04 to 13:05 JST | `records/verdin-imx95/20261128-0205-gles2-tree-92344e4d` (per-row end lines, the 76 `.built` lines, the staging md5s) |
+
+Per slice of the filters (pass / fail / not supported / warning of the cases
+run): S1 4,033 / 1,126 / 34 / 3 of 5,196; S2 3,921 / 951 / 0 / 0 of 4,872;
+S3 2,291 / 1,804 / 384 / 0 of 4,479; S4 2,349 / 445 / 27 / 0 of 2,821.
+What this run does not show: the refusal texts per case. The console was
+read only at each row's end lines (the bridge is reached through its
+serial tools, not captured to a file), so the per-text refusal counts are
+not tallied and the full captures are not kept.
+
 ## Mali: NanoPC-T6 on Zephyr (by kexec)
 
 Zephyr images started out of the board's Armbian by kexec
