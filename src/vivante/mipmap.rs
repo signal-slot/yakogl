@@ -275,9 +275,17 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
      * (`backend::emit_target_boundary`). A level that does not fit the
      * stream starts the next kick (`draw_one`), so a chain is as few kicks
      * as its draws fit. The chain's stream starts with every state group
-     * unknown; forgetting them here as well keeps that true. */
-    let _ = backend::gc_flush();
-    super::dedup::invalidate();
+     * unknown; forgetting them here as well keeps that true.
+     *
+     * With `gc_chain_open_kick` on (docs/notes/gc-kick-continue.md C5) the
+     * chain stays in the open kick instead: nothing is submitted before or
+     * after it, and no state group is forgotten (the words are compared
+     * anyway; a level's new target still makes its kick boundary). */
+    let open_kick = backend::chain_open_kick_on();
+    if !open_kick {
+        let _ = backend::gc_flush();
+        super::dedup::invalidate();
+    }
     g().chain_stream = true;
     for l in 1..n {
         if record_level(t.base_gpu, t.stride_texels, &lv[l - 1], &lv[l]) != 0 {
@@ -289,6 +297,15 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
         }
     }
     g().chain_stream = false;
+    if open_kick {
+        /* the open kick holds the chain's last level; a chain before it,
+         * by kick or by fence, is in this kick or an earlier one */
+        let g = g();
+        g.mip_kick = backend::gc_kick_id();
+        g.mip_fence = 0;
+        note_chain(t.base_gpu, backend::gc_kick_id());
+        return Ok(());
+    }
     if backend::gc_flush() != 0 {
         let _ = backend::gc_finish();
         return Err("the chain's last kick did not submit");
@@ -296,6 +313,7 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
     super::dedup::invalidate();
     let g = g();
     g.mip_fence = backend::last_submitted_fence();
+    g.mip_kick = 0;
     note_chain(t.base_gpu, backend::gc_kick_id().wrapping_sub(1));
     Ok(())
 }
@@ -304,8 +322,9 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
 /// chain of `levels` levels (`YakoglBackend::generate_mipmap`): a 2D RGBA8
 /// texture, in either channel order, gets its levels 1.. drawn on the GPU
 /// (`chain_gpu`: one kick for the chain, or as few as its draws fit,
-/// submitted before this returns) and the answer is 1: the GL core filters
-/// nothing. 0 -- the GL core's CPU box filter, as before -- for any other
+/// submitted before this returns; with `gc_chain_open_kick` on, recorded
+/// into the open kick and not submitted) and the answer is 1: the GL core
+/// filters nothing. 0 -- the GL core's CPU box filter, as before -- for any other
 /// texture (another format, a cube or array stack), a chain whose layout
 /// this backend does not walk (`chain_layout`), a chain past the 32-bit
 /// address space, a level's draw or the last kick refused (the kicks
@@ -362,13 +381,34 @@ pub unsafe extern "C" fn gc_generate_mipmap(b: *const GlesTextureBind, levels: u
 /// a level above 0 is attached): the levels are in the storage already,
 /// written by the chain's kicks, so the wait for the last of them is all
 /// there is. The fences are ordered, so the newest chain's fence covers
-/// every chain before it.
+/// every chain before it. With `gc_chain_open_kick` on the chain is known
+/// by its kick id instead, and waited for through `kick::wait_kick`, which
+/// submits the kick first when it is still the open one; kicks complete in
+/// order, so that covers every chain before it too.
 ///
 /// # Safety
 /// `b` is null or points at a binding that outlives the call.
 pub unsafe extern "C" fn gc_return_mipmap_chain(_b: *const GlesTextureBind, _levels: u32) {
     let g = g();
-    if !g.inited || g.mip_fence <= 0 {
+    if !g.inited {
+        return;
+    }
+    if g.mip_kick != 0 {
+        /* `gc_chain_open_kick`: the chain's kick by its id (submitted first
+         * when it is still the open one) */
+        let kick = g.mip_kick;
+        if !backend::kick_pending_retired(kick) {
+            return;
+        }
+        g.waits += 1;
+        if super::kick::wait_kick(kick) != 0 {
+            glog_once!(
+                "yakogl/vivante: the kicks that made a mipmap chain did not complete: the CPU reads what they left"
+            );
+        }
+        return;
+    }
+    if g.mip_fence <= 0 {
         return;
     }
     let fence = g.mip_fence;
