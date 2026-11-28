@@ -4,11 +4,11 @@
 //! colour targets (knob-proof-v3d, plan #368 RC14, criterion c2), with the GL
 //! core told to offer four draw buffers.
 //!
-//! The count is set through the host stand-in `backend::HOST_DRAW_TARGETS`,
-//! in ONE place, `set_draw_targets`: the `knob` item replaces that body with
-//! `v3d_debug_set_draw_targets(n)` (and `backend::TEST_DRAW_TARGETS`), see
-//! docs/notes/mrt4-v3d-pvr.md section 3. This file needs a check.sh row; the
-//! `knob` item adds it in the same commit as the knob. Run it with exactly
+//! The count is set in ONE place, `set_draw_targets`, through the V3D's test
+//! knob `v3d_debug_set_draw_targets(n)` (src/v3d/debug.rs; the host stand-in
+//! `backend::HOST_DRAW_TARGETS` is left unset), see
+//! docs/notes/mrt4-v3d-pvr.md section 3. tools/check.sh runs this file in its
+//! test-knobs rows. Run it with exactly
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,test-knobs --test es3_mrt4_v3d
@@ -41,11 +41,12 @@ use std::sync::{Mutex, OnceLock};
 
 use yakogl::v3d::ffi::*;
 
-/// The one place the draw-target count is set: the host stand-in
-/// `backend::HOST_DRAW_TARGETS` today. The `knob` item replaces this body
-/// with `v3d_debug_set_draw_targets(n)` (and `backend::TEST_DRAW_TARGETS`).
+/// The one place the draw-target count is set: the V3D's test knob
+/// `v3d_debug_set_draw_targets(n)` (src/v3d/debug.rs), as the Pi 4 images
+/// call it.
 fn set_draw_targets(n: u8) {
-    yakogl::backend::HOST_DRAW_TARGETS.store(n, core::sync::atomic::Ordering::Relaxed);
+    yakogl::v3d::debug::v3d_debug_set_draw_targets(i32::from(n));
+    assert_eq!(yakogl::backend::draw_targets(), usize::from(n));
 }
 
 /* ---- the real layout and packers, built from driver/src/v3d/v3d_tex.c ------ */
