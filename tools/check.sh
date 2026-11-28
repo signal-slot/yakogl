@@ -2956,6 +2956,9 @@ step "run     mali corpus_diff self-test (four committed programs, no Mesa)" mal
 step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
     --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
+step "test    $MALI_CONFIG (tests/mali_glmark2_uniforms.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_glmark2_uniforms
 step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
     --test mali_zs_sharing --test mali_vcube_magswitch
