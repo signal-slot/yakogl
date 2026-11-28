@@ -29,7 +29,8 @@
 //! `tools/mali/deqp-host-measure.sh` (VK-GL-CTS 93bca01); each `.license`
 //! sidecar names the case.
 //!
-//! None compiles at the tip: each test is ignored with its refusal quoted;
+//! Only `tk_rnd_bias_proj` compiles (byte-equal since plan #402's
+//! lower-mixprec3, [`MATCHED`]); each other test is ignored with its refusal quoted;
 //! the lowering removes the `ignore` and the reference's entry in
 //! `REFUSALS` together, and adds it to `MATCHED`. `refusals_pinned` runs
 //! now: it asserts each ignored reference's exact current refusal, names
@@ -97,7 +98,6 @@ fn texmisc_tk_rnd_bias_two() {
 }
 
 #[test]
-#[ignore = "refused: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query)"]
 fn texmisc_tk_rnd_bias_proj() {
     mali_ref::assert_matches("deqp_texmisc_tk_rnd_bias_proj");
 }
@@ -159,7 +159,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_texmisc_tk_rnd_proj_sum", TEX_KIND),
     ("deqp_texmisc_tk_rnd_bias_fragcolor", TEX_KIND),
     ("deqp_texmisc_tk_rnd_bias_two", TEX_KIND),
-    ("deqp_texmisc_tk_rnd_bias_proj", TEX_KIND),
     ("deqp_texmisc_tk_rnd_cube_bias", TEX_KIND),
     ("deqp_texmisc_fcm_int_to_float", FRAG_COORD),
     ("deqp_texmisc_fcm_ivec2_to_vec2", FRAG_COORD),
@@ -169,8 +168,10 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_texmisc_fcm_eval_order", FRAG_COORD),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run): since plan
+/// #402's lower-mixprec3, `tk_rnd_bias_proj`, whose look-ups only
+/// overwritten `gl_FragColor` stores read (mod.rs `overwritten_stores`).
+const MATCHED: &[&str] = &["deqp_texmisc_tk_rnd_bias_proj"];
 
 #[test]
 fn refusals_pinned() {

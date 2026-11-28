@@ -2320,8 +2320,9 @@ fn live_varying_loads(m: &ir_mod::Module<'_>, scratch: &Arena<'_>) -> Result<[u8
     let exact = exact_values(m, scratch)?;
     let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
     let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
-    for (l, op) in live.iter_mut().zip(m.instrs) {
-        *l = matches!(op, ir_mod::Op::StoreOutput { .. });
+    let dead = overwritten_stores(m, scratch).map_err(refused)?;
+    for (i, (l, op)) in live.iter_mut().zip(m.instrs).enumerate() {
+        *l = matches!(op, ir_mod::Op::StoreOutput { .. }) && !dead[i];
     }
     for n in m.nodes {
         if let ir_mod::Node::If { cond, .. } = n {
@@ -2330,12 +2331,70 @@ fn live_varying_loads(m: &ir_mod::Module<'_>, scratch: &Arena<'_>) -> Result<[u8
             }
         }
     }
-    mark_reads(m, live, live_local, |i| exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32)));
+    mark_reads(m, live, live_local, |i| {
+        dead[i] || (exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32)))
+    });
+    for (l, d) in live.iter_mut().zip(dead.iter()) {
+        *l &= !*d;
+    }
     let mut out = [0u8; select::MAX_VARYINGS];
     for (op, _) in m.instrs.iter().zip(live.iter()).filter(|(_, l)| **l) {
         if let ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Varying(loc), comps } = *op {
             let d = out.get_mut(loc as usize).ok_or(refused(MaliError::VaryingLocation))?;
             *d |= ((1u16 << comps.min(4)) - 1) as u8;
+        }
+    }
+    Ok(out)
+}
+
+/// The stores of fragment module `m` that a later store overwrites whole
+/// before anything reads them, one flag per instruction: Mesa's
+/// `nir_lower_vars_to_ssa` and `nir_opt_dead_write_vars` leave them no use
+/// before the link, so nothing they read is live and a varying only they
+/// read is no varying. Two kinds: a store of an output that a later store
+/// of it in `main`'s own node list replaces, no `if`, loop or jump between
+/// them (deqp_varyload_tex110: four `gl_FragColor`
+/// stores, the last a look-up of `f` alone, the vertex shader storing `f`
+/// only; deqp_varyload_cond19's first `gl_FragColor` after an `if`, its
+/// `l` and `k` no varyings), and a store of an output's own local (the local an output store
+/// loads whole: a `gl_FragColor` the shader reads back) that a later one
+/// replaces before any read (nir.rs `overwritten_stores`;
+/// deqp_varyload_basic33: `gl_FragColor = ... * vec4(i, h, g, f) * ...;
+/// gl_FragColor = vec4(-3.25 * a, ...)`, `a` and `b` its only varyings).
+/// Other locals keep every store (the walk reads a local's stores in
+/// order: deqp_mixprec3_hp_dot, _hp_vec3_fn).
+pub(super) fn overwritten_stores<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliError> {
+    let out = scratch.alloc_filled(m.instrs.len(), false).map_err(|_| MaliError::OutOfScratch)?;
+    /* a store of the body's own list replaced later in that list, no `if`,
+     * loop or jump between them */
+    let top = m.nodes_of(m.body);
+    for (j, n) in top.iter().enumerate() {
+        let ir_mod::Node::Instr(id) = *n else { continue };
+        let Some(&ir_mod::Op::StoreOutput { slot, .. }) = m.instr(id) else { continue };
+        let later = top[j + 1..].iter().map_while(|n| match *n {
+            ir_mod::Node::Instr(x) => Some(x),
+            _ => None,
+        });
+        if let Some(o) = out.get_mut(id.0 as usize) {
+            *o = later
+                .into_iter()
+                .any(|x| matches!(m.instr(x), Some(&ir_mod::Op::StoreOutput { slot: s, .. }) if s == slot));
+        }
+    }
+    /* the outputs' own locals */
+    let own = |l: ir_mod::LocalId| {
+        m.instrs.iter().any(|o| match *o {
+            ir_mod::Op::StoreOutput { src, .. } => {
+                matches!(m.instrs.get(src.val.0 as usize), Some(&ir_mod::Op::LoadLocal { local, index: None, .. }) if local == l)
+            }
+            _ => false,
+        })
+    };
+    let locals = scratch.alloc_filled(m.instrs.len(), false).map_err(|_| MaliError::OutOfScratch)?;
+    nir::overwritten_stores(m, m.nodes_of(m.body), scratch, locals)?;
+    for (i, op) in m.instrs.iter().enumerate() {
+        if let ir_mod::Op::StoreLocal { local, .. } = *op {
+            out[i] |= locals[i] && own(local);
         }
     }
     Ok(out)

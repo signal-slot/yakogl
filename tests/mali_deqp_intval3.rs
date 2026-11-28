@@ -77,7 +77,9 @@ const REFUSED: &[(&str, &str)] = &[
     ("reslib_inout_int_fs", INT_VALUE),
     ("rsg_cond12_fs", INT_VALUE),
     ("rsg_condcomb80_fs", CONTROL_FLOW),
-    ("rsg_exp76_fs", INT_VALUE),
+    /* its int values only an overwritten colour store read (plan #402's
+     * lower-mixprec3) */
+    ("rsg_exp76_fs", "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet"),
     ("rsg_sconv72_fs", INT_VALUE),
     /* every int and bool value dead: the uniform's form next */
     ("rsg_swizzle12_fs", FS_UNIFORM),

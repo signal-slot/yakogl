@@ -587,6 +587,35 @@ fn swapped_compares(m: &Module<'_>, n: usize, grafted: &[Option<ir::ValueId>; MA
         else {
             continue;
         };
+        /* a vector `Flt`/`Fle` of two locals each stored once from a
+         * varying load (`greaterThan(in0, in1)` of `highp vec2 in0 =
+         * v_in0.xz`, ...): copy propagation leaves NIR's two loads where
+         * the compare reads them, in its sources' order (`flt(in1, in0)`,
+         * `fge(in1, in0)` for `lessThanEqual(in0, in1)`), before
+         * `nir_opt_move` sinks them to it ([`move_loads`]: the second stays,
+         * the first goes after it). So the first source's load takes the
+         * earlier key (deqp_mixprec4_gt_vec2, _le_vec2: `v_in0`, index 0x0,
+         * loaded first; _ge_vec4, deqp_mixprec3_hp_bvec4 as before) */
+        if matches!(op, AluOp::Flt | AluOp::Fle) && m.comps_of(ir::ValueId(v as u32)) != 1 && keys[v] != u32::MAX {
+            let load = |k: usize| {
+                let Some(&ir::Op::LoadLocal { local, index: None, .. }) = m.instrs.get(s[k].val.0 as usize) else {
+                    return None;
+                };
+                let mut st =
+                    (0..n).filter(|&j| matches!(m.instrs[j], ir::Op::StoreLocal { local: l, .. } if l == local));
+                let (Some(j), None) = (st.next(), st.next()) else { return None };
+                let ir::Op::StoreLocal { src, index: None, .. } = m.instrs[j] else { return None };
+                let u = src.val.0 as usize;
+                matches!(m.instrs.get(u), Some(ir::Op::LoadInput { slot: IoSlot::Varying(_), .. })).then_some(u)
+            };
+            let (p, q) = if op == AluOp::Flt { (0, 1) } else { (1, 0) };
+            if let (Some(x), Some(y)) = (load(p), load(q)) {
+                if x != y && keys[x] > keys[y] && keys[x] != u32::MAX {
+                    keys.swap(x, y);
+                }
+            }
+            continue;
+        }
         /* `smoothstep(e0, e1, x)`'s quotient: the built-in's `edge0` is read
          * twice and stays its parameter's temporary, `x` and `edge1` are
          * grafted into `(x - edge0) / (edge1 - edge0)`, so glsl_to_nir
@@ -1638,6 +1667,11 @@ pub struct Fs<'s> {
     /// first, one bit each ([`layout`]): one variable with the column
     /// before it, converted by one `f2fmp` ([`conversion_order`]).
     mat_col: u32,
+    /// The varying locations that are a varying array's element past its
+    /// first (`var[1]`, ... beside `var`), one bit each ([`layout`]): one
+    /// variable with the element before it, converted by one `f2fmp`
+    /// ([`conversion_order`]; deqp_mixprec3_vary_array_static).
+    arr_el: u32,
     pub compacted: bool,
     alpha: Option<u16>,
     /// The uniform array elements read at a run-time index
@@ -5159,8 +5193,11 @@ fn ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliEr
     let oom = |_| MaliError::OutOfScratch;
     let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
     let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
-    for (l, op) in live.iter_mut().zip(m.instrs) {
-        *l = matches!(op, ir::Op::StoreOutput { .. } | ir::Op::Discard);
+    /* (a store a later one overwrites reads nothing, mod.rs
+     * `overwritten_stores`) */
+    let dead = super::overwritten_stores(m, scratch)?;
+    for (i, (l, op)) in live.iter_mut().zip(m.instrs).enumerate() {
+        *l = matches!(op, ir::Op::StoreOutput { .. } | ir::Op::Discard) && !dead[i];
     }
     for n in m.nodes {
         if let Node::If { cond, .. } = n {
@@ -5169,7 +5206,10 @@ fn ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliEr
             }
         }
     }
-    super::mark_reads(m, live, live_local, |_| false);
+    super::mark_reads(m, live, live_local, |i| dead[i]);
+    for (l, d) in live.iter_mut().zip(dead.iter()) {
+        *l &= !*d;
+    }
     Ok(live)
 }
 
@@ -5218,6 +5258,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         nreads: 0,
         lane_of: [[None; 4]; MAX_VARYINGS],
         mat_col: 0,
+        arr_el: 0,
         compacted: false,
         alpha: None,
         ubo_idx: [0; MAX_UBO_READS],
@@ -7423,8 +7464,17 @@ fn walk_nodes(
                 let k = neg_literal(m, &s).ok_or(MaliError::Defect(Defect::IrIndex))?;
                 let (c, v) = (lane(vals, s[k], 0), f.fp16_operand(lane(vals, s[1 - k], 0)));
                 let (Val::Const(c), Val::Lane(..)) = (c, v) else { return Err(MaliError::ArithConstant) };
-                let p = f.node(Alu::Fmul, [Val::Const(c ^ F32_NEG_ZERO), v, Val::Undef], at)?;
-                out[0] = f.neg(p, at)?;
+                /* `-0.0 * b`: `fneg(fmul(0.0, b))`, whose product is 0.0
+                 * (`fmul(a, 0.0)`, nir_opt_algebraic.py:277) before the link,
+                 * so `b` is read nowhere and the constant is `fneg(0.0)`
+                 * (deqp_varyload_rnd57: `vec4(a, a, -0.0 * b, a)`, the FAU
+                 * word `80008000`, `b` no varying) */
+                out[0] = if c == F32_NEG_ZERO {
+                    Val::Const(F32_NEG_ZERO)
+                } else {
+                    let p = f.node(Alu::Fmul, [Val::Const(c ^ F32_NEG_ZERO), v, Val::Undef], at)?;
+                    f.neg(p, at)?
+                };
             }
             /* `smoothstep`'s last product: the front end's `(t * t) * (3.0 -
              * 2.0 * t)` is Mesa's `t * (t * (3.0 - 2.0 * t))`
@@ -7642,7 +7692,25 @@ fn walk_nodes(
             ir::Op::Alu(a @ (AluOp::Flt | AluOp::Fle | AluOp::Feq), s) => {
                 let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
-                    let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
+                    /* a compare of a highp varying's lanes ([`Fs::hp_lane`]),
+                     * every other operand a constant: lower_precision leaves
+                     * it at fp32 (its operands are highp), `FCMP_OR.f32`
+                     * (deqp_mixprec3_hp_bvec4's `lessThan` of two highp
+                     * vec4, deqp_mixprec4_*, deqp_mixcol_hp_bool). A compare
+                     * of arithmetic on them (refract's `k < 0.0`,
+                     * tests/mali_fs_refract.rs) has no reference at fp32 */
+                    let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
+                    let island = |v: Val| matches!(v, Val::Const(_)) || f.hp_lane(v);
+                    if !prec.highp && (f.hp_lane(x) || f.hp_lane(y)) && island(x) && island(y) {
+                        let u = Val::Undef;
+                        *o = match a {
+                            AluOp::Flt => f.op32(Alu::Fcmp(Cmpf::Lt), [x, y, u], at)?,
+                            AluOp::Fle => f.op32(Alu::Fcmp(Cmpf::Ge), [y, x, u], at)?,
+                            _ => f.op32(Alu::Fcmp(Cmpf::Eq), [x, y, u], at)?,
+                        };
+                        continue;
+                    }
+                    let (x, y) = (f.fp16_operand(x), f.fp16_operand(y));
                     if x == Val::Undef || y == Val::Undef {
                         if i > 0 {
                             break;
@@ -10058,7 +10126,13 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         return Err(MaliError::ColourForm);
     }
     f.mat_col = 0;
+    f.arr_el = 0;
     for d in m.inputs.iter().filter(|d| d.kind == IoKind::Varying) {
+        /* (a matrix's columns are named `v[1]`, ... too, with the
+         * matrix's type: [`Fs::mat_col`]) */
+        if d.name.ends_with(']') && super::glsl::columns(d.gl_type) == 1 {
+            f.arr_el |= 1u32.checked_shl(u32::from(d.location)).unwrap_or(0);
+        }
         for col in 1..super::glsl::columns(d.gl_type) {
             f.mat_col |= 1u32.checked_shl(u32::from(d.location) + u32::from(col)).unwrap_or(0);
         }
@@ -11524,20 +11598,14 @@ fn conversion_order(
 ) -> Result<Conversions, MaliError> {
     let mut out = Conversions {
         at_load: [[NO_LANE; 4]; MAX_VARYINGS],
+        lazy: [false; MAX_VARYINGS],
+        swap: [0; MAX_VARYINGS],
         at_store: [(0, NO_LANE); 8],
         n: 0,
         later: [(0, 0, NO_LANE); 8],
         n_later: 0,
     };
-    let lanes_of = |x: &P| -> [Option<(u8, u8)>; 2] {
-        match *x {
-            P::Leaf(Leaf::Half { k, h, swz: Swz::H10 }) => [Some((k, 2 * h + 1)), Some((k, 2 * h))],
-            P::Leaf(Leaf::Half { k, h, .. }) => [Some((k, 2 * h)), Some((k, 2 * h + 1))],
-            P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. } | Leaf::MkInt { k, c, .. }) => [Some((k, c)), None],
-            P::Leaf(Leaf::Lanes { k, c, e, d }) => [Some((k, c)), Some((e, d))],
-            _ => [None, None],
-        }
-    };
+    let lanes_of = leaf_lanes;
     /* the lanes the fp16 trees convert: every leaf but the colour's own,
      * and the lanes an operation read that the walk folded ([`Fs::folded`]) */
     let mut tree = [0u8; MAX_VARYINGS];
@@ -11572,8 +11640,15 @@ fn conversion_order(
         for l in (0..MAX_VARYINGS)
             .filter(|&l| f.lane_of[l].iter().flatten().any(|&(s, lane)| s == slot && tree[k] & 1 << lane != 0))
         {
-            let base = f.mat_base(l as u8);
+            /* (and a varying array's elements are one variable, one
+             * `f2fmp` of the packed lanes: deqp_mixprec3_vary_array_static's
+             * two `V2F32_TO_V2F16` of `var[0..3]` in one slot) */
+            let mut base = f.mat_base(l as u8);
+            while base > 0 && base < 32 && f.arr_el >> base & 1 != 0 {
+                base -= 1;
+            }
             bases |= 1u32.checked_shl(u32::from(base)).unwrap_or(0);
+            out.lazy[k] |= f.arr_el >> l & 1 != 0 || f.arr_el.checked_shr(l as u32 + 1).is_some_and(|x| x & 1 != 0);
             /* a mediump float vec3 or vec4 of its own, not a matrix
              * column */
             vectors &= f.var_comps[l] >= 3
@@ -11586,12 +11661,22 @@ fn conversion_order(
          * load they share, in lane order whatever variable each lane is
          * (gm2_vload_1: `V2F32_TO_V2F16 r1, r2^, r3^` of (v_n.z, v_e.x),
          * then `MKVEC.v2i16 r3, r1.h1, r2.h0` for v_e.xy;
-         * docs/notes/mali-varying-load.md). Scalars of two varyings in one
-         * load (deqp_varyload_rnd57, basic33: Mesa's link folds and merges
-         * them further) and a highp one beside (op_common_mod_fs_highp)
-         * have no reference */
-        if bases.count_ones() > 1 && (f.prec.highp || f.mixed || !vectors) {
+         * docs/notes/mali-varying-load.md): each at its variable's first
+         * read ([`Conversions::later`], below). Any other slot of several
+         * variables: each its own `f2fmp` where it is first read,
+         * `nir_opt_vectorize` making the two of an aligned pair one at the
+         * first one's place, the even lane low (deqp_varyload_basic33: `a`,
+         * `b` packed as x, y, read by one fp16 vector, `V2F32_TO_V2F16 r0,
+         * r0^, r1^` before the `FMA.v2f16`): the conversions at their first
+         * reader ([`Conversions::lazy`]), Mesa's order checked below.
+         * Packed vectors in a highp or mixed-precision shader
+         * (gm2_cf_loop1_if_fs's `highp vec3 lv` beside two packed mediump
+         * vec3s) have no reference */
+        if bases.count_ones() > 1 && vectors && (f.prec.highp || f.mixed) {
             return Err(MaliError::FsVaryingLoad);
+        }
+        if bases.count_ones() > 1 && !vectors {
+            out.lazy[k] = true;
         }
         /* Mesa's order of the conversions */
         let mut order = [0u8; 4];
@@ -11650,7 +11735,7 @@ fn conversion_order(
          * lane is odd or that a tree reads stays refused below */
         for g in &mesa[..nm] {
             let (c, Some(d)) = (g.0, g.1) else { continue };
-            let lone = |c: u8| conv_form[k][c as usize] == Some(false) && tree[k] & 1 << c == 0;
+            let lone = |c: u8| conv_form[k][c as usize] == Some(false);
             if c & 1 == 0 && lone(c) && lone(d) {
                 conv_form[k][c as usize] = Some(true);
                 conv_form[k][d as usize] = Some(true);
@@ -11661,8 +11746,31 @@ fn conversion_order(
                 no -= 1;
             }
         }
-        /* the same conversions (a pair Mesa makes with its odd lane low has
-         * no reference here); a tree's at the load, in Mesa's order */
+        /* a pair Mesa makes with its odd lane low, each lane a lone colour
+         * lane its leaves read alone (no [`Leaf::Half`] or [`Leaf::Lanes`]
+         * of the load): one conversion, the even lane the high half
+         * (deqp_varyload_rnd31's `vec4(b, 1.0, a, a)` of `a`, `b` packed
+         * as x, y: `V2F32_TO_V2F16 r0, r1^, r0^`, then `MKVEC.v2i16 r1,
+         * r0.h0, u2.w0.h0` and `IADD.v2u16 r2, r0^.h11, 0x0`) */
+        let halves = pr.nodes[..pr.n].iter().any(|x| {
+            matches!(*x, P::Leaf(Leaf::Half { k: j, .. } | Leaf::Lanes { k: j, .. }) if j as usize == k)
+                || matches!(*x, P::Leaf(Leaf::Lanes { e, .. }) if e as usize == k)
+        });
+        for g in &mesa[..nm] {
+            let (c, Some(d)) = (g.0, g.1) else { continue };
+            let lone = |c: u8| conv_form[k][c as usize] == Some(false) && tree[k] & 1 << c == 0;
+            if c & 1 == 1 && d + 1 == c && lone(c) && lone(d) && !halves {
+                conv_form[k][c as usize] = Some(true);
+                conv_form[k][d as usize] = Some(true);
+                out.swap[k] |= 1 << d;
+                let i = ours[..no].iter().position(|o| o.0 == d).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                ours[i] = (c, Some(d));
+                let j = ours[..no].iter().position(|o| *o == (c, None)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                ours.copy_within(j + 1..no, j);
+                no -= 1;
+            }
+        }
+        /* the same conversions; a tree's at the load, in Mesa's order */
         let same = nm == no && mesa[..nm].iter().all(|g| ours[..no].contains(g));
         if !same {
             return Err(MaliError::FsVaryingLoad);
@@ -11687,7 +11795,7 @@ fn conversion_order(
              * one with a lane of the variable the load stands for, at the
              * load */
             let at = g.1.map_or(owner_key(g.0), |d| owner_key(g.0).min(owner_key(d)));
-            if at > f.varyings[k].key() {
+            if !out.lazy[k] && at > f.varyings[k].key() {
                 *out.later.get_mut(out.n_later).ok_or(MaliError::Defect(Defect::IrIndex))? = (at, k as u8, g.0);
                 out.n_later += 1;
             } else {
@@ -11705,7 +11813,11 @@ fn conversion_order(
              * Mesa makes with the odd lane first are refused above) */
             let form = conv_form.get(k as usize).and_then(|x| x.get(c as usize)).copied().flatten();
             let Some(pair) = form else { return Err(MaliError::Defect(Defect::IrIndex)) };
-            let c = if pair { c & !1 } else { c };
+            let c = match pair {
+                true if out.swap.get(k as usize).is_some_and(|m| m & 1 << (c & !1) != 0) => c | 1,
+                true => c & !1,
+                false => c,
+            };
             let tree_lane = tree.get(k as usize).is_some_and(|t| t & 1 << c != 0);
             if !tree_lane && !out.at_store[..out.n].contains(&(k, c)) {
                 *out.at_store.get_mut(out.n).ok_or(MaliError::Defect(Defect::IrIndex))? = (k, c);
@@ -11716,6 +11828,17 @@ fn conversion_order(
     Ok(out)
 }
 
+/// The varying lanes (load, lane) a pair-graph leaf reads.
+fn leaf_lanes(x: &P) -> [Option<(u8, u8)>; 2] {
+    match *x {
+        P::Leaf(Leaf::Half { k, h, swz: Swz::H10 }) => [Some((k, 2 * h + 1)), Some((k, 2 * h))],
+        P::Leaf(Leaf::Half { k, h, .. }) => [Some((k, 2 * h)), Some((k, 2 * h + 1))],
+        P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. } | Leaf::MkInt { k, c, .. }) => [Some((k, c)), None],
+        P::Leaf(Leaf::Lanes { k, c, e, d }) => [Some((k, c)), Some((e, d))],
+        _ => [None, None],
+    }
+}
+
 /// Where the fp16 conversions of the loads stand ([`conversion_order`]):
 /// those of the fp16 trees at their load (each load's first lanes, in
 /// order, padded with [`NO_LANE`]) or, for a variable read first after its
@@ -11724,6 +11847,17 @@ fn conversion_order(
 /// first lane), `n` of them).
 struct Conversions {
     at_load: [[u8; 4]; MAX_VARYINGS],
+    /// A load of a varying array's elements: its tree conversions stand at
+    /// their first reader, not at the load (each element is its own
+    /// variable, its `f2fmp` where the element is read; `nir_opt_vectorize`
+    /// makes an aligned pair one at the first lane's place:
+    /// deqp_mixprec3_vary_array_static's second `V2F32_TO_V2F16` after
+    /// the first `FADD.v2f16`).
+    lazy: [bool; MAX_VARYINGS],
+    /// Per load, the even lanes of the pairs converted with their odd lane
+    /// low (`V2F32_TO_V2F16 r0, r1^, r0^`, the even lane the high half:
+    /// deqp_varyload_rnd31), one bit each.
+    swap: [u8; MAX_VARYINGS],
     at_store: [(u8, u8); 8],
     n: usize,
     later: [(u32, u8, u8); 8],
@@ -13269,6 +13403,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut lv = Leaves {
         conv: [[None; 4]; MAX_VARYINGS],
         conv_hi: [0; MAX_VARYINGS],
+        conv_swap: conv_order.swap,
         raw: [[None; 4]; MAX_VARYINGS],
         tex: [[None; 4]; MAX_LOOK_UPS],
         ubo: *ubo,
@@ -13283,7 +13418,52 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut val = [None::<Src>; MAX_PAIRS];
     let mut rows = 0u128;
     let mut texel = None;
+    /* the lazy loads' conversions not made yet ([`Conversions::lazy`]),
+     * one bit per first lane */
+    let mut pending = [0u8; MAX_VARYINGS];
+    for (k, m) in pending.iter_mut().enumerate().take(f.nvar) {
+        if conv_order.lazy[k] {
+            for &c in conv_order.at_load[k].iter().take_while(|&&c| c != NO_LANE) {
+                *m |= 1 << c;
+            }
+        }
+    }
+    let mut flush = |p: &mut Prog<'_>, lv: &mut Leaves, rows: &mut u128, reads: &dyn Fn(u8, u8) -> bool| {
+        for k in 0..f.nvar {
+            for &c in conv_order.at_load[k].iter().take_while(|&&c| c != NO_LANE) {
+                let pair = conv_form[k][c as usize] == Some(true);
+                if pending[k] & 1 << c != 0 && (reads(k as u8, c) || (pair && reads(k as u8, c + 1))) {
+                    pending[k] &= !(1 << c);
+                    /* the pair's odd lane read first: its `f2fmp` stands
+                     * first, and `nir_opt_vectorize` keeps the first one's
+                     * lane low (deqp_mixcol_lz_rnd_other's `vec4(d, c, b,
+                     * a)` of `b`, `d` packed as x, y: `V2F32_TO_V2F16 r0,
+                     * r1^, r0^`) */
+                    if pair && c & 1 == 0 && !reads(k as u8, c) {
+                        lv.conv_swap[k] |= 1 << c;
+                    }
+                    conversion(p, f, k, c, &conv_form, lv, rows)?;
+                }
+            }
+        }
+        Ok::<(), MaliError>(())
+    };
     for &(_, _, what, x) in events.iter() {
+        /* a lazy conversion before the first operation that reads it, and
+         * every one left before any other event that reads lanes (a
+         * load, and another load's conversion at a later variable's first
+         * read, read none) */
+        match (what, pr.nodes[x as usize]) {
+            (LOAD | CONV, _) => {}
+            (NODE, P::Op(a, srcs)) if (x as usize) < pr.n => {
+                let ar = a.arity().min(3);
+                let reads = |k: u8, c: u8| {
+                    srcs[..ar].iter().any(|&s| leaf_lanes(&pr.nodes[s as usize]).contains(&Some((k, c))))
+                };
+                flush(p, &mut lv, &mut rows, &reads)?;
+            }
+            _ => flush(p, &mut lv, &mut rows, &|_, _| true)?,
+        }
         match what {
             CONV => {
                 let (_, k, c) = conv_order.later[x as usize];
@@ -13297,6 +13477,9 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                  * .wait1 r0.h0` after `TEX_SINGLE`), so its conversions
                  * follow that look-up */
                 if f.live_look_ups().any(|(_, t)| t.load == Some(x) && t.load_lane == 1) {
+                    continue;
+                }
+                if conv_order.lazy[x as usize] {
                     continue;
                 }
                 for &c in conv_order.at_load[x as usize].iter().take_while(|&&c| c != NO_LANE) {
@@ -13455,6 +13638,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * (`nir_lower_mediump_io`'s `f2fmp` before the 32-bit store,
      * nir_lower_mediump.c:102-104), after every event above, a discard
      * included (fsconv_discw), each load made before its first */
+    flush(p, &mut lv, &mut rows, &|_, _| true)?;
     for &(k, c) in &conv_order.at_store[..conv_order.n] {
         conversion(p, f, k as usize, c, &conv_form, &mut lv, &mut rows)?;
     }
@@ -13614,6 +13798,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                     P::Leaf(Leaf::Half { swz: Swz::H11, .. }) => Swz::H11,
                     P::Leaf(Leaf::Uniform { swz: Swz::H11, .. }) => Swz::H11,
                     P::Leaf(Leaf::TexLane(_, c)) if c % 2 == 1 => Swz::H11,
+                    /* a two-lane operation's high lane as its own
+                     * (deqp_varyload_basic33's `MKVEC.v2i16 r1, r2^.h0,
+                     * r1^.h1`: the `FMA.v2f16`'s second lane) */
+                    P::Leaf(Leaf::Part { h: 1, .. }) => Swz::H11,
                     _ => Swz::H00,
                 };
                 let s = [operand(&pr, x, &lv, &val)?.swz(half(x)), operand(&pr, y, &lv, &val)?.swz(half(y))];
@@ -15935,6 +16123,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     let mut lv = Leaves {
         conv: [[None; 4]; MAX_VARYINGS],
         conv_hi: [0; MAX_VARYINGS],
+        conv_swap: [0; MAX_VARYINGS],
         raw: [[None; 4]; MAX_VARYINGS],
         tex: [[None; 4]; MAX_LOOK_UPS],
         ubo: *ubo,
@@ -16694,6 +16883,8 @@ struct Leaves {
     conv: [[Option<u16>; 4]; MAX_VARYINGS],
     /// The lanes read as the high half of their pair's register ([`conv_lane`]).
     conv_hi: [u8; MAX_VARYINGS],
+    /// The pairs converted with their odd lane low ([`Conversions::swap`]).
+    conv_swap: [u8; MAX_VARYINGS],
     raw: [[Option<u16>; 4]; MAX_VARYINGS],
     /// Each look-up's words ([`Fs::look_ups`]): two fp16 pairs, or four
     /// fp32 lanes.
@@ -16891,6 +17082,15 @@ fn conversion(
     let comps = f.varyings[k].comps as usize;
     let lane = |c: usize| lv.raw[k].get(c).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex));
     match form[k].get(c).copied().flatten() {
+        /* a pair whose odd lane is low ([`Conversions::swap`]) */
+        Some(true) if lv.conv_swap[k] & 1 << (c & !1) != 0 && (c | 1) < comps => {
+            let (lo, hi) = (c | 1, c & !1);
+            let s = [Src::ssa(lane(lo)?), Src::ssa(lane(hi)?)];
+            let r = row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &s)?;
+            lv.conv[k][lo] = Some(r);
+            lv.conv[k][hi] = Some(r);
+            lv.conv_hi[k] |= 1 << hi;
+        }
         Some(true) if c + 1 < comps => {
             let s = [Src::ssa(lane(c)?), Src::ssa(lane(c + 1)?)];
             let r = row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &s)?;

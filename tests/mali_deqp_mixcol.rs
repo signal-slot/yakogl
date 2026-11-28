@@ -41,10 +41,9 @@
 mod mali_ref;
 
 const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
-/// The later refusals of the colourpair rows spike-colourpair-rest lifted
-/// past their pair: the colour's lane forms and the conversions.
+/// The later refusal of the colourpair rows spike-colourpair-rest lifted
+/// past their pair: the colour's lane forms.
 const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
-const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
 /// The references byte-equal now, their tests running.
 const LOWERED: &[&str] = &["ck_scale", "ck_sum", "lz_scale"];
@@ -62,7 +61,22 @@ const LOWERED: &[&str] = &["ck_scale", "ck_sum", "lz_scale"];
 /// fp32 product of an int uniform's float with the varying's lane as
 /// loaded (step MX4 of `docs/notes/mali-mixcol-lowering.md`); `f2i_rnd`,
 /// whose products by 0.0 then fold as Mesa's.
-const MATCHED: &[&str] = &["hp_mat", "hp_loop", "f2i_seq", "hp_scale", "ck_scale_highp", "int_uniform", "f2i_rnd"];
+///
+/// Since plan #402's lower-mixprec3: `hp_bool`, the highp compare kept
+/// fp32 (`FCMP_OR.f32`, nir_fs.rs `walk_nodes`); `lz_rnd_other`, a slot of
+/// two variables converted where they are first read, the pair with its
+/// odd lane low when that lane is read first (nir_fs.rs `select`'s flush).
+const MATCHED: &[&str] = &[
+    "hp_mat",
+    "hp_loop",
+    "f2i_seq",
+    "hp_scale",
+    "ck_scale_highp",
+    "int_uniform",
+    "f2i_rnd",
+    "hp_bool",
+    "lz_rnd_other",
+];
 
 /// The references that compile with other words than Mesa's: `f2i_dead`'s
 /// colour holds a `-0.0` half (`80003c00`) where Mesa's FAU word has `0.0`
@@ -74,7 +88,6 @@ const DIFFERS: &[&str] = &["f2i_dead"];
 const REFUSALS: &[(&str, &str)] = &[
     /* mixprec, declared highp: Mesa computes the highp values at fp32 and
      * narrows each where it meets a mediump value (FADD.f32 .h0) */
-    ("hp_bool", MIX),
     ("hp_param", MIX),
     ("hp_seq", MIX),
     /* mixprec, an int read as a float beside two mediump float members
@@ -84,7 +97,6 @@ const REFUSALS: &[(&str, &str)] = &[
      * shaders' other lanes */
     ("ck_rnd_other", FORM),
     ("lz_rnd", FORM),
-    ("lz_rnd_other", LOAD),
 ];
 
 #[test]
@@ -93,7 +105,6 @@ fn mixcol_hp_scale() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (hp_bool)"]
 fn mixcol_hp_bool() {
     mali_ref::assert_matches("deqp_mixcol_hp_bool");
 }
@@ -180,7 +191,6 @@ fn mixcol_lz_rnd() {
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (lz_rnd_other)"]
 fn mixcol_lz_rnd_other() {
     mali_ref::assert_matches("deqp_mixcol_lz_rnd_other");
 }

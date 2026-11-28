@@ -60,7 +60,12 @@ const REFUSED: &[(&str, &str)] = &[
     ("dead_cond_fs", FS_OPERAND),
     ("dead_ivec_uniform_fs", FRAGCOLOR),
     ("int_uniform_lanes_fs", INT_VALUE),
-    ("trunc_atan_fs", INT_VALUE),
+    /* its int values only an overwritten colour store read (plan #402's
+     * lower-mixprec3) */
+    (
+        "trunc_atan_fs",
+        "Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet",
+    ),
     ("trunc_lane_fs", INT_VALUE),
 ];
 

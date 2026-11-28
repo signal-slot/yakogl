@@ -114,10 +114,6 @@ const OPERAND: &str = "Valhall: a fragment shader operand of a form or in a plac
 /// Mesa's rules fold and reassociate once they are scalar (nir_fs.rs
 /// `unfolded_zero_sum`).
 const ARITH_CONST: &str = "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet";
-/// `MaliError::FsVaryingLoad`: `mod`'s `ffma` is outside the highp
-/// varying's island (nir_fs.rs `hp32_op`), so its lanes meet the load's
-/// rule first.
-const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 /// `MaliError::ColourForm`: `smoothstep`'s `ffma` likewise, met at the
 /// colour's lane.
 const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
@@ -128,9 +124,6 @@ const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own la
 const MIXED: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
 /// `MaliError::Rebalance`.
 const CHAIN: &str = "Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet";
-/// `random_frcp_fs_mediump` past its reciprocal (arith step 1a): its
-/// look-up with a projection.
-const TEX_KIND: &str = "Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message, in the note's
 /// shape order: the shape, the stage and precision of the reference, how many
@@ -250,7 +243,8 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.mix fs mediump: 4 cases of shaders.operator.common_functions.mix.mediump_vec3_float_fragment */
     ("op_common_mix_fs_mediump", OPERAND),
     /* op.common.mod fs highp: 7 cases of shaders.operator.common_functions.mod.highp_float_fragment */
-    ("op_common_mod_fs_highp", LOAD),
+    /* past its load since plan #402's lower-mixprec3 */
+    ("op_common_mod_fs_highp", MIXED),
     /* op.common.mod fs mediump: 7 cases of shaders.operator.common_functions.mod.mediump_float_fragment */
     /* op.common.sign fs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_fragment */
     ("op_common_sign_fs_highp", ARITH),
@@ -349,7 +343,9 @@ const REFUSED: &[(&str, &str)] = &[
     /* random.fne fs mediump: 19 cases of shaders.random.all_features.fragment.29 */
     ("random_fne_fs_mediump", ARITH),
     /* random.frcp fs mediump: 15 cases of shaders.random.texture.fragment.1 */
-    ("random_frcp_fs_mediump", TEX_KIND),
+    /* its look-up only an overwritten colour store read (plan #402's
+     * lower-mixprec3, mod.rs `overwritten_stores`) */
+    ("random_frcp_fs_mediump", ARITH),
     /* random.frsq fs mediump: 10 cases of shaders.random.all_features.fragment.35 */
     ("random_frsq_fs_mediump", ARITH),
     /* random.fsin fs mediump: 35 cases of shaders.random.all_features.fragment.18 */
