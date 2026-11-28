@@ -1312,9 +1312,9 @@ fn npot_mip_chains(layers: u32) -> bool {
 /// A non-power-of-two 2D array of a decoded ETC2/EAC name on a back end that
 /// does not walk layers itself ([`npot_mip_chains`] false). Its GL levels all
 /// have texels (a decoded name's uploads must land somewhere): the chain is
-/// laid out packed, level i of `layers` images of max(w >> i, 1) x max(h >> i,
-/// 1), and the array copy (`native_array::copy`) puts it layer-major for the
-/// TPU. Uncompressed arrays keep one level there ([`npot_mip_chains`]).
+/// laid out packed, level i of `layers` images of
+/// max(w >> i, 1) x max(h >> i, 1), and the array copy (`native_array::copy`)
+/// puts it layer-major for the TPU. Uncompressed arrays keep one level there ([`npot_mip_chains`]).
 fn stacked_decoded_array(t: &GlTexture) -> bool {
     t.target == GL_TEXTURE_2D_ARRAY
         && t.decoded_from != 0
@@ -10781,10 +10781,11 @@ mod tests {
     /// A NPOT cube map keeps its base level on the PowerVR's shape and,
     /// since the texture.specification cube_57x57 cases
     /// (tests/pvr_npot_cube.rs), the levels after it: the chain is laid out
-    /// packed ([`packed_npot_cube`]), level l the six faces of max(6 >> l,
-    /// 1) rows stacked right after level l - 1 (not at the power-of-two step
-    /// of the stacked height, 64 rows for 36), which the native cube's copy
-    /// re-lays for the TPU. Until then it kept its base level alone.
+    /// packed ([`packed_npot_cube`]), level l the six faces of
+    /// max(6 >> l, 1) rows stacked right after level l - 1 (not at the
+    /// power-of-two step of the stacked height, 64 rows for 36), which the
+    /// native cube's copy re-lays for the TPU. Until then it kept its base
+    /// level alone.
     #[test]
     fn a_powervr_npot_cube_keeps_its_base_level() {
         let gl = TestGl::new(4, 4);
