@@ -44,7 +44,6 @@ const LANE: &str = "Valhall: a gl_FragColor lane other than the varying's own la
 /// (`s[0].b[1].b[0]`), since plan #377's spike-uniarray-rest2 took its
 /// `float(s[0].c)` (nir.rs `int_float_only`).
 const VS_PRECISION: &str = "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet";
-const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
 /// The references that compile byte-equal, without the `deqp_unif2_` prefix.
 const LOWERED: &[&str] = &["fs_mat_uniform", "vs_mat_uniform"];
@@ -65,9 +64,12 @@ const REFUSED: &[(&str, &str)] = &[
     ("vs_int_uniform", LOOP_VS),
     ("vs_mediump_array", LANE),
     ("vs_mediump_struct", LANE),
-    /* the struct's int member read as its word (vs16-2); its compare
-     * product is next */
-    ("vs_struct_uniform", ARITH),
+    /* the struct's int member read as its word (vs16-2) and its compare
+     * product lowered (plan #387 mali-train-3b: nir.rs `vs_reduce`'s
+     * `ivec4 ==` and `vs_mask_tree`; the vertex words are Mesa's, measured
+     * beside a fragment shader that reads the varying alone); the
+     * fragment shader's colour is next */
+    ("vs_struct_uniform", LANE),
 ];
 
 #[test]

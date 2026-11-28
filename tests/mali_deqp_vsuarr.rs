@@ -42,25 +42,19 @@ const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
 /// The references the compiler makes byte-equal: `init_bool` (the OR chain
 /// of the negated elements, nir.rs `vs_b2f_and`) and `init_int` (the later
 /// element first in the `umax`, nir.rs `vs_zero_and`), plan #377
-/// lower-uniform-rest3.
-const MATCHED: &[&str] = &["init_bool", "init_int"];
-
-/// The arithmetic refusal (the vertex shader's), without the `Valhall: ` prefix.
-const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
+/// lower-uniform-rest3; `init_bvec4`, `init_ivec4` and `init_multi`, plan
+/// #387 mali-train-3b step VA1 (a vector's `==` cut last lane first, nir.rs
+/// `vs_reduce`, and the product's conditions joined as Mesa's selects are,
+/// `vs_mask_tree`).
+const MATCHED: &[&str] = &["init_bool", "init_bvec4", "init_int", "init_ivec4", "init_multi"];
 
 /// The references that compile now and still differ from Mesa's words.
 /// None.
 const DIFFERS: &[&str] = &[];
 
 /// Every refused reference with its refusal.
-const REFUSED: &[(&str, &str)] = &[
-    ("init_bvec4", ARITH),
-    ("init_ivec4", ARITH),
-    ("init_mat4", UNIFORM_ARRAY),
-    ("init_multi", ARITH),
-    ("init_struct_mat", UNIFORM_ARRAY),
-    ("init_nested_mat", UNIFORM_ARRAY),
-];
+const REFUSED: &[(&str, &str)] =
+    &[("init_mat4", UNIFORM_ARRAY), ("init_struct_mat", UNIFORM_ARRAY), ("init_nested_mat", UNIFORM_ARRAY)];
 
 fn on_disk() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
@@ -143,10 +137,11 @@ fn init_int() {
 }
 
 /// `bvec4 u_var[3]`, every lane `== false`: one `LSHIFT_OR.i32` tree over
-/// the twelve words (FAU 11 to 22), its leaves regrouped across elements,
-/// one `CSEL.u32.eq` at the end.
+/// the twelve words (FAU 11 to 22), each element's lanes last first (w and
+/// z in one instruction, which `bi_opt_reorder_push` gives the first FAU
+/// slots: the leaves are not regrouped across elements), one `CSEL.u32.eq`
+/// at the end.
 #[test]
-#[ignore = "refused: arithmetic beyond +, -, * (uniform bvec4 u_var[3])"]
 fn init_bvec4() {
     mali_ref::assert_matches("deqp_vsuarr_init_bvec4");
 }
@@ -154,7 +149,6 @@ fn init_bvec4() {
 /// `mediump ivec4 u_var[3]`, every lane `== 0`: one `CSEL.u32.gt` (umax)
 /// tree over the twelve words, one `ICMP_OR.u32.eq.m1` with 0.
 #[test]
-#[ignore = "refused: arithmetic beyond +, -, * (uniform mediump ivec4 u_var[3])"]
 fn init_ivec4() {
     mali_ref::assert_matches("deqp_vsuarr_init_ivec4");
 }
@@ -173,7 +167,6 @@ fn init_mat4() {
 /// the bvec2 words with a `.not`, joined by `LSHIFT_AND.i32`. FAU 11 to 28
 /// in the order of first use.
 #[test]
-#[ignore = "refused: arithmetic beyond +, -, * (the ivec3 and bvec2 arrays beside a float array)"]
 fn init_multi() {
     mali_ref::assert_matches("deqp_vsuarr_init_multi");
 }
