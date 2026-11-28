@@ -214,7 +214,10 @@ filter, 56 checks) and `sh tools/v3d/check71.d/hvs6_dlist_swap.sh`
 
 `q4: yes` needs every swap's pickup; a swap without a `lact-pickup` line (an
 older probe, which printed `lact-follows ... (record only)`) or with a `FAIL`
-one makes it `no`, and the restore PASS is then refused too. The two error
+one makes it `no`, and the restore PASS is then refused too. Any
+`dlswap swap<k> FAIL <error name> ...` line also makes `q4: no`, naming that
+swap, whatever the FRCNT, pickup and vblank lines say (a read-back or a
+restore word that failed; since 9ba3e95f). The two error
 names of `hvs6_dlist_swap.h`, `DL.LACT did not reach the new head` and
 `restore: DL.LACT not back on the firmware's head`, are named as the cause
 of a `u3 restore: FAIL`.
