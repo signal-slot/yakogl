@@ -1139,8 +1139,10 @@ fn ring_reserve(k: &YdPvrKm, ring: *mut u8, wo: &mut u32, need: u32) {
     }
 }
 
-/// One command: header, body padded to 16 bytes.
-fn ring_put(k: &YdPvrKm, ring: *mut u8, wo: &mut u32, ty: u32, body: &[u8]) {
+/// One command: header, body padded to 16 bytes. `job_ref` is the kick's
+/// seq, written as the header's `ui32ExtJobRef` (the firmware copies it into
+/// the HWPerf packets of the kick, docs/notes/pvr-hwperf.md).
+fn ring_put(k: &YdPvrKm, ring: *mut u8, wo: &mut u32, ty: u32, job_ref: u32, body: &[u8]) {
     let h = ring.wrapping_add(*wo as usize);
     let padded = round_up(body.len() as u64, u64::from(CCB_CMD_ALIGN)) as u32;
     // SAFETY: the caller reserved the room.
@@ -1148,6 +1150,7 @@ fn ring_put(k: &YdPvrKm, ring: *mut u8, wo: &mut u32, ty: u32, body: &[u8]) {
         core::ptr::write_bytes(h, 0, CCB_CMD_HEADER_SIZE + padded as usize);
         wr32(h, CCB_CMD_HEADER_TYPE, ty);
         wr32(h, CCB_CMD_HEADER_SIZE_FIELD, padded);
+        wr32(h, CCB_CMD_HEADER_EXT_JOB_REF, job_ref);
         core::ptr::copy_nonoverlapping(body.as_ptr(), h.add(CCB_CMD_HEADER_SIZE), body.len());
     }
     k.flush(h, CCB_CMD_HEADER_SIZE + padded as usize);
@@ -1481,10 +1484,10 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         }
         let mut gwo = r.gwo;
         ring_reserve(k, gring, &mut gwo, 16 + 64 + 16 + 16 + if pr { 16 + 16 } else { 0 }); // bodies padded to 16
-        ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_GEOM, &words_bytes::<16, 64>(&dk));
-        ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(gufo_fa, seq));
+        ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_GEOM, seq, &words_bytes::<16, 64>(&dk));
+        ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_UPDATE, seq, &ufo_bytes(gufo_fa, seq));
         if pr {
-            ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(timeline_fa, seq));
+            ring_put(k, gring, &mut gwo, CCB_CMD_TYPE_UPDATE, seq, &ufo_bytes(timeline_fa, seq));
         }
         r.gwo = gwo;
     }
@@ -1606,19 +1609,19 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
             // same seq (not seq + 1: the next kick's geometry fence names
             // seq by equality, and the firmware's UFO test is an equality
             // test, ctx_init) - a no-op while no partial render is pending.
-            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE_PR, &ufo_bytes(timeline_fa, seq));
-            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, &words_bytes::<80, 320>(&dk_pr));
-            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(timeline_fa, seq));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE_PR, seq, &ufo_bytes(timeline_fa, seq));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, seq, &words_bytes::<80, 320>(&dk_pr));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, seq, &ufo_bytes(timeline_fa, seq));
         }
         // The FENCE on the geometry UFO first: the firmware schedules a 3D as
         // soon as its kick arrives, so without it the 3D can run before the
         // TA has tiled (observed: an empty frame).
-        ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE, &ufo_bytes(gufo_fa, seq));
+        ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE, seq, &ufo_bytes(gufo_fa, seq));
         r.last_frag_cmd = dk;
         r.last_frag_seq = seq;
-        ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D, &words_bytes::<80, 320>(&dk));
+        ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D, seq, &words_bytes::<80, 320>(&dk));
         let fufo_fa = k.heap_fwaddr(r.fufo_off);
-        ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(fufo_fa, seq));
+        ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, seq, &ufo_bytes(fufo_fa, seq));
         r.fwo = fwo;
     }
     k.fence();
@@ -4788,6 +4791,80 @@ mod submit_tests {
                 [(CCCB_SIZE - room, CCB_CMD_TYPE_PADDING, room - 16)]
             );
             assert_eq!(t.types(GCCCB, t.r.gwo).len(), if knob == 1 { 3 } else { 2 });
+        }
+    }
+
+    // ---- ui32ExtJobRef (docs/notes/pvr-hwperf.md, "Still to do") ----
+
+    /// The header dword `i` (0 type, 1 size, 2 ext job ref, 3 int job ref)
+    /// of every command written into a client CCB so far.
+    fn header_dw(t: &Rig, ring: u32, woff: u32, i: usize) -> Vec<u32> {
+        let mut out = Vec::new();
+        let mut o = 0u32;
+        while o < woff {
+            let b = (ring + o) as usize / 4;
+            out.push(t.mem[b + i]);
+            o += CCB_CMD_HEADER_SIZE as u32 + t.mem[b + 1];
+        }
+        out
+    }
+
+    /// FNV-1a over the whole carveout with every client-CCB command's
+    /// `ui32ExtJobRef` dword set to zero.
+    fn carveout_hash_without_ext_job_ref(t: &Rig) -> u64 {
+        let mut mem = t.mem.clone();
+        for (ring, woff) in [(GCCCB, t.r.gwo), (FCCCB, t.r.fwo)] {
+            let mut o = 0u32;
+            while o < woff {
+                let b = (ring + o) as usize / 4;
+                mem[b + CCB_CMD_HEADER_EXT_JOB_REF / 4] = 0;
+                o += CCB_CMD_HEADER_SIZE as u32 + mem[b + 1];
+            }
+        }
+        mem.iter()
+            .flat_map(|w| w.to_le_bytes())
+            .fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
+    }
+
+    /// Three kicks, knob off and on: every command a kick writes (GEOM and
+    /// its UPDATEs; FENCE_PR, 3D_PR, FENCE, 3D and UPDATEs) carries the
+    /// kick's seq in `ui32ExtJobRef`, so consecutive kicks carry consecutive
+    /// refs, the same number as the kick's fence and kick_times' seq.
+    /// `ui32IntJobRef` (the services' own) stays zero.
+    #[test]
+    fn each_kick_writes_its_seq_as_the_ext_job_ref() {
+        for (knob, per) in [(0u32, [2usize, 3]), (1, [3, 6])] {
+            let mut t = rig(knob);
+            for tag in 1..=3u32 {
+                let mut f = 0u32;
+                assert_eq!(submit(&mut t.k, &mut t.r, &kick(tag), &mut f), 0, "log:\n{}", t.log());
+                assert_eq!(f, tag);
+            }
+            for ((ring, woff), n) in [(GCCCB, t.r.gwo), (FCCCB, t.r.fwo)].into_iter().zip(per) {
+                let want: Vec<u32> = (1..=3u32).flat_map(|s| core::iter::repeat_n(s, n)).collect();
+                assert_eq!(
+                    header_dw(&t, ring, woff, CCB_CMD_HEADER_EXT_JOB_REF / 4),
+                    want,
+                    "knob {knob}, ring {ring:#x}"
+                );
+                assert_eq!(header_dw(&t, ring, woff, 3), vec![0; 3 * n], "knob {knob}, ring {ring:#x}");
+            }
+        }
+    }
+
+    /// Apart from the `ui32ExtJobRef` dwords, the carveout after three kicks
+    /// (knob off and on) is the bytes the code wrote before the field was
+    /// written: the hashes were taken from the parent of the commit that
+    /// added the write, where the field was zero.
+    #[test]
+    fn apart_from_the_ext_job_ref_every_byte_is_as_before() {
+        for (knob, before) in [(0u32, 5242436709775769920u64), (1, 6689609043291008108u64)] {
+            let mut t = rig(knob);
+            for tag in 1..=3u32 {
+                let mut f = 0u32;
+                assert_eq!(submit(&mut t.k, &mut t.r, &kick(tag), &mut f), 0, "log:\n{}", t.log());
+            }
+            assert_eq!(carveout_hash_without_ext_job_ref(&t), before, "knob {knob}");
         }
     }
 }

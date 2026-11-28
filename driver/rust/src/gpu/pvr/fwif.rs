@@ -357,6 +357,9 @@ pins! {
     CCB_CMD_HEADER_SIZE: usize = 16 => "sizeof(RGXFWIF_CCB_CMD_HEADER)";
     CCB_CMD_HEADER_TYPE: usize = 0 => "offsetof(RGXFWIF_CCB_CMD_HEADER, eCmdType)";
     CCB_CMD_HEADER_SIZE_FIELD: usize = 4 => "offsetof(RGXFWIF_CCB_CMD_HEADER, ui32CmdSize)";
+    /// The kick's reference the firmware copies into its HWPerf packets
+    /// (rgx_fwif_km.h:1401; render.rs writes the kick's seq).
+    CCB_CMD_HEADER_EXT_JOB_REF: usize = 8 => "offsetof(RGXFWIF_CCB_CMD_HEADER, ui32ExtJobRef)";
     CCB_CMD_TYPE_GEOM: u32 = 0x2ABC_80C9 => "RGXFWIF_CCB_CMD_TYPE_GEOM";
     CCB_CMD_TYPE_3D: u32 = 0x2ABC_80CB => "RGXFWIF_CCB_CMD_TYPE_3D";
     /// The 3D command of a partial render (rgx_fwif_km.h:1325).
