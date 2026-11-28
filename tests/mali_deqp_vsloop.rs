@@ -9,7 +9,10 @@
 //! earlier reference holds. The ones a lowering takes run ([`MATCHED`]);
 //! the rest are `#[ignore]`d with their refusal. `refusals_pinned` runs now
 //! and holds each refusal's exact text (the VS one: it is compiled first),
-//! so a lowering must move its pin.
+//! so a lowering must move its pin. Plan #402's `lower-vsloop` (step 1,
+//! `nir.rs` `vs_put_jloop` and `vs_dead_loop`) makes all eight byte-equal:
+//! the loops are unrolled with their jumps, each jump's condition folded
+//! in each pass, and the loop with no effect is removed.
 //!
 //! Every reference is drawn once on Mesa's drm-shim (`tools/mali/deqp_ref.sh
 //! --instrument shim`, `--uniform-values`). Mesa leaves no loop in any of
@@ -50,24 +53,23 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// `MaliError::LoopVertex`.
-const LOOP_VERTEX: &str = "a loop in a vertex shader";
-
-/// The references the vertex walk makes byte-equal. None yet.
-const MATCHED: &[&str] = &[];
+/// The references the vertex walk makes byte-equal (plan #402
+/// `lower-vsloop`): every one.
+const MATCHED: &[&str] = &[
+    "con_cond_break",
+    "con_double_continue",
+    "con_inf_cond_break",
+    "con_mixed",
+    "fn_after_break",
+    "fn_nested",
+    "uni_inf_break_last",
+    "uni_only_continue",
+];
 
 /// Every refused reference with its refusal, without the `Valhall: `
-/// prefix and the ` is not lowered yet` suffix.
-const REFUSED: &[(&str, &str)] = &[
-    ("con_cond_break", LOOP_VERTEX),
-    ("con_double_continue", LOOP_VERTEX),
-    ("con_inf_cond_break", LOOP_VERTEX),
-    ("con_mixed", LOOP_VERTEX),
-    ("fn_after_break", LOOP_VERTEX),
-    ("fn_nested", LOOP_VERTEX),
-    ("uni_inf_break_last", LOOP_VERTEX),
-    ("uni_only_continue", LOOP_VERTEX),
-];
+/// prefix and the ` is not lowered yet` suffix. None since plan #402
+/// `lower-vsloop`.
+const REFUSED: &[(&str, &str)] = &[];
 
 #[test]
 fn refusals_pinned() {
@@ -112,49 +114,41 @@ fn constant_shapes_are_one_program() {
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (a constant bound with a guard that folds once unrolled), lowered by lower-vsloop"]
 fn con_cond_break() {
     mali_ref::assert_matches("deqp_vsloop_con_cond_break");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (a constant bound, `continue` and `break` of one if/else if), lowered by lower-vsloop"]
 fn con_mixed() {
     mali_ref::assert_matches("deqp_vsloop_con_mixed");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (a constant-bound `while` with two `continue`s), lowered by lower-vsloop"]
 fn con_double_continue() {
     mali_ref::assert_matches("deqp_vsloop_con_double_continue");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (`do {..} while (true)` left by a constant-decided `break`), lowered by lower-vsloop"]
 fn con_inf_cond_break() {
     mali_ref::assert_matches("deqp_vsloop_con_inf_cond_break");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (an infinite loop whose last statement is `break`: one pass), lowered by lower-vsloop"]
 fn uni_inf_break_last() {
     mali_ref::assert_matches("deqp_vsloop_uni_inf_break_last");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (a uniform-bound loop of a lone `continue`: deleted), lowered by lower-vsloop"]
 fn uni_only_continue() {
     mali_ref::assert_matches("deqp_vsloop_uni_only_continue");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (a constant loop with a `break` in a function), lowered by lower-vsloop"]
 fn fn_after_break() {
     mali_ref::assert_matches("deqp_vsloop_fn_after_break");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (`return` in nested constant loops in a function), lowered by lower-vsloop"]
 fn fn_nested() {
     mali_ref::assert_matches("deqp_vsloop_fn_nested");
 }
