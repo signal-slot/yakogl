@@ -1451,7 +1451,9 @@ pub fn translate(d: &DrawState) -> Result<StatePackets71, Refusal71> {
     let (cw, ch) = if maxx > minx && maxy > miny { (maxx - minx, maxy - miny) } else { (0, 0) };
     let clip = ClipWindow { left: minx as u16, bottom: miny as u16, width: cw as u16, height: ch as u16 };
 
-    /* the depth and the facing: no early-Z bits at 7.1, Z clipping -1..1 */
+    /* the depth and the facing: no early-Z bits at 7.1, Z clipping -1..1.
+     * Z updates are off under GL_EQUAL whatever the depth mask, as Mesa packs
+     * them (3f499a50): a passing EQUAL test writes the value already there */
     let (depth_func, z_updates) = if d.depth_test {
         (d.depth_func, d.depth_write && d.depth_func != Compare::Equal)
     } else {
