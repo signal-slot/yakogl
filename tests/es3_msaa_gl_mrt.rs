@@ -25,6 +25,7 @@ use yakogl::gl::es3::glClearBufferfv;
 use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::state::*;
+use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage2D};
 use yakogl::gl::types::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 
@@ -60,8 +61,18 @@ fn bytes(c: [f32; 4]) -> [u8; 4] {
     c.map(|v| (v * 255.0 + 0.5) as u8)
 }
 
+const N: usize = backend::GLES_MAX_TARGETS;
+
+/// `(target_ids, target_gens)` of every clear draw, in order.
+static IDS: Mutex<Vec<([u32; N], [u32; N])>> = Mutex::new(Vec::new());
+
 unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     let d = &*d;
+    if d.index_count == 0 {
+        let (ids, gens) = (d.target_ids, d.target_gens);
+        assert_eq!((ids[0], gens[0]), (d.target_id, d.target_gen), "slot 0 mirrors the scalar pair");
+        IDS.lock().unwrap().push((ids, gens));
+    }
     if d.samples > 1 && d.index_count == 0 {
         let mask = if d.clear_target_mask != 0 { d.clear_target_mask } else { 1 };
         let mut p = PENDING.lock().unwrap();
@@ -398,4 +409,113 @@ fn format_mismatch_on_one_draw_buffer_is_invalid_operation() {
     draw_buffers(&[GL_COLOR_ATTACHMENT0, GL_NONE]);
     assert_eq!(blit_from(src.fb, GL_COLOR_ATTACHMENT0, dst.fb), GL_NO_ERROR);
     assert!(all(dst.fb, 0, RED));
+}
+
+/* ---- GlesDraw::target_ids / target_gens per MRT slot ---------------------- */
+
+/// Clear every colour attachment of the bound FBO (`n` of them) and return the
+/// ids and generations the last clear's draw carried.
+fn ids_after_clears(n: GLint) -> ([u32; N], [u32; N]) {
+    IDS.lock().unwrap().clear();
+    for k in 0..n {
+        clear_buffer(k, RED);
+    }
+    *IDS.lock().unwrap().last().expect("a clear was recorded")
+}
+
+/// Specify `rb` again with 4 samples.
+fn restore(rb: GLuint) {
+    // SAFETY: plain GL calls on a renderbuffer this test made.
+    unsafe {
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, 8, 8);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+}
+
+fn both_draw_buffers() {
+    draw_buffers(&[GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2]);
+}
+
+/// Each 4x colour slot has its own non-zero id and generation; they stay
+/// across redraws.
+#[test]
+fn every_slot_has_a_distinct_stable_id() {
+    let _g = context_ms4();
+    let fbo = framebuffer(4, &[GL_RGBA8, GL_RGBA8, GL_RGBA8]).unwrap();
+    both_draw_buffers();
+    let (ids, gens) = ids_after_clears(3);
+    for k in 0..3 {
+        assert_ne!(ids[k], 0, "slot {k} id");
+        assert_ne!(gens[k], 0, "slot {k} gen");
+        for j in 0..k {
+            assert_ne!(ids[k], ids[j], "slots {j} and {k} share an id");
+        }
+    }
+    assert_eq!((ids[3], gens[3]), (0, 0), "slot past the attachments");
+    assert_eq!(ids_after_clears(3), (ids, gens), "a redraw");
+    drop(fbo);
+}
+
+/// Re-storing one attachment moves only its generation.
+#[test]
+fn restoring_one_slot_moves_only_its_gen() {
+    let _g = context_ms4();
+    let fbo = framebuffer(4, &[GL_RGBA8, GL_RGBA8, GL_RGBA8]).unwrap();
+    both_draw_buffers();
+    let (ids, mut gens) = ids_after_clears(3);
+    for k in 0..3usize {
+        restore(fbo.rbs[k]);
+        // SAFETY: a framebuffer name this test made.
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, fbo.fb) };
+        let (i2, g2) = ids_after_clears(3);
+        assert_eq!(i2, ids, "re-storing slot {k}: ids stay");
+        for j in 0..3 {
+            if j == k {
+                assert_ne!(g2[j], gens[j], "slot {k}'s gen moves");
+            } else {
+                assert_eq!(g2[j], gens[j], "slot {j}'s gen stays when slot {k} is re-stored");
+            }
+        }
+        gens = g2;
+    }
+}
+
+/// A texture attachment, a GL_NONE draw buffer and an unattached slot give 0.
+#[test]
+fn texture_and_empty_slots_are_zero() {
+    let _g = context_ms4();
+    let _fbo = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let mut tex = 0;
+    // SAFETY: plain GL calls; one name out.
+    unsafe {
+        glGenTextures(1, &mut tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8 as GLint, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, core::ptr::null());
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, tex, 0);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    let (e, rb3) = storage(0, GL_RGBA8);
+    assert_eq!(e, GL_NO_ERROR);
+    // SAFETY: a renderbuffer made above.
+    unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_RENDERBUFFER, rb3) };
+    // slot 2 has no attachment, slot 1 a texture, slot 3 a renderbuffer; one sample throughout, a texture cannot join a 4x FBO
+    draw_buffers(&[GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3]);
+    let (ids, gens) = ids_after_clears(4);
+    assert_ne!(ids[0], 0);
+    assert_ne!(ids[3], 0);
+    assert_eq!((ids[1], gens[1]), (0, 0), "texture slot");
+    assert_eq!((ids[2], gens[2]), (0, 0), "empty slot");
+    // GL_NONE in the draw buffers: slot 3 off
+    draw_buffers(&[GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE, GL_NONE]);
+    IDS.lock().unwrap().clear();
+    clear_buffer(0, RED);
+    let (ids, gens) = *IDS.lock().unwrap().last().unwrap();
+    assert_ne!(ids[0], 0);
+    assert_eq!((ids[1..].to_vec(), gens[1..].to_vec()), (vec![0; N - 1], vec![0; N - 1]), "disabled draw buffers");
+    // SAFETY: names made above.
+    unsafe {
+        glDeleteTextures(1, &tex);
+        glDeleteRenderbuffers(1, &rb3);
+    }
 }
