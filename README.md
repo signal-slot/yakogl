@@ -72,6 +72,7 @@ depth-texture fix of #40 (`tools/cts/RESULTS.md`):
 | AM62P | 467 (main `86d0b482`, 2026-10-28; 461 at `445c5653`, 2026-10-20) |
 | Raspberry Pi 4 | 193 (`445c5653`, 2026-10-20) |
 | i.MX8MP | 42 (`445c5653`, 2026-10-20) |
+| Verdin iMX95 (Mali-G310) | 46 at 800x600 on the panel (32 scenes: 23 ran, 9 refused by the online compiler; terrain stops the image), main `92344e4d`, 2026-11-28 |
 
 Each scene's picture value and frame time are recorded on all three boards
 (`tools/cts/glmark2-pictures.txt`, columns `am62p`, `pi4` and `imx8mp`, 33

@@ -271,8 +271,8 @@ driver/samples/zephyr/glmark2/
   prj.conf           C++ runtime, POSIX getopt, online shader compiler, 1 MiB stack,
                      96 MiB heap, board lifetime 900 s (CONFIG_YAKOGL_BOARD_LIFETIME_S)
   boards/            a .conf (and, where the board needs one, an .overlay) per
-                     board: Verdin AM62P, Verdin iMX8M Plus, Raspberry Pi 4,
-                     NanoPC-T6, Armadillo-X2 and STM32MP257F-DK. The common
+                     board: Verdin AM62P, Verdin iMX8M Plus, Verdin iMX95,
+                     Raspberry Pi 4, NanoPC-T6, Armadillo-X2 and STM32MP257F-DK. The common
                      set builds this image for the first three only
                      (`common-images.sh`)
   patches/libmatrix-util-zephyr.patch
@@ -293,6 +293,31 @@ west build -p always -d <ws>/build/gm2-am62p -b verdin_am62p/am62p54/a53 \
     -DGLMARK2_SRC=$PWD/build/glmark2-upstream
 RUN_BOUND=960 tools/board.sh am62p run <ws>/build/gm2-am62p/zephyr/zephyr.bin <logdir> glmark2
 ```
+
+Build and run (the Verdin iMX95, Mali-G310, 800x600 on the X12 panel):
+
+```sh
+west build -p always -d <ws>/build/gm2-imx95 -b verdin_imx95/mimx9596/a55 \
+    driver/samples/zephyr/glmark2 -- \
+    "-DZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh <ws>)" \
+    -DGLMARK2_SRC=$PWD/build/glmark2-upstream
+RUN_BOUND=1200 BOARD_END_RE='^glmark2: (score [0-9]+: |FAIL rc=)' \
+    tools/board.sh imx95 run <ws>/build/gm2-imx95/zephyr/zephyr.bin <logdir> glmark2
+```
+
+`RUN_BOUND=1200`: the 33 scenes of 10 s plus the online compiler's time on
+the A55 (the image's lifetime is 1200 s, `boards/verdin_imx95_mimx9596_a55.conf`).
+`board.sh` has no end regex for imx95 images (its `END_RE_DEFAULT` is empty),
+so `BOARD_END_RE` matches the sample's two verdict lines, `glmark2: score N: `
+and `glmark2: FAIL rc=`. **These board.sh settings have not been exercised on
+the iMX95**: the first run (2026-11-28) was started by hand from the U-Boot
+prompt (`ext4load mmc 0:2` and `go`). The GPU carve-out
+(`CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=109674496`) peaked at 22,172 KiB of
+107,104 KiB, so about 80 MiB of it is unused; the libc heap's peak was not
+measured. On Mali the default list's terrain is refused at glCompileShader
+and then crashes the image (a NULL data abort in `Mesh::render_vbo`), so a
+full-list run ends in a WDOG3 reset, not in an end line; the 46 recorded in
+`tools/cts/RESULTS.md` is from a list without terrain (`CONFIG_GLMARK2_ARGS`).
 
 The common set's GM image is built from the checkout's HEAD by the stage
 script, with `GLMARK2_SRC` naming the pinned upstream checkout (the build
@@ -422,6 +447,7 @@ fixes:
 |---|---|
 | Verdin AM62P | the 96 MiB heap, the window buffer (up to `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB=8100`) and the 1 MiB stack, `driver/samples/zephyr/glmark2/boards/verdin_am62p_am62p54_a53.conf` |
 | Verdin iMX8M Plus | the 256 MiB RAM region; no UART: the GLMARK2 record carries the numbers (section 2) Today's i.MX8MP board runs are measured on the Armadillo-X2 (`tools/board.sh x2`, same SoC and GPU), the Verdin being off the farm. |
+| Verdin iMX95 | the 256 MiB window at 0xd0000000 (`zephyr,sram`): 94 MiB heap (98,566,144 bytes), the 104.6 MiB Mali carve-out (`driver/samples/zephyr/glmark2/boards/verdin_imx95_mimx9596_a55.conf`) |
 | Raspberry Pi 4 | `&sram0` of 288 MiB from 0x200000 (`driver/samples/zephyr/glmark2/boards/rpi_4b.overlay`, ends at 0x12200000, below the firmware's 0x3c100000); the V3D carve-out is 96 MiB (refract's peak and terrain's NPOT chains); kernel VM 512 MiB. The earlier 224 MiB region at a 48 MiB carve-out took 194,192 KiB |
 | NanoPC-T6 | Linux, not this image for the stage-2 benchmark (section 4); `driver/samples/zephyr/glmark2/boards/nanopc_t6.conf` is the 96 MiB Mali carve-out of the Zephyr image that ran on the display |
 
