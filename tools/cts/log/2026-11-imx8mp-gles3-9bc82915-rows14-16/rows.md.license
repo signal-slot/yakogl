@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+Results of our i.MX8MP dEQP-GLES3 slice (rows 14-16 at 9bc82915, measured on the Armadillo-X2), written by tools/board.sh x2 tally.

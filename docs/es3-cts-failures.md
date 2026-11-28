@@ -79,7 +79,10 @@ row, and e25 (364 fails), e26 (277) and e29 (328) were left with counts only —
 NotSupported and 12 other cases have no names, because the board's A53 console delivered no text in any of the
 three sessions (recipe, "What the three sessions measured"). e26 stops at its first `precision.reflect` case
 with an `other` status and never begins the 123 cases after it, the same record on a rerun: not a watchdog end.
-Entries 13-15 and 51-132 (14,351 mustpass cases) have not run. Per cause: "GC7000UL (i.MX8MP) failures
+Entries 13-15 ran at `9bc82915` on the Armadillo-X2 (same SoC and GPU; the Verdin is off the farm) on
+2026-11-27, `tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows14-16/`: 1,183 begun, 79 pass / 1,104 fail, 0
+without a result, counts only (each row has more fails than 40 name pages cover); not yet in the tables below.
+Entries 51-132 have not run. Per cause: "GC7000UL (i.MX8MP) failures
 by group" below; per case against the host: `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`. The cause map
 `tools/cts/imx8mp-gles3-causes.tsv` gives every one of the 873 named fails a cause (0 unclassified), per cause:
 RC1 240, RC8 108, R and RG integer texture attachments 116, GC 64-bit integer targets beside another

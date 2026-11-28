@@ -53,6 +53,7 @@ import argparse, os, re, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINE = re.compile(r'^\s*(board\.sh\s+(imx8mp|x2)\s+e(\d+)(?:-p(\d+))?\s+rc=\S+\s+verdict=\S+.*?)\s*$')
 X2_MEASURED = 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2 (crash-route kexec)'
+X2_NOT_VERDIN = 'Measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), not the Verdin i.MX8MP.'
 
 SCAN_NF = re.compile(r'^!! NO FINISH row (\d+) \((hang|watchdog end|reset)\) at [^;]*; last result ([^;]*);')
 
@@ -303,7 +304,8 @@ def build(a):
          'commit %s' % a.commit, '',
          ]
     if board == 'x2':
-        o += ['Run %s, %s: the slice' % (a.run_date or a.date, X2_MEASURED),
+        o += [X2_NOT_VERDIN, '',
+              'Run %s, %s: the slice' % (a.run_date or a.date, X2_MEASURED),
               '`%s`, %s of `tools/cts/imx8mp-gles3-tree.txt` (%s, counted from 0 as the'
               % (x2_name(a, h8, lo, hi), span, ent),
               'selector does), one crash-route kexec per entry, from the campaign commit above. The Toradex Verdin iMX8M',
