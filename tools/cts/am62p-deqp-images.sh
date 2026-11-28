@@ -75,6 +75,16 @@
 #                 resolved .config (check-deqp-images.py --pvr-instance-divisor):
 #                 a dropped Kconfig dependency cannot leave a software-path
 #                 image under the hardware arm's name.
+#   YAKOGL_MSAA_FBO  optional, 0 or 1: -DCONFIG_YAKOGL_MSAA_FBO=n/y for every image
+#                 (unset: the Kconfig default n, no argument, so the pinned run is
+#                 unchanged): the crate's msaa-fbo feature, 4x framebuffer objects
+#                 (GL_MAX_SAMPLES 4). Printed on stderr at the start, and an image
+#                 built with a value is checked to keep CONFIG_YAKOGL_MSAA_FBO=y/n in
+#                 its resolved .config (else rc=not-msaa-config), and the zephyr
+#                 CMake status line in its log shows msaa-fbo=ON/OFF. The directory
+#                 name does not carry the arm: use a separate <out-dir>, e.g. a
+#                 -msaa1 suffix, which tools/cts/am62p-gles3-preflight.sh does not
+#                 know yet.
 #   driver/src/fw/pvr_fw_blob.h in this checkout: generated from the board's
 #                 firmware by driver/tools/mkfwblob.sh, never committed
 set -euo pipefail
@@ -116,6 +126,14 @@ rows() {
         { n++; lab = (l != "") ? l : "img" n "-" tag
           printf "%d\t%s\t%d\t%s\t%s\n", n, lab, (l != ""), (c != "" ? c : "-"), $0; l = ""; c = "" }' "$1"
 }
+MSAA=
+case "${YAKOGL_MSAA_FBO:-}" in
+    '') ;;
+    0) MSAA=n ;;
+    1) MSAA=y ;;
+    *) die "YAKOGL_MSAA_FBO must be 0 or 1, not '$YAKOGL_MSAA_FBO'" ;;
+esac
+echo "am62p-deqp-images: YAKOGL_MSAA_FBO=${YAKOGL_MSAA_FBO:-unset (Kconfig default n)}" >&2
 if [ "$DRY" = 1 ]; then
     rows "$FILTERS" | while IFS=$'\t' read -r n lab _ conf filt; do
         in_rows $((n - 1)) "${TREE_ROWS:-}" || continue
@@ -160,6 +178,7 @@ case "${DEQP_PVR_NATIVE_ARRAY:-}" in
     0 | 1) MODARGS="$MODARGS -DCONFIG_DEQP_PVR_NATIVE_ARRAY=$DEQP_PVR_NATIVE_ARRAY" ;;
     *) die "DEQP_PVR_NATIVE_ARRAY must be 0 or 1, not '$DEQP_PVR_NATIVE_ARRAY'" ;;
 esac
+[ -n "$MSAA" ] && MODARGS="$MODARGS -DCONFIG_YAKOGL_MSAA_FBO=$MSAA"
 IDIV=
 case "${DEQP_PVR_INSTANCE_DIVISOR:-}" in
     '') ;;
@@ -185,6 +204,12 @@ rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled conf filt; do
         python3 "$HERE/check-deqp-images.py" --config "$B/zephyr/.config" ${conf:+--ms4} \
             $([ "$DEQP_MODULE" = gles3 ] && echo --gles3) ${IDIV:+--pvr-instance-divisor} \
             >> "$B.log" 2>&1 || rc=not-conformance
+    fi
+    # an image built with the knob must keep it in its resolved .config
+    if [ "$rc" = 0 ] && [ -n "$MSAA" ]; then
+        if grep -q "^CONFIG_YAKOGL_MSAA_FBO=y" "$B/zephyr/.config"; then got=y; else got=n; fi
+        echo "yakogl-msaa-fbo: CONFIG_YAKOGL_MSAA_FBO=$got (asked $MSAA)" >> "$B.log"
+        [ "$got" = "$MSAA" ] || rc=not-msaa-config
     fi
     # no zephyr.bin (a failed build) makes sha256sum fail; pipefail with set -e would end the sweep
     bin=$(sha256sum "$B/zephyr/zephyr.bin" 2>/dev/null | cut -c1-16) || bin=
