@@ -6,7 +6,8 @@
 # a complete run whose records begin cases outside the mustpass list (not PARTIAL, the row sums to the
 # mustpass count), the three real 9bc82915 slices alone (PARTIAL, exit 1) and completed with synthetic
 # slices (exit 0), the record order by first row, and the drafts checked against the layout of
-# tools/cts/RESULTS.md, STATUS.md and ROADMAP.md.
+# tools/cts/RESULTS.md, STATUS.md and ROADMAP.md; board.sh x2's refused jump (a refusal, not a reset or hang,
+# out of the counts, named with its cause) and its return without ping ("ping n/a": an ordinary return).
 #
 #   TMPDIR=<dir> sh tools/cts/imx8mp-gles3-report-selftest.sh
 #
@@ -461,6 +462,72 @@ expect "mixed: the ROADMAP.md bullet names both boards" $?
 for f in RESULTS.md STATUS.md ROADMAP.md; do
 	sec "$work/full.out" "$f" | grep -qE 'Armadillo|Verdin|measured on'; [ $? = 1 ]; expect "all-Verdin: the $f draft names no board (as before)" $?
 done
+
+# board.sh x2's two newer forms (made-up data on copies of the all-X2 slices): a refused kexec jump of entry 46
+# (rc=3 verdict=refused, meta.txt jump=refused / refused_rc / refused=, no t_reboot, back or rc_cycle) and a
+# return of entry 46 without ping (meta lost=, back=1, timeline "ping n/a", back_after=?s)
+echo "== Armadillo-X2: a refused jump and a return without ping"
+x2form() {   # x2form DEST LINE ROW META: copies of the all-X2 slices; entry 46's verdict line, results row ('dash'/'keep'), e46.meta.txt
+	mkdir "$1"; for d in "${X[@]}"; do cp -r "$d" "$1/"; done
+	python3 - "$1/$(basename "${X[1]}")" "$2" "$3" "$4" <<'PY'
+import sys
+d, line, row, meta = sys.argv[1:5]
+t = open(d + '/README.md').read()
+assert 'board.sh x2 e46 rc=0 verdict=done resets=absent\n' in t
+open(d + '/README.md', 'w').write(t.replace('board.sh x2 e46 rc=0 verdict=done resets=absent\n', line + '\n'))
+if row == 'dash':
+    rows = open(d + '/results.tsv').read().split('\n')
+    for k, l in enumerate(rows):
+        f = l.split('\t')
+        if f[0] == '46':
+            rows[k] = '\t'.join(f[:2] + ['-'] * 7)
+    open(d + '/results.tsv', 'w').write('\n'.join(rows))
+open(d + '/e46.meta.txt', 'w').write(meta.replace('|', '\n') + '\n')
+PY
+}
+REFL='board.sh x2 e46 rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none resets=absent record=absent back_after=?s'
+REFM='name=e46|boot=kexec-dev|jump=refused (exit 1)|refused_rc=3|refused=kexec_zephyr refused (exit 1): loader: made-up irqchip line no undo needed'
+x2form "$work/rf1" "$REFL" dash "$REFM"
+x2form "$work/rf2" "$REFL" keep "$REFM"
+mapfile -t RF1 < <(ls -d "$work"/rf1/*/); mapfile -t RF2 < <(ls -d "$work"/rf2/*/)
+python3 "$REPORT" --date 2026-11-10 "${RF1[@]}" > "$work/rf1.out" 2>&1; rc=$?
+python3 "$REPORT" --date 2026-11-10 "${RF2[@]}" > "$work/rf2.out" 2>&1; rc2=$?
+{ [ "$rc" = 1 ] && [ "$rc2" = 1 ] && grep -q '^\*\*\* PARTIAL' "$work/rf1.out" && grep -q '^\*\*\* PARTIAL' "$work/rf2.out"; }
+expect "refused: exit 1 and PARTIAL (the entry has no result), with an all-'-' row and with a stale row" $?
+for f in rf1 rf2; do
+	grep -qF 'problem: e46: refused jump (rc=3, the board was not rebooted; no result, not a reset or hang): kexec_zephyr refused (exit 1): loader: made-up irqchip line no undo needed' "$work/$f.out"
+	expect "refused ($f): the problem names e46 with the cause from its meta.txt" $?
+	blk "$work/$f.out" | grep -q '^- Refused: e46 (`tools/cts/log/[^`]*rows046-090/`): the jump was refused (rc=3), the board was not rebooted; kexec_zephyr refused'
+	expect "refused ($f): the #24 comment lists e46 with its slice and cause" $?
+	{ ! grep -qi 'NOT CLEAN\|not clean\|verdict=refused resets' "$work/$f.out" && ! grep -q 'resets or hangs\|リセットまたはハング' "$work/$f.out" \
+		&& grep -q '0 resets (every entry run' "$work/$f.out" && grep -q 'リセット 0' "$work/$f.out"; }
+	expect "refused ($f): not a reset verdict, not in the resets-or-hangs figure (0 resets)" $?
+	{ ! grep -q 'no record' "$work/$f.out" && grep -q '132 of 133 entries run (refused: 46)' "$work/$f.out" \
+		&& sec "$work/$f.out" 'STATUS.md' | grep -qF '（途中、記録が不完全。ジャンプ拒否 46）' \
+		&& sec "$work/$f.out" 'ROADMAP.md' | grep -qF '132 of the tree'"'"'s 133 entries (`tools/cts/imx8mp-gles3-tree.txt`; refused: 46)'; }
+	expect "refused ($f): 132 of 133 entries run, e46 refused (not 'no record') in the RESULTS, STATUS and ROADMAP drafts" $?
+done
+read -r bp bf bs bo bn bsum <<< "$(python3 -I "$work/row.py" "$work/bx2.out")"
+read -r rp rf rs ro rn rsum <<< "$(python3 -I "$work/row.py" "$work/rf1.out")"
+read -r kp kf ks ko <<< "$(awk -F'\t' '$1=="46"{print $4, $5, $6, $7}' "${X[1]}/results.tsv")"
+{ [ "$rsum" = "$MP" ] && [ $((bp - rp)) = "$kp" ] && [ $((bf - rf)) = "$kf" ] && [ $((bs - rs)) = "$ks" ] && [ $((bo - ro)) = "$ko" ] \
+	&& [ $((rn - bn)) = $((kp + kf + ks + ko)) ]; }
+expect "refused: e46's results (${kp:-?} Pass, ${kf:-?} Fail, ${ks:-?} NotSupported, ${ko:-?} other) are out of the counts, its cases are without a result, the row sums to $MP" $?
+[ "$(python3 -I "$work/row.py" "$work/rf2.out")" = "$(python3 -I "$work/row.py" "$work/rf1.out")" ]
+expect "refused: a stale results row of the refused entry is not counted (same row as the all-'-' row)" $?
+# the same verdict line without eNN.meta.txt: still a refusal, the cause not known
+rm "$work"/rf1/*/e46.meta.txt
+python3 "$REPORT" --date 2026-11-10 "${RF1[@]}" 2>&1 | grep -qF 'problem: e46: refused jump (rc=3, the board was not rebooted; no result, not a reset or hang): no cause in the slice record'
+expect "refused without meta.txt: still named, 'no cause in the slice record'" $?
+
+PNGL='board.sh x2 e46 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=none resets=absent record=absent back_after=?s'
+PNGM='name=e46|boot=kexec-dev|lost=4|back=1|t_back=|timeline=jump 0s, ping n/a (no reply; a new boot_id over ssh is the return), ssh back 212s, route --crash'
+x2form "$work/png" "$PNGL" keep "$PNGM"
+mapfile -t PNG < <(ls -d "$work"/png/*/)
+python3 "$REPORT" --date 2026-11-10 "${PNG[@]}" > "$work/png.out" 2>&1; rc=$?
+expect "ping n/a: exit 0" "$rc"
+cmp -s "$work/png.out" "$work/bx2.out"; expect "ping n/a: an ordinary return, the drafts are byte for byte those of the same slices returning with ping" $?
+grep -q PARTIAL "$work/png.out"; [ $? = 1 ]; expect "ping n/a: no PARTIAL, no refusal" $?
 
 echo "== a WDOG1 end and a hang that read verdict=done are counted from the records"
 wd="$work/wdog"; mkdir "$wd"
