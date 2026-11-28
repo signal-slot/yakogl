@@ -5,23 +5,21 @@
 //! shapes of dEQP-GLES3 (tests/es3_blit_ds_v3d.rs's shapes), item
 //! gc-blit-ds-test.
 //!
-//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) and, since
-//! gc-ds-read, `stencil_resolve` (`gc_stencil_resolve`), but `ds_write: None`
-//! (src/vivante/backend.rs).
-//! So src/gl/blit.rs refuses every blit that writes a depth plane
-//! (REFUSED_DEPTH_DST, src/gl/blit.rs:875) or touches stencil (REFUSED_STENCIL,
-//! src/gl/blit.rs:874): GL_INVALID_OPERATION, nothing copied, logged once.
+//! The Vivante table has `depth_resolve` (`gc_depth_resolve`),
+//! `stencil_resolve` (`gc_stencil_resolve`, since gc-ds-read) and, since
+//! gc-ds-write, `ds_write` (`gc_ds_write`, ds_cache.rs `write_plane`)
+//! (src/vivante/backend.rs). So src/gl/blit.rs copies every shape on the CPU:
+//! it reads the source plane through the resolves and writes the
+//! destination's rectangle through `ds_write`. The destinations here were
+//! cleared, so the probe finds their planes Cleared and the write first
+//! fills the clear over the whole plane.
 //!
-//! Per shape, in a module of its own: `<shape>::is_refused_today` pins that
-//! answer: exactly one GL_INVALID_OPERATION, the destination's depth plane
-//! (read through `depth_resolve`) still its clear, and the context usable
-//! (a clear afterwards lands). The stencil plane is not checked in the
-//! refusal (the refusals predate `stencil_resolve`); the
-//! stencil half of the expected-result twin reads it through the table entry
-//! the lift adds. `<shape>::reads_back_the_source` is `#[ignore]`d: what a
-//! working blit leaves (tests/es3_blit_ds.rs's model): no error, each
-//! destination pixel takes the nearest source pixel in the planes the mask
-//! names, the others keep their clear.
+//! Per shape, in a module of its own: `<shape>::reads_back_the_source`
+//! checks what a working blit leaves (tests/es3_blit_ds.rs's model): no
+//! error, each destination pixel takes the nearest source pixel in the
+//! planes the mask names, the others keep their clear. Until gc-ds-write it
+//! was `#[ignore]`d beside an `is_refused_today` pin of the
+//! GL_INVALID_OPERATION refusal (REFUSED_DEPTH_DST / REFUSED_STENCIL).
 //!
 //! The GPU draws nothing here (every kick is kept, none executed), so the
 //! sources are clear-only; a lifted blit is checked against the source plane
@@ -308,8 +306,7 @@ fn read_depth(rb: GLuint, w: i32, h: i32) -> Vec<f32> {
     v
 }
 
-/// The stencil plane through the table's `stencil_resolve` (the entry the
-/// lift adds; `None` today).
+/// The stencil plane through the table's `stencil_resolve`.
 fn read_stencil(rb: GLuint, w: i32, h: i32) -> Vec<u8> {
     let f = yakogl_backend_vivante.stencil_resolve.expect("the GC table has a stencil_resolve entry");
     let mut v = vec![0xffu8; (w * h) as usize];
@@ -331,33 +328,6 @@ fn scaled<T: Copy>(src: &[T], s: &Shape) -> Vec<T> {
         .flat_map(|y| (0..dw).map(move |x| (x, y)))
         .map(|(x, y)| src[(src_of(y, sh, dh) * sw + src_of(x, sw, dw)) as usize])
         .collect()
-}
-
-/// Today: the blit is refused whole, with one GL_INVALID_OPERATION.
-fn check_refused(s: Shape) {
-    on_gc7000(|| {
-        let p = pair(&s);
-        let (dw, dh) = s.sizes().1;
-        blit(&s);
-        assert_eq!(err(), GL_INVALID_OPERATION, "the blit is refused");
-        assert_eq!(err(), GL_NO_ERROR, "exactly one error");
-        if s.has_depth() {
-            let got = read_depth(p.dst_rb, dw, dh);
-            assert!(got.iter().all(|&d| d == DST_CLEAR.0), "the destination depth is untouched");
-        }
-        /* usable afterwards: a clear of the destination lands */
-        // SAFETY: plain GL calls.
-        unsafe {
-            glClearDepthf(0.5);
-            glClear(s.clear_bits());
-            glFinish();
-        }
-        assert_eq!(err(), GL_NO_ERROR, "the context is usable after the refusal");
-        if s.has_depth() {
-            assert!(read_depth(p.dst_rb, dw, dh).iter().all(|&d| d == 0.5), "a later clear lands");
-        }
-        release(&p);
-    });
 }
 
 /// What a blit that works leaves: no error, each destination pixel takes the
@@ -399,11 +369,6 @@ macro_rules! shapes {
             use super::*;
             const S: Shape = Shape { format: $format, point: $point, mask: $mask, scale: $scale };
             #[test]
-            fn is_refused_today() {
-                check_refused(S);
-            }
-            #[test]
-            #[ignore = "needs ds_write/stencil_resolve on the GC7000UL (src/vivante/backend.rs:4013)"]
             fn reads_back_the_source() {
                 check_readback(S);
             }
@@ -434,13 +399,11 @@ shapes! {
     stencil_index8_scale: GL_STENCIL_INDEX8, GL_STENCIL_ATTACHMENT, STENCIL, true;
 }
 
-/// The two table entries the refusals name are absent today; this is the
-/// line the lift changes.
+/// The three table entries the blit copies through are set; this is the line
+/// gc-ds-write changed (`ds_write`).
 #[test]
-fn the_table_lacks_ds_write_today() {
-    assert!(yakogl_backend_vivante.ds_write.is_none(), "ds_write (src/vivante/backend.rs:4013)");
-    /* stencil_resolve is set since gc-ds-read (ds_cache.rs resolve_plane): the
-     * refusals rest on ds_write alone */
+fn the_table_has_ds_write() {
+    assert!(yakogl_backend_vivante.ds_write.is_some(), "ds_write (src/vivante/backend.rs gc_ds_write)");
     assert!(yakogl_backend_vivante.stencil_resolve.is_some(), "stencil_resolve (src/vivante/backend.rs)");
     assert!(yakogl_backend_vivante.depth_resolve.is_some(), "depth_resolve stays");
 }

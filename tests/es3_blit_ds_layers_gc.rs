@@ -8,47 +8,34 @@
 //! its design docs/notes/blit-depth-layers.md; the rig here is the rig of
 //! tests/es3_blit_ds_window_gc.rs and tests/es3_blit_ds_gc.rs.
 //!
-//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) and
-//! `stencil_resolve` (`gc_stencil_resolve`) but `ds_write: None`
-//! (src/vivante/backend.rs).
-//! Every shape here is exactly one GL_INVALID_OPERATION today; the refusal
-//! of src/gl/blit.rs that answers it:
+//! The Vivante table has `depth_resolve` (`gc_depth_resolve`),
+//! `stencil_resolve` (`gc_stencil_resolve`, since gc-ds-read) and, since
+//! gc-ds-write, `ds_write` (`gc_ds_write`, ds_cache.rs `write_plane`)
+//! (src/vivante/backend.rs). With the GL core's face/layer paths
+//! (gl-ds-layers, src/gl/blit.rs) every shape here is copied on the CPU:
 //!
-//! - depth from a cube face or an array layer into a renderbuffer: the source
-//!   is REFUSED_DEPTH_SRC (`depth_texels` and `texture::resolve_depth` take
-//!   GL_TEXTURE_2D only, `GlesDraw::depth_id` names a texture, not a face or
-//!   layer), and the destination is REFUSED_DEPTH_DST as well (no `ds_write`
-//!   for a renderbuffer). Both causes answer; the call is refused whole.
+//! - depth from a cube face or an array layer into a renderbuffer: the
+//!   face's or layer's texels read by the GL core, the renderbuffer written
+//!   through `ds_write`;
 //! - depth from a renderbuffer into a cube face or an array layer: the
-//!   source could be read (`depth_resolve`), the destination is
-//!   REFUSED_DEPTH_DST (`depth_texels` takes GL_TEXTURE_2D only). The lift is
-//!   the GL core's (gl-ds-layers); no table entry is missing for it.
-//! - stencil into a D24S8 texture from a renderbuffer, and out of a D24S8
-//!   texture into a renderbuffer: REFUSED_STENCIL (a stencil copy needs
-//!   `stencil_resolve` and `ds_write`, which the table lacks, and a
-//!   renderbuffer on both sides).
+//!   renderbuffer read through `depth_resolve`, the texels written by the GL
+//!   core (no table entry needed);
+//! - stencil into a D24S8 texture from a renderbuffer, and out of it into a
+//!   renderbuffer: through the plane the back end keeps for the texture's
+//!   level 0, read by `stencil_resolve` and written by `ds_write`.
 //!
 //! The API entries these tests need are not refused before blit.rs: cube and
 //! array depth storage, glFramebufferTexture2D with a face target and
 //! glFramebufferTextureLayer with a depth attachment give complete
 //! framebuffers.
 //!
-//! Each shape is a pair. `..._is_refused_today` pins today's answer: exactly
-//! one GL_INVALID_OPERATION, the destination unchanged (a renderbuffer's
-//! depth through `depth_resolve`, a texture's texels as the GL core holds
-//! them), every other layer and face unchanged, and the context usable
-//! afterwards. The stencil plane cannot be read on this back end, so the
-//! stencil refusals do not check it. The `#[ignore]`d twin holds what a
-//! working blit leaves, from the nearest-sample model of
-//! tests/es3_blit_ds_layers.rs, written apart from the code.
-//!
-//! What un-ignores the twins: the GL core's gl-ds-layers (the face/layer
-//! depth source and destination, and stencil to and from a texture in
-//! src/gl/blit.rs) and, for the shapes that read or write a renderbuffer's
-//! depth or stencil through the table, the GC7000UL `ds_write` and
-//! `stencil_resolve` entries (plans #335/#355). The twin of depth from a
-//! renderbuffer into a face or layer needs gl-ds-layers only; the others need
-//! both. Removing the `#[ignore]` is all it takes then.
+//! Each test checks what the blit leaves against the nearest-sample model of
+//! tests/es3_blit_ds_layers.rs, written apart from the code: the
+//! destination's picture, every other layer and face unchanged. Until
+//! gc-ds-write the shapes that write a renderbuffer or stencil were
+//! `#[ignore]`d beside `..._is_refused_today` pins of the single
+//! GL_INVALID_OPERATION (REFUSED_DEPTH_DST / REFUSED_STENCIL); the pins are
+//! gone with the refusal.
 //!
 //! HOST-ONLY: API verdicts on the host back end, never pictures and not a
 //! board result (tools/cts/README.md 2b).
@@ -56,7 +43,6 @@
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_blit_ds_layers_gc
 //! ```
-//! (add `-- --ignored` for the twins, which fail until the lift)
 
 #![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
@@ -387,24 +373,6 @@ fn set_texel(tex: GLuint, layer: u32, x: u32, y: u32, v: f32) {
     unsafe { texel_ptr(tex, layer, x, y).write(v) }
 }
 
-/// A `w` x `h` 2D depth texture, depth (x, y) = `f(x, y)`.
-fn depth_texture(fmt: Fmt, w: u32, h: u32, f: impl Fn(u32, u32) -> f32) -> GLuint {
-    let mut tex = 0;
-    // SAFETY: room for one name; no pixels (the texels are written below).
-    unsafe {
-        glGenTextures(1, &mut tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, fmt.0 as GLint, w as i32, h as i32, 0, fmt.1, fmt.2, core::ptr::null());
-    }
-    assert_eq!(err(), GL_NO_ERROR, "a {:#x} depth texture", fmt.0);
-    for y in 0..h {
-        for x in 0..w {
-            set_texel(tex, 0, x, y, f(x, y));
-        }
-    }
-    tex
-}
-
 /// A `side` x `side` cube map (six faces) or 2D array (`n` layers; a cube
 /// has six) of depth, depth (x, y) of layer k = `f(k, x, y)`.
 fn layered_texture(kind: Layered, fmt: Fmt, side: u32, n: u32, f: impl Fn(u32, u32, u32) -> f32) -> GLuint {
@@ -455,21 +423,6 @@ fn layer_picture(tex: GLuint, layer: u32, side: u32) -> Vec<f32> {
 
 fn picture(tex: GLuint, w: u32, h: u32) -> Vec<f32> {
     (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| texel(tex, 0, x, y)).collect()
-}
-
-/// A framebuffer with the 2D depth texture `tex` at GL_DEPTH_ATTACHMENT (or
-/// at GL_DEPTH_STENCIL_ATTACHMENT with `stencil_too`), checked complete.
-fn texture_fbo(tex: GLuint, stencil_too: bool) -> GLuint {
-    let mut fb = 0;
-    let point = if stencil_too { GL_DEPTH_STENCIL_ATTACHMENT } else { GL_DEPTH_ATTACHMENT };
-    // SAFETY: room for one name; plain GL calls.
-    unsafe {
-        glGenFramebuffers(1, &mut fb);
-        glBindFramebuffer(GL_FRAMEBUFFER, fb);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, point, GL_TEXTURE_2D, tex, 0);
-        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
-    }
-    fb
 }
 
 /// A framebuffer with face `face` (index into `FACES`) of cube map `tex` at
@@ -561,8 +514,7 @@ fn assert_depth_eq(what: &str, got: &[f32], want: &[f32]) {
 }
 
 /// A `w` x `h` depth-only renderbuffer matching `fmt` (DEPTH_COMPONENT24 or
-/// 32F, so the formats of the two sides agree and the blit is refused only
-/// for the causes in the header) at GL_DEPTH_ATTACHMENT of a new
+/// 32F, so the formats of the two sides agree) at GL_DEPTH_ATTACHMENT of a new
 /// framebuffer, depth cleared to `depth`: (framebuffer, renderbuffer).
 fn depth_rb(fmt: Fmt, w: i32, h: i32, depth: f32) -> (GLuint, GLuint) {
     let (mut fb, mut rb) = (0, 0);
@@ -586,26 +538,6 @@ fn depth_rb(fmt: Fmt, w: i32, h: i32, depth: f32) -> (GLuint, GLuint) {
 
 const SIDE: u32 = 8;
 const WHOLE: [i32; 4] = [0, 0, SIDE as i32, SIDE as i32];
-
-/// Blit once and require today's answer: exactly one GL_INVALID_OPERATION.
-fn refused(s: [i32; 4], d: [i32; 4], mask: GLbitfield, what: &str) {
-    blit(s, d, mask);
-    assert_eq!(err(), GL_INVALID_OPERATION, "{what}");
-    assert_eq!(err(), GL_NO_ERROR, "{what}: exactly one error");
-}
-
-/// The context still blits after a refusal: a depth renderbuffer copies
-/// into a 2D depth texture (the GL core holds its texels).
-fn still_usable() {
-    let tex = depth_texture(D24, 4, 4, |_, _| 0.5);
-    let tfb = texture_fbo(tex, false);
-    let (rfb, rb) = depth_rb(D24, 4, 4, SRC_CLEAR.0);
-    bind(rfb, tfb);
-    blit([0, 0, 4, 4], [0, 0, 4, 4], DEPTH);
-    assert_eq!(err(), GL_NO_ERROR, "the context after a refusal");
-    assert_depth_eq("a later blit", &picture(tex, 4, 4), &[SRC_CLEAR.0; 16]);
-    release(&[rfb, tfb], &[tex], &[rb]);
-}
 
 fn untouched_layers(tex: GLuint, n: u32, except: Option<u32>, what: &str) {
     for l in (0..n).filter(|&l| Some(l) != except) {
@@ -632,11 +564,10 @@ fn layer_source(kind: Layered, tex: GLuint, k: u32) -> GLuint {
 /* ---- (1)/(2) depth from a cube face or an array layer into a renderbuffer --- */
 
 /// Face/layer `k` of a layered texture of `fmt` blitted `s` -> `d` into a
-/// `SIDE` x `SIDE` depth renderbuffer cleared to `DST_CLEAR`. Refused today
-/// (REFUSED_DEPTH_SRC, and REFUSED_DEPTH_DST for the missing `ds_write`):
-/// the renderbuffer's depth and every layer stay. Otherwise the
-/// renderbuffer holds the model's picture.
-fn from_layer(kind: Layered, fmt: Fmt, k: u32, s: [i32; 4], d: [i32; 4], refused_today: bool) {
+/// `SIDE` x `SIDE` depth renderbuffer cleared to `DST_CLEAR`: the
+/// renderbuffer holds the model's picture (written through `ds_write`) and
+/// every layer stays.
+fn from_layer(kind: Layered, fmt: Fmt, k: u32, s: [i32; 4], d: [i32; 4]) {
     on_gc7000(|| {
         let n = layer_count(kind);
         let tex = layered_texture(kind, fmt, SIDE, n, layer_depth);
@@ -645,76 +576,54 @@ fn from_layer(kind: Layered, fmt: Fmt, k: u32, s: [i32; 4], d: [i32; 4], refused
         let id = ds_id(rb);
         let what = format!("{kind:?} {fmt:?} layer {k} into a renderbuffer: {s:?} -> {d:?}");
         let keep = |_, _| DST_CLEAR.0;
-        let before = read_depth(id, SIDE as i32, SIDE as i32);
         bind(sfb, dfb);
-        let want = if refused_today {
-            refused(s, d, DEPTH, &what);
-            before.clone()
-        } else {
-            blit(s, d, DEPTH);
-            assert_eq!(err(), GL_NO_ERROR, "{what}");
-            let src = |x, y| layer_depth(k, x, y);
-            model(&src, (SIDE, SIDE), &keep, (SIDE, SIDE), s, d)
-        };
+        blit(s, d, DEPTH);
+        assert_eq!(err(), GL_NO_ERROR, "{what}");
+        let src = |x, y| layer_depth(k, x, y);
+        let want = model(&src, (SIDE, SIDE), &keep, (SIDE, SIDE), s, d);
         assert_depth_eq(&what, &read_depth(id, SIDE as i32, SIDE as i32), &want);
         untouched_layers(tex, n, None, &what);
-        if refused_today {
-            still_usable();
-        }
         release(&[sfb, dfb], &[tex], &[rb]);
     });
 }
 
 /// Faces +X and -Z of a D24 and a D32F cube, 1:1, scaled, and flipped.
-fn each_face(refused_today: bool) {
+fn each_face() {
     for fmt in [D24, D32F] {
         for face in [FACE_PX, FACE_NZ] {
-            from_layer(Layered::Cube, fmt, face as u32, WHOLE, WHOLE, refused_today);
-            from_layer(Layered::Cube, fmt, face as u32, WHOLE, [0, 0, 4, 4], refused_today);
-            from_layer(Layered::Cube, fmt, face as u32, [1, 2, 6, 7], [7, 1, 2, 6], refused_today);
+            from_layer(Layered::Cube, fmt, face as u32, WHOLE, WHOLE);
+            from_layer(Layered::Cube, fmt, face as u32, WHOLE, [0, 0, 4, 4]);
+            from_layer(Layered::Cube, fmt, face as u32, [1, 2, 6, 7], [7, 1, 2, 6]);
         }
     }
 }
 
-fn each_layer(refused_today: bool) {
+fn each_layer() {
     for fmt in [D24, D32F] {
         for layer in [0, 2] {
-            from_layer(Layered::Array, fmt, layer, WHOLE, WHOLE, refused_today);
-            from_layer(Layered::Array, fmt, layer, WHOLE, [0, 0, 4, 4], refused_today);
-            from_layer(Layered::Array, fmt, layer, [1, 2, 6, 7], [7, 1, 2, 6], refused_today);
+            from_layer(Layered::Array, fmt, layer, WHOLE, WHOLE);
+            from_layer(Layered::Array, fmt, layer, WHOLE, [0, 0, 4, 4]);
+            from_layer(Layered::Array, fmt, layer, [1, 2, 6, 7], [7, 1, 2, 6]);
         }
     }
 }
 
 #[test]
-fn depth_from_a_cube_face_is_refused_today() {
-    each_face(true);
-}
-
-#[test]
-#[ignore = "needs gl-ds-layers and GC7000UL ds_write/stencil_resolve"]
 fn depth_from_a_cube_face_into_a_renderbuffer_copies_that_face() {
-    each_face(false);
+    each_face();
 }
 
 #[test]
-fn depth_from_an_array_layer_is_refused_today() {
-    each_layer(true);
-}
-
-#[test]
-#[ignore = "needs gl-ds-layers and GC7000UL ds_write/stencil_resolve"]
 fn depth_from_an_array_layer_into_a_renderbuffer_copies_that_layer() {
-    each_layer(false);
+    each_layer();
 }
 
 /* ---- (3) depth from a renderbuffer into a cube face or an array layer ------- */
 
 /// A `sz` x `sz` depth renderbuffer cleared to `SRC_CLEAR` blitted `s` -> `d`
-/// into face/layer `k` of a layered texture of `fmt`. Refused today
-/// (REFUSED_DEPTH_DST: the source is readable by `depth_resolve`): every
-/// layer stays. Otherwise only layer `k` takes the model's picture.
-fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: i32, s: [i32; 4], d: [i32; 4], refused_today: bool) {
+/// into face/layer `k` of a layered texture of `fmt`: only layer `k` takes
+/// the model's picture.
+fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: i32, s: [i32; 4], d: [i32; 4]) {
     on_gc7000(|| {
         let n = layer_count(kind);
         let tex = layered_texture(kind, fmt, SIDE, n, layer_depth);
@@ -724,51 +633,43 @@ fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: i32, s: [i32; 4], d: [i32; 4]
         bind(sfb, dfb);
         let what = format!("{kind:?} {fmt:?} renderbuffer into layer {k}: {s:?} -> {d:?}");
         let keep = |x, y| layer_depth(k, x, y);
-        let want = if refused_today {
-            refused(s, d, DEPTH, &what);
-            (0..SIDE * SIDE).map(|i| keep(i % SIDE, i / SIDE)).collect()
-        } else {
-            blit(s, d, DEPTH);
-            assert_eq!(err(), GL_NO_ERROR, "{what}");
-            let src = |_, _| SRC_CLEAR.0;
-            model(&src, (sz as u32, sz as u32), &keep, (SIDE, SIDE), s, d)
-        };
+        blit(s, d, DEPTH);
+        assert_eq!(err(), GL_NO_ERROR, "{what}");
+        let src = |_, _| SRC_CLEAR.0;
+        let want = model(&src, (sz as u32, sz as u32), &keep, (SIDE, SIDE), s, d);
         assert_depth_eq(&what, &layer_picture(tex, k, SIDE), &want);
         untouched_layers(tex, n, Some(k), &what);
         assert_depth_eq(&what, &read_depth(id, sz, sz), &vec![SRC_CLEAR.0; (sz * sz) as usize]);
-        if refused_today {
-            still_usable();
-        }
         release(&[sfb, dfb], &[tex], &[rb]);
     });
 }
 
-fn into_faces(refused_today: bool) {
+fn into_faces() {
     for fmt in [D24, D32F] {
-        into_layer(Layered::Cube, fmt, FACE_PX as u32, 8, WHOLE, WHOLE, refused_today);
-        into_layer(Layered::Cube, fmt, FACE_NZ as u32, 4, [0, 0, 4, 4], WHOLE, refused_today);
-        into_layer(Layered::Cube, fmt, 2, 8, WHOLE, [2, 2, 6, 6], refused_today);
+        into_layer(Layered::Cube, fmt, FACE_PX as u32, 8, WHOLE, WHOLE);
+        into_layer(Layered::Cube, fmt, FACE_NZ as u32, 4, [0, 0, 4, 4], WHOLE);
+        into_layer(Layered::Cube, fmt, 2, 8, WHOLE, [2, 2, 6, 6]);
     }
 }
 
-fn into_layers(refused_today: bool) {
+fn into_layers() {
     for fmt in [D24, D32F] {
-        into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE, refused_today);
-        into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE, refused_today);
-        into_layer(Layered::Array, fmt, 1, 8, WHOLE, [2, 2, 6, 6], refused_today);
+        into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE);
+        into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE);
+        into_layer(Layered::Array, fmt, 1, 8, WHOLE, [2, 2, 6, 6]);
     }
 }
 
 /// Depth into a texture's face or layer needs only `depth_resolve` (the GL
-/// core writes the texels): lifted by item layers-unignore-backends.
+/// core writes the texels): passed before `ds_write` too.
 #[test]
 fn depth_from_a_renderbuffer_into_a_cube_face_changes_only_that_face() {
-    into_faces(false);
+    into_faces();
 }
 
 #[test]
 fn depth_from_a_renderbuffer_into_an_array_layer_changes_only_that_layer() {
-    into_layers(false);
+    into_layers();
 }
 
 /* ---- (4) stencil to and from a D24S8 texture -------------------------------- */
@@ -776,38 +677,12 @@ fn depth_from_a_renderbuffer_into_an_array_layer_changes_only_that_layer() {
 const TEX_DEPTH: f32 = 0.5;
 const R: [i32; 4] = [0, 0, 4, 4];
 
-/// Stencil from a renderbuffer into a D24S8 texture, and from a D24S8
-/// texture into a renderbuffer (REFUSED_STENCIL), each alone and with depth.
-#[test]
-fn stencil_to_and_from_a_texture_is_refused_today() {
-    on_gc7000(|| {
-        let (src_fb, src_rb) = ds_fbo(4, 4, SRC_CLEAR);
-        let (out_fb, out_rb) = ds_fbo(4, 4, DST_CLEAR);
-        let (tex_fb, tex) = tex_fbo(4, 4, TEX_DEPTH);
-        let tex_before = picture(tex, 4, 4);
-        let (src_id, out_id) = (ds_id(src_rb), ds_id(out_rb));
-        let (src_before, out_before) = (read_depth(src_id, 4, 4), read_depth(out_id, 4, 4));
-        bind(src_fb, tex_fb);
-        refused(R, R, STENCIL, "stencil into a texture");
-        refused(R, R, DEPTH | STENCIL, "depth and stencil into a texture");
-        bind(tex_fb, out_fb);
-        refused(R, R, STENCIL, "stencil from a texture");
-        refused(R, R, DEPTH | STENCIL, "depth and stencil from a texture");
-        assert_depth_eq("source", &read_depth(src_id, 4, 4), &src_before);
-        assert_depth_eq("destination", &read_depth(out_id, 4, 4), &out_before);
-        assert_depth_eq("the texture", &picture(tex, 4, 4), &tex_before);
-        still_usable();
-        release(&[src_fb, out_fb, tex_fb], &[tex], &[src_rb, out_rb]);
-    });
-}
-
 /// Renderbuffer -> texture -> second renderbuffer, the second hop into the
 /// middle of the destination: the second renderbuffer's stencil plane, the
 /// only place stencil can be seen, holds the source's stencil in the
 /// destination rectangle and its own clear elsewhere; the texture's depth is
 /// not what the stencil blits wrote.
 #[test]
-#[ignore = "needs gl-ds-layers and GC7000UL ds_write/stencil_resolve"]
 fn stencil_goes_through_a_texture_and_back() {
     on_gc7000(|| {
         let (src_fb, src_rb) = ds_fbo(4, 4, SRC_CLEAR);
@@ -832,12 +707,11 @@ fn stencil_goes_through_a_texture_and_back() {
     });
 }
 
-/// The table entries the refusals rest on; the line the lift changes.
+/// The three table entries the blits copy through are set; this is the line
+/// gc-ds-write changed (`ds_write`).
 #[test]
-fn the_table_lacks_ds_write_today() {
-    assert!(yakogl_backend_vivante.ds_write.is_none(), "ds_write (src/vivante/backend.rs)");
-    /* stencil_resolve is set since gc-ds-read (ds_cache.rs resolve_plane): the
-     * refusals rest on ds_write alone */
+fn the_table_has_ds_write() {
+    assert!(yakogl_backend_vivante.ds_write.is_some(), "ds_write (src/vivante/backend.rs gc_ds_write)");
     assert!(yakogl_backend_vivante.stencil_resolve.is_some(), "stencil_resolve (src/vivante/backend.rs)");
     assert!(yakogl_backend_vivante.depth_resolve.is_some(), "depth_resolve stays");
 }

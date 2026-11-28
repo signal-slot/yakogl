@@ -382,6 +382,8 @@ struct Seen {
     size: (u32, u32),
     /// `GlesDraw::target_id`, `target_gen`.
     ident: (u32, u32),
+    /// `GlesDraw::depth_id`, `depth_gen`, `stencil_id`, `stencil_gen`.
+    ds: (u32, u32, u32, u32),
 }
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
@@ -397,6 +399,7 @@ unsafe extern "C" fn rec_draw(d: *const GlesDraw) -> i32 {
         targets: g.targets[..n].iter().map(|t| (t.gpu, t.format)).collect(),
         size: (g.target_w, g.target_h),
         ident: (g.target_id, g.target_gen),
+        ds: (g.depth_id, g.depth_gen, g.stencil_id, g.stencil_gen),
     });
     gc_draw(d)
 }
@@ -1241,30 +1244,84 @@ fn a_scaled_or_shifted_resolve_is_invalid_operation() {
 /// Depth and stencil of a 4x framebuffer resolve to one sample a pixel
 /// (note (b)8: which sample is the implementation's, ES 3.0 4.3.3). The blit
 /// is legal and the resolved framebuffer stays complete and drawable.
+///
+/// The GPU model runs neither the depth test nor a 1x draw, so the colour
+/// checks are the colour resolve's, and the depth and stencil are checked in
+/// the back end's planes: the 4x surface's D24S8 words are seeded with a
+/// different value in each sample, and the destination's planes, written
+/// through `ds_write` (`gc_ds_write`) into its 1x surface, read back each
+/// pixel's sample 0 (the top-left word of its 2x2 block, ds_cache.rs
+/// `resolve_plane`; which sample the PE keeps is board-unverified).
 #[cfg(feature = "msaa-fbo")]
 #[test]
-#[ignore = "note (b)8 + (c3) 'Depth', not gc-msaa-fbo's: glBlitFramebuffer refuses a depth/stencil blit into a renderbuffer on this back end (GL_INVALID_OPERATION at 1x too: the GC table has no ds_write or stencil_resolve entry, gl/blit.rs refuse_ds), ds_cache::resolve_depth refuses the 4x surface (scale 2, -ENOTSUP), and this file's GPU model does not run the depth test; which sample the PE keeps is board-unverified"]
 fn depth_resolve_keeps_one_sample() {
+    use yakogl::vivante::backend::{gc_depth_resolve, gc_stencil_resolve};
+    use yakogl::vivante::ds_cache::{self, DsKey};
     on_gc7000(|| {
         let fbo = framebuffer(4, Some(GL_DEPTH24_STENCIL8)).expect("4 samples are legal storage");
         assert_eq!(rb_samples(fbo.depth.unwrap()), 4);
+        expect_layers([all(BLACK8), left_half_edge(RED8)]);
         clear(BLACK);
         // SAFETY: plain GL calls.
         unsafe {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LESS);
+            /* the draw writes stencil too, so both planes are live */
+            glEnable(GL_STENCIL_TEST);
+            glStencilFunc(GL_ALWAYS, 0x40, 0xff);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         }
-        assert_eq!(draw_left_of(HALF_EDGE_X, 0.0, RED).samples, 4);
+        let s = draw_left_of(HALF_EDGE_X, 0.0, RED);
+        assert_eq!(s.samples, 4);
+        /* the 4x surface's words: sample (i, j) of pixel (x, y) is word row
+         * 2y + j, column 2x + i */
+        let (did, dgen, sid, sgen) = s.ds;
+        let key = DsKey { depth_id: did, depth_gen: dgen, stencil_id: sid, stencil_gen: sgen, scale: 2 };
+        let (mem, bytes) = ds_cache::memory_of(key).expect("the 4x depth surface");
+        let stride = ds_cache::stride_of(key).expect("the 4x depth surface") as usize / 4;
+        let word = |r: usize, c: usize| ((r * 131 + c * 7 + 1) as u32) << 8 | ((r & 1) << 1 | (c & 1)) as u32 | 0x40;
+        /* a guard before the words and one after them */
+        let guard = (mem.size - bytes) / 2;
+        // SAFETY: the allocation holds guard + bytes + guard bytes, word-aligned.
+        let words = unsafe { core::slice::from_raw_parts_mut((mem.cpu as *mut u8).add(guard) as *mut u32, bytes / 4) };
+        for (i, w) in words.iter_mut().enumerate() {
+            *w = word(i / stride, i % stride);
+        }
         let (e, dst) = resolve_blit(&fbo, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         assert_eq!(e, GL_NO_ERROR);
-        /* a draw at the same depth through the resolved depth fails GL_LESS
-         * wherever the resolved depth is the drawn one: the interior stays red */
+        assert_eq!(pixel(3), RED8, "the colour interior");
+        /* the destination's planes: sample 0 of each pixel */
+        let dst_id = {
+            use yakogl::gl::context;
+            use yakogl::gl::names::{self, Kind};
+            let c = context::current().expect("a current context");
+            let slot = names::slot_of(c, Kind::Renderbuffer, dst.depth.unwrap()).expect("a renderbuffer name");
+            context::ds_object_id(c.renderbuffer_object(slot).expect("a renderbuffer").serial, false)
+        };
+        let n = SIZE as usize;
+        let (mut depth, mut stencil) = (vec![-1.0f32; n * n], vec![0xeeu8; n * n]);
+        // SAFETY: `n` rows of `n` elements each.
+        unsafe {
+            assert_eq!(gc_depth_resolve(dst_id, depth.as_mut_ptr(), n as u32, n as u32, n as u32), 0);
+            assert_eq!(gc_stencil_resolve(dst_id, stencil.as_mut_ptr(), n as u32, n as u32, n as u32), 0);
+        }
+        for y in 0..n {
+            for x in 0..n {
+                let w = word(2 * y, 2 * x);
+                let want = ((w >> 8) as f64 / 16_777_215.0) as f32;
+                assert!((depth[y * n + x] - want).abs() <= 1.0 / 16_777_215.0, "depth at ({x}, {y})");
+                assert_eq!(stencil[y * n + x], (w & 0xff) as u8, "stencil at ({x}, {y}): sample 0's");
+            }
+        }
+        /* and the resolved framebuffer is drawable at one sample */
         // SAFETY: plain GL calls on a name this test made.
         unsafe { glBindFramebuffer(GL_FRAMEBUFFER, dst.fb) };
         assert_eq!(draw_left_of(1.0, 0.0, BLUE).samples, 1);
-        assert_eq!(pixel(3), [255, 0, 0, 255], "the resolved depth kept the interior");
-        // SAFETY: a plain GL call.
-        unsafe { glDisable(GL_DEPTH_TEST) };
+        // SAFETY: plain GL calls.
+        unsafe {
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_STENCIL_TEST);
+        }
     });
 }
 

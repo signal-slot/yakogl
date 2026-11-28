@@ -914,6 +914,137 @@ pub unsafe fn resolve_plane(
     0
 }
 
+/// Write the `w` x `h` rectangle at (`x`, `y`) of plane `p` ([`DEPTH`]: `f32`
+/// depth at `src`; [`STENCIL`]: bytes) of GL object `id`, `pitch` elements a
+/// row, into the surface that holds the plane (`YakoglBackend::ds_write`,
+/// the reverse of [`resolve_plane`]). Rows are top-down at GL's y, as
+/// [`seed_depth`] writes them: pixel (x, y) is word (y, x), row-linear at
+/// the row stride, or at its `layout::offset` in a `SuperTiled` surface. A
+/// depth element becomes bits 31..8 of the word
+/// ([`ds_retention::depth_unorm24`]), a stencil one bits 7..0; the other
+/// plane's bits are kept ([`PLANE_MASK`]).
+///
+/// The plane is found as [`resolve_plane`] finds it: the surface where it is
+/// not Undefined. A plane that holds a whole clear's value only is first
+/// filled with it over the whole surface, then the rectangle is written. The
+/// plane is then Live, and `written_by` moves to the surface's `used_by` (the
+/// last kick that used it, completed: a pending one is waited for first with
+/// `finish`, as [`seed_depth`] does; the GL core waited already, so this is a
+/// guard).
+///
+/// An empty rectangle (`w` or `h` 0) is the GL core's probe: it writes
+/// nothing and answers 0 when a write could be made (the plane is Live or
+/// Cleared in a surface), 1 when no surface holds it (Undefined: never
+/// drawn, or its contents gone; also a clear value parked when its surface
+/// went to another pair, which has no surface to write into). The answers
+/// in full: 0 written; 1 as the probe's; `-ENOTSUP` for a 4x surface (scale
+/// 2: ES 3.0 forbids a multisample blit destination) or a layout with no
+/// CPU writing; `-EINVAL` for a plane other than the two, a null `src`,
+/// `w > pitch` or a rectangle past the surface; a failed `finish`'s code.
+///
+/// # Safety
+/// `src` holds `h` rows of `pitch` elements of the plane's type, `w <= pitch`.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn write_plane(
+    id: u32,
+    p: usize,
+    src: *const core::ffi::c_void,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    guard: usize,
+    pending: impl Fn(u32) -> bool,
+    mut finish: impl FnMut() -> i32,
+) -> i32 {
+    if p != DEPTH && p != STENCIL {
+        return -crate::util::EINVAL;
+    }
+    if id == 0 {
+        return 1;
+    }
+    let c = cache();
+    let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.plane == p as u8);
+    let Some(slot) = (0..ENTRIES)
+        .find(|&j| c.entries[j].as_ref().is_some_and(|e| mine(e.key.plane(p)) && e.planes[p] != Plane::UNDEFINED))
+    else {
+        return 1;
+    };
+    let Some(e) = c.entries[slot].as_ref() else { return 1 };
+    if e.key.scale != 1 {
+        crate::glog_once!(
+            "vivante: a depth/stencil write into the 4x plane of object 0x{:x} is refused (a multisample blit \
+             destination)",
+            id
+        );
+        return -crate::util::ENOTSUP;
+    }
+    if !matches!(e.layout, Layout::Linear | Layout::SuperTiled) {
+        return -crate::util::ENOTSUP;
+    }
+    if w == 0 || h == 0 {
+        return 0;
+    }
+    if src.is_null() || w > pitch {
+        return -crate::util::EINVAL;
+    }
+    if x as u64 + w as u64 > (e.stride / 4) as u64 || y as u64 + h as u64 > e.rows as u64 {
+        return -crate::util::EINVAL;
+    }
+    if e.used_by != 0 && pending(e.used_by) {
+        let rc = finish();
+        if rc != 0 {
+            return rc;
+        }
+    }
+    let Some(e) = c.entries[slot].as_mut() else { return -1 };
+    let bytes = e.stride as usize * e.rows as usize;
+    // SAFETY: a live allocation of this cache, guard + stride * rows + guard
+    // bytes, which no kick uses (waited for above).
+    let Some(px) = (unsafe { e.mem.bytes_mut() }).and_then(|a| a.get_mut(guard..guard + bytes)) else {
+        crate::glog_once!("vivante: a depth/stencil surface has no CPU mapping: the plane is not written");
+        return -crate::util::ENOTSUP;
+    };
+    // SAFETY: the whole CPU mapping.
+    unsafe { osal::cache_invd(e.mem.cpu, e.mem.size) };
+    let mask = PLANE_MASK[p];
+    let bits = |v: u32| if p == DEPTH { v << 8 } else { v & mask };
+    if let Some(v) = e.planes[p].cleared_value() {
+        /* the clear's value over the whole plane first: the rectangle is
+         * all that changes */
+        let v = bits(if p == DEPTH { ds_retention::depth_unorm24(f32::from_bits(v)) } else { v });
+        for word in px.as_chunks_mut::<4>().0.iter_mut() {
+            *word = ((u32::from_ne_bytes(*word) & !mask) | v).to_ne_bytes();
+        }
+    }
+    let (stride, l) = (e.stride, e.layout);
+    for r in 0..h {
+        for col in 0..w {
+            let at = r as usize * pitch as usize + col as usize;
+            // SAFETY: the caller's contract: (col, r) is inside `src`'s rows.
+            let v = bits(unsafe {
+                if p == DEPTH {
+                    ds_retention::depth_unorm24((src as *const f32).add(at).read())
+                } else {
+                    u32::from((src as *const u8).add(at).read())
+                }
+            });
+            let o = layout::offset(l, x + col, y + r, 4, stride);
+            let Some(word) = px.get_mut(o..o + 4) else { continue };
+            let old = u32::from_ne_bytes([word[0], word[1], word[2], word[3]]);
+            word.copy_from_slice(&((old & !mask) | v).to_ne_bytes());
+        }
+    }
+    // SAFETY: as above.
+    unsafe { osal::cache_flush(e.mem.cpu, e.mem.size) };
+    e.planes[p] = Plane::LIVE;
+    if e.used_by != 0 {
+        e.written_by = e.used_by;
+    }
+    0
+}
+
 /// PERF page 4 v3's counter (`mipmap::FallbackCounters::carveout_cpu_bytes`)
 /// gets the bytes a CPU depth resolve READS from the carve-out surface: 4
 /// bytes (one D24S8 word) a resolved texel, `w * h * 4` for a whole plane

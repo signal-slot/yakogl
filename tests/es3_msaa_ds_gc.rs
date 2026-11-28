@@ -15,6 +15,13 @@
 //! keep their sentinel. A plane that holds a whole clear (in its surface or
 //! parked) is that value everywhere; a plane in no surface answers 1.
 //!
+//! The write, `ds_cache::write_plane` (`gc_ds_write`, step G2), is the
+//! resolve's reverse into a 1x surface: a rectangle into a held plane, the
+//! other plane's bits kept; a Cleared plane first filled whole with its
+//! value; the probe (an empty rectangle) 0 for a Live or Cleared plane and 1
+//! for an Undefined one; `-ENOTSUP` for a 4x surface, which ES 3.0 forbids
+//! as a blit destination.
+//!
 //! The resolve does not depend on `msaa-fbo` (a scale-2 surface is the
 //! cache's own), so the file needs only the Vivante host back end and runs
 //! in every gpu-vivante row of tools/check.sh's CONFIGS:
@@ -337,5 +344,202 @@ fn the_table_has_the_stencil_resolve() {
     // SAFETY: 4 rows of 4 bytes.
     assert_eq!(unsafe { f(0x400, out.as_mut_ptr(), 4, 4, 4) }, 1, "an object in no surface");
     assert!(out.iter().all(|&v| v == SENTINEL_S));
+    shutdown();
+}
+
+/* ---- ds_write (`ds_cache::write_plane`, `gc_ds_write`) ---------------------- */
+
+const ENOTSUP: i32 = 95;
+
+/// `write_plane` of plane `p` (0 depth, 1 stencil) from `src`, no kick
+/// pending.
+#[allow(clippy::too_many_arguments)]
+fn write<T>(id: u32, p: usize, src: &[T], x: u32, y: u32, w: u32, h: u32, pitch: u32) -> i32 {
+    assert!(w == 0 || h == 0 || src.len() >= ((h - 1) * pitch + w) as usize);
+    // SAFETY: `h` rows of `pitch` elements at `src`.
+    unsafe { ds_cache::write_plane(id, p, src.as_ptr() as *const c_void, x, y, w, h, pitch, GUARD, |_| false, || 0) }
+}
+
+fn probe(id: u32, p: usize) -> i32 {
+    write::<u32>(id, p, &[0], 0, 0, 0, 0, 0)
+}
+
+/// The unorm24 of a depth, as the write rounds it.
+fn unorm24(d: f32) -> u32 {
+    (d.clamp(0.0, 1.0) as f64 * 16_777_215.0 + 0.5) as u32
+}
+
+/// A rectangle into a held (Live) 1x plane changes only its own pixels and
+/// only its plane's bits; rows are top-down at GL's y (word row y).
+#[test]
+fn ds_write_puts_a_rectangle_into_a_held_plane() {
+    let _g = init();
+    let key = DsKey { scale: 1, ..KEY };
+    draw(key, 37, 11, 1, [true, true], [None, None]);
+    let (words, stride) = seed(key);
+    let before: Vec<u32> = words.to_vec();
+    assert_eq!(probe(ID, 0), 0, "a live depth plane can be written");
+    assert_eq!(probe(ID, 1), 0, "a live stencil plane can be written");
+    let (x, y, w, h, pitch) = (3u32, 2u32, 5u32, 4u32, 7u32);
+    let depth: Vec<f32> = (0..h * pitch).map(|i| (i as f32 + 0.5) / 64.0).collect();
+    let stencil: Vec<u8> = (0..h * pitch).map(|i| (i * 7 + 3) as u8).collect();
+    assert_eq!(write(ID, 0, &depth, x, y, w, h, pitch), 0);
+    assert_eq!(write(ID, 1, &stencil, x, y, w, h, pitch), 0);
+    for r in 0..words.len() / stride {
+        for c in 0..stride {
+            let old = before[r * stride + c];
+            let inside = (x as usize..(x + w) as usize).contains(&c) && (y as usize..(y + h) as usize).contains(&r);
+            let want = if inside {
+                let at = (r - y as usize) * pitch as usize + (c - x as usize);
+                unorm24(depth[at]) << 8 | stencil[at] as u32
+            } else {
+                old
+            };
+            assert_eq!(words[r * stride + c], want, "word ({r}, {c})");
+        }
+    }
+    assert_eq!(ds_cache::planes_of(key), Some([Plane::LIVE; 2]));
+    /* and the resolve reads the rectangle back */
+    let mut all = vec![SENTINEL_F; 37 * 11];
+    assert_eq!(resolve_depth(ID, &mut all, 37, 11, 37), 0);
+    for r in 0..h as usize {
+        for c in 0..w as usize {
+            let (got, d) = (all[(y as usize + r) * 37 + x as usize + c], depth[r * pitch as usize + c]);
+            assert!((got - d).abs() <= 1.0 / 16_777_215.0, "depth ({c}, {r})");
+        }
+    }
+    shutdown();
+}
+
+/// A plane that holds a whole clear only is filled with it first: after a
+/// rectangle, every other pixel reads the clear and the plane is Live; the
+/// other plane's bits are kept.
+#[test]
+fn ds_write_materialises_a_cleared_plane() {
+    let _g = init();
+    let key = DsKey { scale: 1, ..KEY };
+    let (d, st) = (0.375f32, 0x5au32);
+    draw(key, 20, 10, 1, [false, true], [Some(d.to_bits()), None]);
+    assert_eq!(ds_cache::planes_of(key), Some([Plane::cleared(d.to_bits()), Plane::LIVE]));
+    let (words, stride) = seed(key);
+    let before: Vec<u32> = words.to_vec();
+    assert_eq!(probe(ID, 0), 0, "a cleared plane can be written");
+    let src = [0.875f32; 4];
+    assert_eq!(write(ID, 0, &src, 4, 6, 2, 2, 2), 0);
+    assert_eq!(ds_cache::planes_of(key), Some([Plane::LIVE; 2]));
+    for (i, &got) in words.iter().enumerate() {
+        let (r, c) = (i / stride, i % stride);
+        let depth = if (4..6).contains(&c) && (6..8).contains(&r) { unorm24(0.875) } else { unorm24(d) };
+        assert_eq!(got, depth << 8 | (before[i] & 0xff), "word ({r}, {c})");
+    }
+    /* a stencil clear materialises the same way, the depth bits kept */
+    let key2 = DsKey { depth_id: 0x501, stencil_id: 0x501, scale: 1, ..KEY };
+    draw(key2, 8, 8, 2, [true, false], [None, Some(st)]);
+    let (w2, s2) = seed(key2);
+    let before2: Vec<u32> = w2.to_vec();
+    assert_eq!(write(0x501, 1, &[0xc3u8], 1, 1, 1, 1, 1), 0);
+    for (i, &got) in w2.iter().enumerate() {
+        let s = if i == s2 + 1 { 0xc3 } else { st };
+        assert_eq!(got, (before2[i] & 0xffff_ff00) | s, "word {i}");
+    }
+    shutdown();
+}
+
+/// The probe answers 1 only for a plane nothing holds (Undefined): never
+/// drawn, drawn without writing that plane, or gone.
+#[test]
+fn ds_write_probe_answers_1_for_an_undefined_plane() {
+    let _g = init();
+    assert_eq!(probe(ID, 0), 1, "never drawn");
+    assert_eq!(probe(ID, 1), 1, "never drawn");
+    let key = DsKey { scale: 1, ..KEY };
+    /* a surface whose planes nothing wrote: Undefined */
+    draw(key, 8, 8, 1, [false, false], [None, None]);
+    assert_eq!(ds_cache::planes_of(key), Some([Plane::UNDEFINED; 2]));
+    assert_eq!(probe(ID, 0), 1, "drawn, but nothing written");
+    let (words, _) = seed(key);
+    let before: Vec<u32> = words.to_vec();
+    assert_eq!(write(ID, 0, &[0.5f32], 0, 0, 1, 1, 1), 1, "nothing to write into");
+    assert_eq!(words.to_vec(), before, "nothing written");
+    /* drawn, then gone */
+    draw(key, 8, 8, 2, [true, true], [None, None]);
+    assert_eq!(probe(ID, 0), 0);
+    ds_cache::gone(ID, |_| false);
+    assert_eq!(probe(ID, 0), 1, "its contents are gone");
+    assert_eq!(probe(ID, 1), 1, "its contents are gone");
+    /* the table's entry answers the same */
+    let f = yakogl::vivante::backend::yakogl_backend_vivante.ds_write.expect("ds_write is set");
+    let z = 0u32;
+    // SAFETY: an empty rectangle reads nothing.
+    assert_eq!(unsafe { f(ID, 0, &z as *const u32 as *const c_void, 0, 0, 0, 0, 0) }, 1);
+    // SAFETY: as above; plane 2 is neither.
+    assert_eq!(unsafe { f(ID, 2, &z as *const u32 as *const c_void, 0, 0, 0, 0, 0) }, -22);
+    shutdown();
+}
+
+/// A 4x surface is no blit destination (ES 3.0 4.3.3): -ENOTSUP, probe or
+/// write, and its words stay.
+#[test]
+fn ds_write_refuses_a_4x_plane() {
+    let _g = init();
+    draw(KEY, 8, 8, 1, [true, true], [None, None]);
+    let (words, _) = seed(KEY);
+    let before: Vec<u32> = words.to_vec();
+    assert_eq!(probe(ID, 0), -ENOTSUP);
+    assert_eq!(probe(ID, 1), -ENOTSUP);
+    assert_eq!(write(ID, 0, &[0.25f32; 4], 0, 0, 2, 2, 2), -ENOTSUP);
+    assert_eq!(write(ID, 1, &[7u8; 4], 0, 0, 2, 2, 2), -ENOTSUP);
+    assert_eq!(words.to_vec(), before, "nothing written");
+    assert_eq!(ds_cache::planes_of(KEY), Some([Plane::LIVE; 2]));
+    /* a cleared 4x plane too */
+    let key = DsKey { depth_id: 0x502, stencil_id: 0x502, ..KEY };
+    draw(key, 8, 8, 2, [false, false], [Some(0.5f32.to_bits()), Some(3)]);
+    assert_eq!(probe(0x502, 0), -ENOTSUP);
+    shutdown();
+}
+
+/// A rectangle past the surface is refused whole (-EINVAL), nothing written;
+/// a pending kick that used the surface is finished first.
+#[test]
+fn ds_write_checks_the_rectangle_and_waits_for_a_pending_kick() {
+    let _g = init();
+    let key = DsKey { scale: 1, ..KEY };
+    draw(key, 8, 8, 4, [true, true], [None, None]);
+    let (words, stride) = seed(key);
+    let before: Vec<u32> = words.to_vec();
+    let rows = words.len() / stride;
+    let src = vec![0u8; 2];
+    assert_eq!(write(ID, 1, &src, stride as u32 - 1, 0, 2, 1, 2), -22, "past the right edge");
+    assert_eq!(write(ID, 1, &src, 0, rows as u32, 1, 1, 1), -22, "past the last row");
+    assert_eq!(words.to_vec(), before, "nothing written");
+    let finished = core::cell::Cell::new(0);
+    // SAFETY: one row of one byte.
+    let rc = unsafe {
+        ds_cache::write_plane(
+            ID,
+            1,
+            [9u8].as_ptr() as *const c_void,
+            0,
+            0,
+            1,
+            1,
+            1,
+            GUARD,
+            |k| k == 4,
+            || {
+                finished.set(finished.get() + 1);
+                0
+            },
+        )
+    };
+    assert_eq!((rc, finished.get()), (0, 1), "kick 4 is pending: finished first");
+    assert_eq!(words[0] & 0xff, 9);
+    /* a failed finish is the answer, nothing written */
+    // SAFETY: as above.
+    let rc = unsafe {
+        ds_cache::write_plane(ID, 1, [10u8].as_ptr() as *const c_void, 0, 0, 1, 1, 1, GUARD, |_| true, || -5)
+    };
+    assert_eq!(rc, -5);
+    assert_eq!(words[0] & 0xff, 9);
     shutdown();
 }

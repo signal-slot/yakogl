@@ -4680,7 +4680,9 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
      * into its frame arena and never reads the GPU copy: the GL core's
      * upload and range flush per draw were for nothing (2026-11-05) */
     uniforms_host_only: true,
-    ds_write: None,
+    /* a depth/stencil blit's destination plane, written on the CPU into
+     * its 1x surface (ds_cache.rs `write_plane`) */
+    ds_write: Some(gc_ds_write),
     stencil_resolve: Some(gc_stencil_resolve),
     /* 4x framebuffer objects: one scratch per live 4x colour target, kept
      * across jobs and resolved by the RS into the renderbuffer's storage at
@@ -4709,6 +4711,42 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     query_end: None,
     query_result: Some(gc_query_result),
 };
+
+/// Write a rectangle of the depth or stencil plane of GL object `id`
+/// (`YakoglBackend::ds_write`; ds_cache.rs `write_plane`): into the 1x
+/// surface that holds it, rows top-down at GL's y, the other plane's bits
+/// kept. An empty rectangle is the GL core's probe: 0 when the plane is Live
+/// or Cleared in a surface, 1 when nothing holds it (the GL core then clears
+/// it, `gl/blit.rs` `clear_undrawn_dst`), -ENOTSUP for a 4x surface.
+///
+/// # Safety
+/// `src` holds `h` rows of `pitch` elements of the plane's type, `w <= pitch`.
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn gc_ds_write(
+    id: u32,
+    plane: u32,
+    src: *const core::ffi::c_void,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    pitch: u32,
+) -> i32 {
+    if !g().inited {
+        return 1;
+    }
+    let p = match plane {
+        crate::backend::DS_PLANE_DEPTH => ds_retention::DEPTH,
+        crate::backend::DS_PLANE_STENCIL => ds_retention::STENCIL,
+        _ => return -crate::util::EINVAL,
+    };
+    /* a CPU write of a surface the stream addresses: as gc_depth_resolve */
+    dedup::invalidate();
+    // SAFETY: the caller's contract.
+    unsafe {
+        super::ds_cache::write_plane(id, p, src, x, y, w, h, pitch, GC_DEPTH_GUARD_BYTES, kick_pending_retired, finish)
+    }
+}
 
 /// The backend's own tests (the module is large enough to keep them apart, as
 /// `pvr/backend_tests.rs` does).

@@ -7,36 +7,32 @@
 //! on a stand-in back end in tests/es3_blit_ds_window.rs; the renderbuffer
 //! blits over this table in tests/es3_blit_ds_gc.rs (the rig here is its rig).
 //!
-//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) and
-//! `stencil_resolve` (`gc_stencil_resolve`) but `ds_write: None`
-//! (src/vivante/backend.rs).
-//! What src/gl/blit.rs does with the window at this base, per blit:
+//! The Vivante table has `depth_resolve` (`gc_depth_resolve`),
+//! `stencil_resolve` (`gc_stencil_resolve`, since gc-ds-read) and, since
+//! gc-ds-write, `ds_write` (`gc_ds_write`, ds_cache.rs `write_plane`)
+//! (src/vivante/backend.rs). So src/gl/blit.rs copies depth and stencil to
+//! and from the window on the CPU, per blit:
 //!
-//! - stencil, either way: REFUSED_STENCIL (a stencil copy needs both
-//!   entries).
-//! - depth into the window, or into a renderbuffer (no `ds_write`): the
-//!   destination cannot be written, REFUSED_DEPTH_DST.
-//! - depth from the window into a depth *texture* (the GL core holds the
-//!   texels itself, so no `ds_write` is needed): the GL core's window path
-//!   (gl-ds-window) reads the window through `depth_resolve`, which the
-//!   table has, so it works: `depth_from_the_window_into_a_texture_reads_back_the_window`
-//!   is not ignored.
+//! - depth or stencil into the window from a renderbuffer (or depth from a
+//!   depth texture): read through the resolves, written into the window's
+//!   plane through `ds_write`, the window's top-down rows mirrored by the GL
+//!   core (`PlaneDst::Window`);
+//! - depth or stencil from the window into a renderbuffer: the window read
+//!   through the resolves, the renderbuffer written through `ds_write`;
+//! - depth from the window into a depth *texture*: the GL core writes the
+//!   texels itself (no `ds_write` needed);
 //! - window to window: GL_INVALID_OPERATION by ES 3.0.6 4.3.3 (the same
-//!   buffer is read and written), whatever the entries; stays after the lift.
+//!   buffer is read and written), whatever the entries;
 //! - colour only to the window: unaffected, no error.
 //!
-//! Every refusal is exactly one GL_INVALID_OPERATION, nothing copied, the
-//! planes the back end holds as they were, and the context usable afterwards.
-//! The stencil plane cannot be read on this back end, so refusals do not
-//! check it.
-//!
-//! `#[ignore]`d twins, for the lift (the `ds_write` and `stencil_resolve`
-//! entries in src/vivante/backend.rs; the window path in src/gl/blit.rs is
-//! there):
-//! the same shapes with the expected pixels of tests/es3_blit_ds_window.rs's
-//! model, the window stored top-down (`default_y_up` false: memory row r is
-//! GL row `WIN - 1 - r`) and y-up, read back through the table's entries.
-//! Removing the `#[ignore]` is all the lift needs.
+//! Each shape is checked against the expected pixels of
+//! tests/es3_blit_ds_window.rs's model, the window stored top-down
+//! (`default_y_up` false: memory row r is GL row `WIN - 1 - r`) and y-up,
+//! read back through the table's entries. Until gc-ds-write these were
+//! `#[ignore]`d beside `..._is_refused_today` pins of the
+//! GL_INVALID_OPERATION refusal (REFUSED_DEPTH_DST / REFUSED_STENCIL); the
+//! pins are gone with the refusal. A depth compared after it went through the
+//! D24S8 words may be one 24-bit step off (`assert_depth_eq`).
 //!
 //! HOST-ONLY: API verdicts on the host back end, never pictures and not a
 //! board result (tools/cts/README.md 2b).
@@ -388,8 +384,7 @@ fn read_depth(id: u32, w: i32, h: i32) -> Vec<f32> {
     try_depth(id, w, h).expect("the back end holds the depth plane")
 }
 
-/// Stencil plane `id` through the table's `stencil_resolve` (the entry the
-/// lift adds; `None` today).
+/// Stencil plane `id` through the table's `stencil_resolve`.
 fn read_stencil(id: u32, w: i32, h: i32) -> Vec<u8> {
     let f = yakogl_backend_vivante.stencil_resolve.expect("the GC table has a stencil_resolve entry");
     let mut v = vec![0xffu8; (w * h) as usize];
@@ -484,105 +479,13 @@ fn cases(sw: i32, sh: i32) -> Vec<Blit> {
     ]
 }
 
-/* ---- (a) refused today ------------------------------------------------------- */
+/* ---- (a) what stays an error, and the table ---------------------------------- */
 
 /// What is on the other side of the blit from the window.
 #[derive(Clone, Copy, Debug)]
 enum Other {
     Renderbuffer,
     Texture,
-}
-
-/// One refusal: blit `mask` between the window and `other` (32x32),
-/// `to_window` choosing the direction, for each of `cases`, the window
-/// top-down and y-up. Exactly one GL_INVALID_OPERATION, the planes the back
-/// end holds as they were, and a later clear lands.
-///
-/// Why each shape is refused is in the header; the expectation is the same
-/// for all of them: refused whole, nothing changes.
-fn check_refused(mask: GLbitfield, other: Other, to_window: bool) {
-    on_gc7000(|| {
-        let wid = window_id();
-        for y_up in [false, true] {
-            window_y_up(y_up);
-            clear_window();
-            let (fb, rb, tex) = match other {
-                Other::Renderbuffer => {
-                    let (fb, rb) = ds_fbo(32, 32, if to_window { SRC_CLEAR } else { DST_CLEAR });
-                    (fb, rb, 0)
-                }
-                Other::Texture => {
-                    let (fb, tex) = tex_fbo(32, 32, if to_window { SRC_CLEAR.0 } else { DST_CLEAR.0 });
-                    (fb, 0, tex)
-                }
-            };
-            let win_before = try_depth(wid, WIN, WIN);
-            let other_before = (rb != 0).then(|| read_depth(ds_id(rb), 32, 32));
-            for (s, d, scissor) in cases(32, 32) {
-                /* from the window: the 32x32 rectangle is the destination */
-                let (s, d) = if to_window { (s, d) } else { (d, s) };
-                if to_window {
-                    bind(fb, 0);
-                } else {
-                    bind(0, fb);
-                }
-                with_scissor(scissor, || blit(s, d, mask));
-                let what = format!("{other:?}, window dst {to_window}, mask {mask:#x}, y_up {y_up}: {s:?} -> {d:?}");
-                assert_eq!(err(), GL_INVALID_OPERATION, "{what}: the blit is refused");
-                assert_eq!(err(), GL_NO_ERROR, "{what}: exactly one error");
-                assert_eq!(try_depth(wid, WIN, WIN), win_before, "{what}: the window depth is untouched");
-                if let Some(before) = &other_before {
-                    assert_eq!(&read_depth(ds_id(rb), 32, 32), before, "{what}: the renderbuffer depth is untouched");
-                }
-            }
-            /* usable afterwards: a clear of the window lands (depth when readable) */
-            clear_window();
-            assert_eq!(err(), GL_NO_ERROR, "the context is usable after the refusals");
-            if let Some(w) = try_depth(wid, WIN, WIN) {
-                assert!(w.iter().all(|&d| d == WIN_CLEAR.0), "a later clear of the window lands");
-            }
-            release(&[fb], &[tex], &[rb]);
-        }
-    });
-}
-
-/// Depth from a renderbuffer into the window: no `ds_write` to write the
-/// window with (REFUSED_DEPTH_DST).
-#[test]
-fn depth_from_a_renderbuffer_into_the_window_is_refused_today() {
-    check_refused(DEPTH, Other::Renderbuffer, true);
-}
-
-/// Depth from a depth texture into the window: the same (REFUSED_DEPTH_DST).
-#[test]
-fn depth_from_a_texture_into_the_window_is_refused_today() {
-    check_refused(DEPTH, Other::Texture, true);
-}
-
-/// Depth from the window into a renderbuffer: no `ds_write` for the
-/// renderbuffer (REFUSED_DEPTH_DST), though the window can be read.
-#[test]
-fn depth_from_the_window_into_a_renderbuffer_is_refused_today() {
-    check_refused(DEPTH, Other::Renderbuffer, false);
-}
-
-/// Stencil into the window from a renderbuffer (REFUSED_STENCIL).
-#[test]
-fn stencil_into_the_window_is_refused_today() {
-    check_refused(STENCIL, Other::Renderbuffer, true);
-}
-
-/// Stencil from the window into a renderbuffer (REFUSED_STENCIL).
-#[test]
-fn stencil_from_the_window_is_refused_today() {
-    check_refused(STENCIL, Other::Renderbuffer, false);
-}
-
-/// Depth and stencil together in either direction: refused whole.
-#[test]
-fn depth_and_stencil_with_the_window_are_refused_today() {
-    check_refused(DEPTH | STENCIL, Other::Renderbuffer, true);
-    check_refused(DEPTH | STENCIL, Other::Renderbuffer, false);
 }
 
 /// The window to the window is GL_INVALID_OPERATION by ES 3.0.6 4.3.3 (the
@@ -626,21 +529,24 @@ fn a_colour_only_blit_to_the_window_works() {
     });
 }
 
-/// The table entries the refusals rest on; the line the lift changes.
+/// The three table entries the blits copy through are set; this is the line
+/// gc-ds-write changed (`ds_write`).
 #[test]
-fn the_table_lacks_ds_write_today() {
-    assert!(yakogl_backend_vivante.ds_write.is_none(), "ds_write (src/vivante/backend.rs)");
-    /* stencil_resolve is set since gc-ds-read (ds_cache.rs resolve_plane): the
-     * refusals rest on ds_write alone */
+fn the_table_has_ds_write() {
+    assert!(yakogl_backend_vivante.ds_write.is_some(), "ds_write (src/vivante/backend.rs gc_ds_write)");
     assert!(yakogl_backend_vivante.stencil_resolve.is_some(), "stencil_resolve (src/vivante/backend.rs)");
     assert!(yakogl_backend_vivante.depth_resolve.is_some(), "depth_resolve stays");
 }
 
-/* ---- (b) the lift: expected pixels from the model -------------------------- */
+/* ---- (b) the copies: expected pixels from the model -------------------------- */
 
+/// One D24 step: a depth written into the back end's D24S8 words comes back
+/// as `unorm24_depth(depth_unorm24(d))`, which for 0.5 (`WIN_CLEAR`, exactly
+/// half way between two steps) is 0.50000006 after the f32 rounding, past
+/// half a step.
 fn assert_depth_eq(what: &str, got: &[f32], want: &[f32]) {
     for (i, (g, e)) in got.iter().zip(want).enumerate() {
-        assert!((g - e).abs() <= 0.5 / 16_777_215.0, "{what}: depth pixel {i}: {g} want {e}");
+        assert!((g - e).abs() <= 1.0 / 16_777_215.0, "{what}: depth pixel {i}: {g} want {e}");
     }
 }
 
@@ -690,25 +596,21 @@ fn check_into_window(mask: GLbitfield, other: Other) {
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn depth_from_a_renderbuffer_into_the_window_reads_back_the_source() {
     check_into_window(DEPTH, Other::Renderbuffer);
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn depth_from_a_texture_into_the_window_reads_back_the_source() {
     check_into_window(DEPTH, Other::Texture);
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn stencil_from_a_renderbuffer_into_the_window_reads_back_the_source() {
     check_into_window(STENCIL, Other::Renderbuffer);
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn depth_and_stencil_from_a_renderbuffer_into_the_window_read_back_the_source() {
     check_into_window(DEPTH | STENCIL, Other::Renderbuffer);
 }
@@ -764,26 +666,23 @@ fn check_from_window(mask: GLbitfield, other: Other) {
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn depth_from_the_window_into_a_renderbuffer_reads_back_the_window() {
     check_from_window(DEPTH, Other::Renderbuffer);
 }
 
 /// Needs only the window path of the GL core (`depth_resolve` exists, the
-/// texture is written by the GL core): passes on the table as it is.
+/// texture is written by the GL core): passed before `ds_write` too.
 #[test]
 fn depth_from_the_window_into_a_texture_reads_back_the_window() {
     check_from_window(DEPTH, Other::Texture);
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn stencil_from_the_window_into_a_renderbuffer_reads_back_the_window() {
     check_from_window(STENCIL, Other::Renderbuffer);
 }
 
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn depth_and_stencil_from_the_window_into_a_renderbuffer_read_back_the_window() {
     check_from_window(DEPTH | STENCIL, Other::Renderbuffer);
 }
