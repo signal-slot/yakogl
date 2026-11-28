@@ -20,8 +20,12 @@
 //!   target and a target of another class), `layout` spills or errors: the
 //!   compiler never refuses a list the emit places in registers;
 //! - (d) `shc_blend_key_mixed` is `Some` exactly when the list has two or
-//!   more targets, an integer target, is not one integer layout repeated, and
-//!   has a register layout.
+//!   more targets, is not one key repeated, and either fits the registers
+//!   (with or without an integer target) or has an integer target and
+//!   `layout` has an end-of-tile program for its spilled last targets;
+//! - (e) `shc_mixed_out_places(t)` is `layout`'s answer: `Some` exactly when
+//!   `layout` is `Ok`, with the register starts (0 for a spilled target), the
+//!   registers spanned and the tile buffers.
 //!
 //! HOST-ONLY: pure arithmetic, no GPU.
 //!
@@ -33,7 +37,7 @@ use yakogl::pvr::mrt_layout::{layout, Place};
 use yakogl::shaderc::ShcIntRt;
 use yakogl::target_key::{
     gles_surf_target_key, shc_blend_key_is_mixed, shc_blend_key_mixed, shc_blend_key_mixed_targets,
-    shc_mixed_out_layout, shc_target_key_dwords, SHC_MIXED_MAX_TARGETS,
+    shc_mixed_out_layout, shc_mixed_out_places, shc_target_key_dwords, SHC_MIXED_MAX_TARGETS,
 };
 
 #[derive(Default)]
@@ -42,6 +46,7 @@ struct Seen {
     placed: usize,
     mixed_keys: usize,
     refused_mixes: usize,
+    spilled: usize,
 }
 
 fn check(fmts: &[u8], keys: &[u32], seen: &mut Seen) {
@@ -87,10 +92,24 @@ fn check(fmts: &[u8], keys: &[u32], seen: &mut Seen) {
 
     // (d)
     /* any list of differing classes is a mix, with or without an integer
-     * layout (item fix-float-mix) */
+     * layout (item fix-float-mix); past the registers only with an integer
+     * target and an end-of-tile program for the spill */
     let all_same = keys.iter().all(|&k| k == keys[0]);
-    let expect = keys.len() >= 2 && !all_same && shc.is_some();
+    let expect = keys.len() >= 2 && !all_same && (shc.is_some() || (any_int && lay.is_ok()));
     assert_eq!(mixed.is_some(), expect, "{ctx}: mixed key presence");
+
+    // (e)
+    let places = shc_mixed_out_places(keys);
+    assert_eq!(places.is_some(), lay.is_ok(), "{ctx}: places against layout {lay:?}");
+    if let (Some((start, span, spilled)), Ok(l)) = (places, lay) {
+        assert_eq!((span, spilled), (l.output_regs, l.tile_buffers), "{ctx}: span and tile buffers");
+        seen.spilled += usize::from(spilled != 0);
+        for (i, &s) in start.iter().enumerate().take(keys.len()) {
+            assert_eq!(u32::from(s), u32::from(l.place[i].source_pos()), "{ctx}: target {i}");
+            let in_tb = matches!(l.place[i], Place::TileBuffer { .. });
+            assert_eq!(in_tb, i + usize::from(spilled) >= keys.len(), "{ctx}: the spilled targets are the last");
+        }
+    }
 }
 
 fn walk(formats: &[(u8, u32)], fmts: &mut Vec<u8>, keys: &mut Vec<u32>, seen: &mut Seen) {
@@ -122,4 +141,5 @@ fn mixed_functions_agree_with_mrt_layout_for_every_format_list() {
     assert!(seen.placed > 0, "no list placed");
     assert!(seen.mixed_keys > 0, "no mixed key");
     assert!(seen.refused_mixes > 0, "no refused mix");
+    assert!(seen.spilled > 0, "no spilled list");
 }

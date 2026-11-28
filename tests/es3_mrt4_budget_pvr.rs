@@ -38,11 +38,17 @@
 //!   lays every output out as RGBA16F's (issue #313's per-target build), so
 //!   the back end does not store the RGBA8 targets from it —
 //!   GL_INVALID_OPERATION, no kick;
-//! - an integer frame (the 16-dword RGBA32UI x4 layout, RGBA32UI beside
-//!   RGBA8) never reaches the back end: the online compiler has no variant
-//!   for it (`mrt_layout` refuses the four-RGBA32UI walk), so the GL core
-//!   drops the draw as a missing variant — counted, logged, no GL error, no
-//!   kick;
+//! - four RGBA32UI (16 dwords) are drawn: the program of the layout's key
+//!   writes attachment 0 to the four registers and stores the other three
+//!   to tile buffers, and the end-of-tile program `eot4_tb3` loads each
+//!   back — GL_NO_ERROR, one kick of four emits (issue #313's integer
+//!   spill; before it the compiler had no variant and the draw was dropped);
+//! - RGBA32UI beside three RGBA8 is refused by name: a mixed key carries
+//!   three targets, so the GL core keys the draw with attachment 0's
+//!   layout, whose program packs every output as RGBA32UI, and the back end
+//!   does not store the RGBA8 targets from it — GL_INVALID_OPERATION, no
+//!   kick (before the integer spill that program did not compile and the
+//!   draw was dropped with no error);
 //! - an RGBA32F attachment is not renderable at all (plan #360):
 //!   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT and GL_INVALID_FRAMEBUFFER_-
 //!   OPERATION for draw and clear.
@@ -769,6 +775,8 @@ fn rgba8_emit(reg: u32) -> Emit {
 fn emit_want(fmt: GLenum, pos: u32, mrt: u32) -> Emit {
     let (packmode, norm, source_format) = match fmt {
         F16 => (PACKMODE_F16F16F16F16, 0, SOURCE_F16_PER_CHANNEL),
+        /* pbestate.xml PACKMODE U32U32U32U32: the raw dwords */
+        U4 => (0x0b, 0, SOURCE_8_PER_CHANNEL),
         _ => (PACKMODE_U8U8U8U8, 1, SOURCE_8_PER_CHANNEL),
     };
     Emit { packmode, norm, source_format, source_pos: pos, mrt_index: mrt }
@@ -873,15 +881,11 @@ enum Today {
     /// target would pass register 3 (the glog_once line naming it
     /// fires once for the process, so it is not asserted per row).
     Emitted(&'static [u32]),
-    /// Complete, but the draw is refused before the back end sees it: the
-    /// online compiler has no fragment variant for a multi-output program
-    /// of the frame's class (an integer variant, or the 16-dword
-    /// four-RGBA32UI layout `mrt_layout` refuses). A
-    /// missing variant is counted (yakogl_draws_refused), logged, and
-    /// raises no GL error (src/gl/draw.rs). No kick, so nothing out of
-    /// range: attachment 0 of the frame decides, hence the RGBA8-class
-    /// rows above kick short while these disappear.
-    NoVariant,
+    /// Complete and drawn, the attachments past the first from tile buffers:
+    /// one kick of every target, each PBE state's `source_pos` as listed (0
+    /// for a target the end-of-tile program loads back from its tile
+    /// buffer, so the positions are not disjoint register spans).
+    Spilled(&'static [u32]),
     /// Complete, attachment 0 is RGBA16F and another attachment RGBA8: the
     /// GL core keys the draw with attachment 0's class, the online compiler
     /// lays every output out as RGBA16F's (one target of that class each,
@@ -889,7 +893,9 @@ enum Today {
     /// name rather than store the RGBA8 targets from registers holding
     /// halves (`GL_INVALID_OPERATION`, no kick; the glog_once line fires
     /// once for the process, so it is not asserted per row). A mix of float
-    /// classes has no key of its own yet.
+    /// classes has no key of its own yet. Likewise RGBA32UI beside three
+    /// RGBA8: four targets have no mixed key, attachment 0's layout keys the
+    /// draw, and the back end refuses it by name.
     MixRefused,
     /// The RGBA32F storage is refused (`GL_INVALID_ENUM`), the framebuffer
     /// is `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` and the draw is
@@ -925,8 +931,8 @@ const OVER: [Over; 15] = [
     Over { label: "RGBA16F + RGBA8 x2 + RGBA16F", fmts: [F16, A8, A8, F16], today: MixRefused },
     Over { label: "RGBA16F x3 + RGBA8", fmts: [F16, F16, F16, A8], today: MixRefused },
     Over { label: "RGBA16F x4", fmts: [F16, F16, F16, F16], today: Emitted(&[0, 2]) },
-    Over { label: "RGBA32UI x4", fmts: [U4, U4, U4, U4], today: NoVariant },
-    Over { label: "RGBA32UI + RGBA8 x3", fmts: [U4, A8, A8, A8], today: NoVariant },
+    Over { label: "RGBA32UI x4", fmts: [U4, U4, U4, U4], today: Spilled(&[0, 0, 0, 0]) },
+    Over { label: "RGBA32UI + RGBA8 x3", fmts: [U4, A8, A8, A8], today: MixRefused },
     Over { label: "RGBA8 x3 + RGBA32F", fmts: [A8, A8, A8, F4], today: NotRenderable },
     Over { label: "RGBA32F + RGBA8 x3", fmts: [F4, A8, A8, A8], today: NotRenderable },
 ];
@@ -1005,10 +1011,11 @@ fn over_budget_framebuffer_statuses_today() {
 ///
 /// - `Emitted`: GL_NO_ERROR, one kick whose PBE states sit exactly at the
 ///   listed registers, each numbered by emission.
-/// - `MixRefused`: GL_INVALID_OPERATION, no kick (refused by name).
-/// - `NoVariant`: no kick and no GL error (the missing variant is refused
-///   and counted, src/gl/draw.rs; the refusal's log line is a glog_once for
-///   the process, so it is not asserted here).
+/// - `Spilled`: the same, the listed positions 0 for the targets loaded
+///   back from tile buffers.
+/// - `MixRefused`: GL_INVALID_OPERATION, no kick (refused by name). (No row
+///   is dropped for a missing variant any more: the integer layouts'
+///   programs spill past the four registers.)
 /// - `NotRenderable`: GL_INVALID_FRAMEBUFFER_OPERATION, no kick.
 #[test]
 fn over_budget_draws_today() {
@@ -1017,15 +1024,11 @@ fn over_budget_draws_today() {
         let _f = Fbo::new(&row.fmts);
         let obs = drawn(4, class_of(&row.fmts));
         match row.today {
-            Emitted(pos) => {
+            Emitted(pos) | Spilled(pos) => {
                 assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
                 let (num_rt, emits) = obs.one(row.label);
                 assert_eq!(num_rt as usize, pos.len(), "{}: kick num_rt: {obs:?}", row.label);
                 assert_eq!(emits, want_emits(&row.fmts, pos), "{}: PBE states: {obs:?}", row.label);
-            }
-            NoVariant => {
-                assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
-                assert!(obs.kicks.is_empty() && obs.emits.is_empty(), "{}: no kick: {obs:?}", row.label);
             }
             MixRefused => {
                 assert_eq!(obs.err, GL_INVALID_OPERATION, "{}: {:?}", row.label, obs.log);

@@ -2445,6 +2445,14 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_mip_ties.rs)" \
 # pvr_refract_lod: glmark2 refract's mip LOD and the three-levels knob (docs/notes/pvr-mip-three-levels.md).
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_refract_lod.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_refract_lod
+# PowerVR integer colour attachments past the pixel's four output registers
+# (dEQP-GLES3 common.modf vec3/vec4, fragment_out.array.{int,uint} rg32,
+# rgba16 and rgba32, the mat4/mat4x2/mat4x3 precision executors; #313): the
+# attachments that do not fit are stored to tile buffers and emitted by the
+# end-of-tile program of the layout, through the GL core and
+# pvr_backend_draw. Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_int_spill.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_int_spill
 # The six ES 3.0 ETC2/EAC names the GL core decodes at upload (docs/notes/
 # etc2-eac.md): each name accepted by glCompressedTexImage* and stored as the
 # decoder's values in the class the design gives it, the compressed format
