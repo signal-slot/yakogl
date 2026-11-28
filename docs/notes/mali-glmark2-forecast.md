@@ -4,17 +4,16 @@
 
 Forecast of the glmark2-es2 run of the `gpu-mali` back end on the
 NanoPC-T6 (issues #20, #7, #33), made on the host from the compiler's
-verdicts, current at main `b08baac7` (2026-11-25). **16 of 33 scenes
-compile-clean, 17 are refused.** Nothing here was rendered: a board run
+verdicts, re-measured at main `41be7d36` (2026-11-28). **23 of 33 scenes
+compile-clean, 10 are refused.** Nothing here was rendered: a board run
 confirms or refutes it. The board's record is `tools/cts/RESULTS.md`
 (section "Mali: NanoPC-T6 glmark2-es2"); this note holds the design and the
 causes, not the results of a session.
 
 - **Verdicts**: `tests/fixtures/mali_glmark2_verdicts.txt`, pinned by
   `tests/mali_glmark2_corpus.rs` (the first refusal of every shader and
-  program; the test fails if one moves back). The fixture last changed in
-  `17a30a20`; no commit since touches it, `src/mali/**` or
-  `src/shaderc/online/mali/**`.
+  program; the test fails if one moves back). Re-run at `41be7d36` it
+  agrees with the fixture: 69 shaders, 52 compile, 31 programs link.
 - **glmark2** `22c527cb0556f3a1ac4445aaa52cc532760928d5` (2023.01), the
   commit `tools/hostharness/glmark2/run.sh` pins. Its shader corpus is
   GPL-3.0 text and is never committed.
@@ -43,86 +42,69 @@ causes, not the results of a session.
 
 ## 1. By scene
 
-`clean` = every shader compiles. The codes are section 2's.
+`clean` = every shader compiles and every program links. The codes are
+section 2's.
 
 | # | scene | verdict | first refusal per shader |
 |---|---|---|---|
-| 0, 1 | `build:use-vbo=false`, `=true` | **clean** | — |
-| 2, 3, 4 | `texture:texture-filter=nearest`, `linear`, `mipmap` | refused | FS `425b` `TEX_COORD` (the link `ace2+425b` fails) |
-| 5 | `shading:shading=gouraud` | **clean** | — |
-| 6 | `shading:shading=blinn-phong-inf` | refused | FS `994f` `NONFINITE_CONST` |
+| 0-6 | `build` (2), `texture` (3), `shading` gouraud, `blinn-phong-inf` | **clean** | — |
 | 7 | `shading:shading=phong` | refused | FS `8a64` `ARITH_CONST` |
-| 8 | `shading:shading=cel` | refused | FS `fea0` `NONFINITE_CONST` |
-| 9 | `bump:bump-render=high-poly` | refused | FS `d442` `NONFINITE_CONST` |
-| 10 | `bump:bump-render=normals` | refused | FS `487d` `NONFINITE_CONST` |
-| 11 | `bump:bump-render=height` | refused | FS `77c5` `NONFINITE_CONST` |
-| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` (3x3) | refused | FS `3c3d` `TEX_MULTI` |
-| 13 | `effect2d:kernel=1,1,1,1,1;…` (5x5) | **clean** | — (`ba8e` compiles) |
-| 14 | `pulsar:quads=5:texture=false:light=false` | **clean** | — |
-| 15 | `desktop:…:effect=blur:…` | **clean** | — (`68af`, `7f17` compile) |
-| 16 | `desktop:windows=4:effect=shadow` | **clean** | — |
-| 17, 18, 19 | `buffer:…` (map, subdata, map with interleave) | **clean** | — |
-| 20 | `ideas:speed=duration` | refused | FS `1aca`, `c565` `INT_VALUE` (the vertex shaders, `51b2` included, are ok) |
-| 21 | `jellyfish` | refused | VS `08a2` `ARITH_CONST`; FS `8ee5` `FS_OPERAND` |
-| 22 | `terrain` | refused | FS `1637`, `4d26`, `c549` `ARITH`; FS `8c86`, `bbba`, `bdfd`, `e043` `TEX_MULTI` |
-| 23 | `shadow` | refused | FS `cf4b` `ARITH` |
+| 8 | `shading:shading=cel` | refused | FS `fea0` `ARITH_CONST` |
+| 9 | `bump:bump-render=high-poly` | **clean** | — |
+| 10 | `bump:bump-render=normals` | refused | FS `487d` `TEX_SWIZZLE` |
+| 11 | `bump:bump-render=height` | refused | FS `77c5` `TEX_MULTI` |
+| 12-19 | `effect2d` (both kernels), `pulsar`, `desktop` (blur, shadow), `buffer` (3) | **clean** | — |
+| 20 | `ideas:speed=duration` | refused | FS `1aca` `FRAGCOLOR_LANE`; FS `c565` `FS_OPERAND` |
+| 21 | `jellyfish` | refused | VS `08a2` `ARITH_CONST` (`8ee5` compiles) |
+| 22 | `terrain` | refused | FS `1637` `ARITH`; FS `4d26` `8c86` `bbba` `bdfd` `c549` `e043` `TEX_MULTI` |
+| 23 | `shadow` | refused | FS `cf4b` `FRAGCOLOR_LANE` |
 | 24 | `refract` | refused | FS `3fae` `ARITH_CONST` |
-| 25, 26, 27 | `conditionals:…` (0/0, 0/5, 5/0 steps) | **clean** | — |
-| 28 | `function:fragment-steps=5:fragment-complexity=low` | **clean** | — |
-| 29 | `function:…:fragment-complexity=medium` | refused | FS `849c` `FRAGCOORD_FP16` |
-| 30 | `loop:…:fragment-loop=false` | **clean** | — |
-| 31 | `loop:…:fragment-uniform=false` | **clean** | — |
+| 25-31 | `conditionals` (3), `function` (low, medium), `loop` (fragment-loop=false, fragment-uniform=false) | **clean** | — |
 | 32 | `loop:…:fragment-uniform=true` | refused | FS `3678` `LOOP_FP16` |
 
-**Compile-clean (16)**: 0, 1, 5, 13, 14, 15, 16, 17, 18, 19, 25, 26, 27, 28,
-30, 31. **Refused (17)**: 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 20, 21, 22, 23,
-24, 29, 32. Shaders not named in a row compile (scene 20's `df64` among
-them). Against the previous measurement (14 clean at `104748bb`) scenes 13
-and 15 moved to clean; no shader moved back.
+**Compile-clean (23)**: 0-6, 9, 12-19, 25-31. **Refused (10)**: 7, 8, 10,
+11, 20, 21, 22, 23, 24, 32. Shaders not named in a row compile. Against the
+`b08baac7` forecast (16 clean) scenes 2, 3, 4, 6, 9, 12 and 29 moved to
+clean (`TEX_COORD`, `NONFINITE_CONST`, `TEX_MULTI` `3c3d` and
+`FRAGCOORD_FP16` are lowered); no shader moved back.
 
-On the board the 16 clean scenes are the only ones that put a command
-stream of their own on the GPU (17-19 little more than their clears). The
-17 refused scenes stop in glmark2's setup at `Failed to add vertex|fragment
-shader`, draw nothing and cannot fault the GPU.
+On the board the clean scenes are the only ones that put a command stream of
+their own on the GPU. The refused scenes stop in glmark2's setup at `Failed
+to add vertex|fragment shader`, draw nothing and cannot fault the GPU.
 
 ## 2. The causes still open
 
 The message is `MaliError::message`'s text
 (`src/shaderc/online/mali/mod.rs`). **Alone**: scenes whose only remaining
-family it is, so lowering it alone makes them clean. **Item**: the queued
-lowering item that covers it (named in plan #367's queue, continued by plans
-#402, #387 and #400); where none is named the cell says so.
+family it is, so lowering it alone makes them clean (each stage gives its
+first refusal only, so a lowering can uncover a later one).
 
-| code | message | shaders | scenes | alone | item |
-|---|---|---|---|---:|---|
-| `NONFINITE_CONST` | a constant operation on or to a value that is not a finite normal float is not lowered yet | FS `994f` `fea0` `d442` `487d` `77c5` | 6, 8, 9, 10, 11 | 5 | `lower-nonfinite-const`; no #402/#387/#400 item names it |
-| `TEX_COORD` | a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet | FS `425b` | 2, 3, 4 | 3 | `lower-texcoord-425b` |
-| `TEX_MULTI` | a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet | FS `3c3d` `8c86` `bbba` `bdfd` `e043` | 12, 22 | 1 (12) | `lower-fma` |
-| `ARITH_CONST` | a constant product in a shape Mesa's algebraic rules move or fold is not lowered yet | FS `8a64` `3fae`; VS `08a2` | 7, 21, 24 | 2 (7, 24) | `lower-constprod-rest` |
-| `ARITH` | arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | FS `cf4b` `1637` `4d26` `c549` | 22, 23 | 1 (23) | `lower-fs-arith2`; none named for `cf4b` |
-| `INT_VALUE` | an integer or boolean value is not lowered yet | FS `1aca` `c565` | 20 | 0 | `lower-ideas` |
-| `FS_OPERAND` | a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet | FS `8ee5` | 21 | 0 | none queued |
-| `FRAGCOORD_FP16` | fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet | FS `849c` | 29 | 1 | `lower-mploop` |
-| `LOOP_FP16` | a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet | FS `3678` | 32 | 1 | `lower-mploop` |
+| code | message | shaders | scenes | alone |
+|---|---|---|---|---:|
+| `ARITH_CONST` | a constant product in a shape Mesa's algebraic rules move or fold is not lowered yet | FS `8a64` `fea0` `3fae`; VS `08a2` | 7, 8, 21, 24 | 4 |
+| `FRAGCOLOR_LANE` | a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | FS `1aca` `cf4b` | 20, 23 | 1 (23) |
+| `TEX_SWIZZLE` | a texture result's lanes other than its own pairs in order (a swizzle, a lane alone) is not lowered yet | FS `487d` | 10 | 1 |
+| `TEX_MULTI` | a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet | FS `77c5` `4d26` `8c86` `bbba` `bdfd` `c549` `e043` | 11, 22 | 1 (11) |
+| `LOOP_FP16` | a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet | FS `3678` | 32 | 1 |
+| `FS_OPERAND` | a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet | FS `c565` | 20 | 0 |
+| `ARITH` | arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | FS `1637` | 22 | 0 |
 
-Two scenes need more than one family: 21 needs `ARITH_CONST` (`08a2`) and `FS_OPERAND`; 22 needs
-`ARITH` and `TEX_MULTI`.
+Two scenes need more than one family: 20 needs `FRAGCOLOR_LANE` and
+`FS_OPERAND`; 22 needs `ARITH` and `TEX_MULTI`.
 
-**Order of scenes unblocked** (greedy; this is the arithmetic of the table,
-not a measurement: a lowering can uncover a later refusal behind the first):
+**Order of scenes unblocked** (greedy; the arithmetic of the table, not a
+measurement):
 
 | step | family | scenes made clean | clean after |
 |---:|---|---|---:|
-| — | now (`b08baac7`) | 16 scenes | 16 |
-| 1 | `NONFINITE_CONST` | 6, 8, 9, 10, 11 | 21 |
-| 2 | `TEX_COORD` `425b` | 2, 3, 4 | 24 |
-| 3 | `TEX_MULTI` | 12 | 25 |
-| 4 | `ARITH_CONST` | 7, 24 | 27 |
-| 5 | `ARITH` (`cf4b`) | 23 | 28 |
-| 6 | `FRAGCOORD_FP16`, `LOOP_FP16` | 29, 32 | 30 |
-| 7 | `INT_VALUE` | 20 | 31 |
-| 8 | `FS_OPERAND`, `ARITH_CONST` `08a2` | 21 | 32 |
-| 9 | `ARITH`, `TEX_MULTI` | 22 (`terrain`) | 33 |
+| — | now (`41be7d36`) | 23 scenes | 23 |
+| 1 | `ARITH_CONST` | 7, 8, 21, 24 | 27 |
+| 2 | `FRAGCOLOR_LANE` `cf4b` | 23 | 28 |
+| 3 | `TEX_SWIZZLE` | 10 | 29 |
+| 4 | `TEX_MULTI` `77c5` | 11 | 30 |
+| 5 | `LOOP_FP16` | 32 | 31 |
+| 6 | `FRAGCOLOR_LANE` `1aca`, `FS_OPERAND` | 20 | 32 |
+| 7 | `ARITH`, `TEX_MULTI` | 22 (`terrain`) | 33 |
 
 ## 3. What the host harness shows past the compiler
 
