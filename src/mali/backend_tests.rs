@@ -1267,8 +1267,16 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("R32F storage", why(&tex(|t| t.format = backend::GLES_TEXFMT_R32F)), built),
             ("a 16x16 chain of 5 levels, in place", why(&tex(|t| (t.mip_filter, t.mip_levels) = (1, 5))), built),
             (
-                "a chain of an NPOT image",
+                "a chain of an NPOT image: in place (docs/notes/mali-npot-mip.md)",
                 why(&tex(|t| (t.width, t.stride_texels, t.mip_levels) = (12, 16, 2))),
+                built,
+            ),
+            (
+                "a chain of an NPOT 2D array",
+                why(&tex(|t| {
+                    (t.type_, t.layers, t.width, t.height, t.stride_texels, t.mip_levels) =
+                        (backend::GLES_TEXTYPE_2D_ARRAY, 2, 12, 32, 16, 2)
+                })),
                 not_built(NOT_BUILT_TEXTURE_NPOT_CHAIN),
             ),
             ("mirrored repeat", why(&tex(|t| t.wrap_t = backend::GLES_WRAP_MIRRORED_REPEAT)), built),
