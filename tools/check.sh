@@ -2934,6 +2934,13 @@ step "test    $MALI_CONFIG (tests/mali_deqp_{loops2,loops3,loops4,misc2,misc3,mi
     --test mali_deqp_vsconst --test mali_deqp_vsloop --test mali_deqp_vsloop2 \
     --test mali_deqp_vsmix --test mali_deqp_vsuarr --test mali_deqp_vsuniarr \
     --test mali_deqp_vsuniarr2 --test mali_deqp_vsunif
+# The files added since (plan #377's highpfs, kfold and t3gap) and plan #367's
+# glmark2 verdict table against the checked-in fixture: with the steps above,
+# every tests/mali_deqp_*.rs and tests/mali_glmark2_corpus.rs.
+step "test    $MALI_CONFIG (tests/mali_deqp_{highpfs,kfold,t3gap}.rs, mali_glmark2_corpus.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_deqp_highpfs --test mali_deqp_kfold --test mali_deqp_t3gap \
+    --test mali_glmark2_corpus
 # The corpus differential (tools/mali/corpus_diff.py, issue #11252): our side,
 # tests/mali_corpus_diff.rs, checks itself on committed references; then the
 # tool's self-test without Mesa or the CTS: the pairing of single shaders and
