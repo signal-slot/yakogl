@@ -143,6 +143,7 @@ want tests/mali_fragment_random_es2.rs "mali treekey"
 want tests/mali_draw_oom_es2.rs "mali treekey"
 want tests/mali_rgb565_stencil_es2.rs "mali treekey"
 want tests/mali_draw_inval_es2.rs "mali treekey"
+want tests/mali_glmark2_blend_draw.rs "mali treekey"
 # plan #377's dEQP byte-compare tests, their shared module, and the
 # deqp_<family>_* references they read
 want tests/mali_deqp_intval.rs "mali treekey"
