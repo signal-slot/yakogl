@@ -147,7 +147,10 @@ case "$DEQP_MODULE" in
     # DEQP_REPORT_ES2=n only drops the sample's select: the library's own
     # default (y) must be turned off too, or the image reports ES 2.0 and
     # dEQP-GLES3 dies at its first query (GL_NUM_EXTENSIONS, INVALID_ENUM)
-    gles3) MODARGS="-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n" ;;
+    # CONFIG_YAKOGL_MSAA_FBO=y: the crate's msaa-fbo feature, so the PowerVR reports
+    # GL_MAX_SAMPLES 4 (ES 3.0 requires >= 4; state_query, implementation_limits,
+    # multisample, fbo.msaa). Only the gles3 images: the ES 2.0 common set is unchanged.
+    gles3) MODARGS="-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n -DCONFIG_YAKOGL_MSAA_FBO=y" ;;
     *) die "DEQP_MODULE must be gles2 or gles3, not '$DEQP_MODULE'" ;;
 esac
 case "${DEQP_PVR_NATIVE_3D:-}" in
