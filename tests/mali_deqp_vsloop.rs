@@ -80,8 +80,13 @@ fn refusals_pinned() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> =
-        REFUSED.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).map(str::to_string).collect();
+    let mut listed: Vec<String> = REFUSED
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(MATCHED.iter().copied())
+        .chain(G310_SHAPES.iter().map(|s| s.0))
+        .map(str::to_string)
+        .collect();
     listed.sort();
     assert_eq!(on_disk, listed, "every deqp_vsloop_* reference has a test and a pin");
     let changed: Vec<String> = REFUSED
@@ -152,4 +157,118 @@ fn fn_after_break() {
 #[ignore = "refused: a loop in a vertex shader (`return` in nested constant loops in a function), lowered by lower-vsloop"]
 fn fn_nested() {
     mali_ref::assert_matches("deqp_vsloop_fn_nested");
+}
+
+// Plan #387 item `vsloop-refs` (docs/notes/mali-vsloop-lowering.md): the
+// shapes of the G310 vertex-loop family (179 lines of "a loop in a vertex
+// shader" in the Verdin iMX95 run at e63ab28e, and 8 dynamic nested loops
+// behind an int-uniform refusal there) that no committed reference held
+// exactly. Their sources are dEQP's generators rebuilt (each `.license`
+// says how); Mesa 26.2.1 drm-shim drew them, as every reference here.
+
+/// `MaliError::LoopVertex`, for the tables below. (Kept apart from
+/// `LOOP_VERTEX` above, which plan #402 `lower-vsloop` removes with that
+/// table's last pin.)
+const VS_LOOP: &str = "a loop in a vertex shader";
+
+/// A reference's outcome at the tip.
+#[derive(Clone, Copy, Debug)]
+enum Tip {
+    /// Refused; the refusal holds this text.
+    Refused(&'static str),
+    /// Refused with this text at the tip, and byte-equal on plan #402
+    /// `lower-vsloop`'s result (`cbb6b45b`, step V1, not landed when these
+    /// were drawn). The pin takes either until that lands; then the entry
+    /// becomes `Matched`.
+    RefusedOrMatched(&'static str),
+    /// Compiles, and `vs.varying` is the one region that differs: `ours`
+    /// words against Mesa's `mesa` (the kept loop's pass cap, a deliberate
+    /// deviation compared by `CapEdit` in src/shaderc/online/mali/tests.rs,
+    /// and what the note says besides).
+    Compiled { ours: usize, mesa: usize },
+}
+
+/// Every new reference (without `deqp_vsloop_`), its step in the note's
+/// section 4 and its outcome at the tip.
+const G310_SHAPES: &[(&str, &str, Tip)] = &[
+    ("do_con_conditional_body", "V1", Tip::RefusedOrMatched(VS_LOOP)),
+    ("fn_return_in_loop_if", "V1", Tip::RefusedOrMatched(VS_LOOP)),
+    ("for_dyn_infinite_with_unconditional_break_last", "V1", Tip::RefusedOrMatched(VS_LOOP)),
+    ("ret_dynamic_loop_always", "V1", Tip::Refused(VS_LOOP)),
+    ("for_con_101_iterations", "V2", Tip::Compiled { ours: 27, mesa: 24 }),
+    ("do_dyn_basic_mediump_float", "V2", Tip::Compiled { ours: 31, mesa: 27 }),
+    ("for_dyn_double_continue", "V3", Tip::Refused(VS_LOOP)),
+    ("do_uni_double_continue", "V3", Tip::Refused(VS_LOOP)),
+    ("for_uni_infinite_with_conditional_break", "V3", Tip::Refused(VS_LOOP)),
+    ("do_dyn_infinite_with_conditional_break", "V3", Tip::Refused(VS_LOOP)),
+    ("wh_dyn_mixed_break_continue", "V4", Tip::Refused(VS_LOOP)),
+    ("do_uni_mixed_break_continue", "V4", Tip::Refused(VS_LOOP)),
+    ("do_uni_nested_sequence", "V5", Tip::Refused(VS_LOOP)),
+    ("wh_uni_nested_tricky_dataflow_1", "V5", Tip::Refused(VS_LOOP)),
+    ("for_dyn_nested_tricky_dataflow_1", "V5", Tip::Refused(VS_LOOP)),
+    ("do_dyn_nested_tricky_dataflow_2", "V5", Tip::Refused(VS_LOOP)),
+];
+
+/// New references whose Mesa words (all three programs) are an earlier
+/// reference's: the loop type or the bound kind does not change Mesa's
+/// program, so the lowering that takes the earlier one takes these.
+const SAME_WORDS: &[(&str, &str)] = &[
+    ("deqp_vsloop_do_con_conditional_body", "deqp_vsloop_con_cond_break"),
+    ("deqp_vsloop_fn_return_in_loop_if", "deqp_vsloop_fn_after_break"),
+    ("deqp_vsloop_for_dyn_infinite_with_unconditional_break_last", "deqp_vsloop_uni_inf_break_last"),
+    ("deqp_vsloop_ret_dynamic_loop_always", "deqp_loops2_vs_ret_static_loop_always"),
+    ("deqp_vsloop_for_uni_infinite_with_conditional_break", "deqp_loops2_vs_do_uni_infinite_with_conditional_break"),
+    ("deqp_vsloop_do_dyn_infinite_with_conditional_break", "deqp_vsloop2_wh_dyn_infinite_with_conditional_break"),
+];
+
+/// Mesa's words of a reference: its expect.json after the `trace` line.
+fn mesa_words(name: &str) -> String {
+    let r = mali_ref::Reference::load(name);
+    r.json.split("\"trace\"").nth(1).unwrap().split_once('\n').unwrap().1.to_string()
+}
+
+#[test]
+fn g310_shapes_pinned() {
+    let mut moved = Vec::new();
+    for &(name, _, tip) in G310_SHAPES {
+        let full = format!("deqp_vsloop_{name}");
+        let r = mali_ref::Reference::load(&full);
+        let got = mali_ref::compile_pair(&r.vs, &r.fs);
+        match (tip, got) {
+            (Tip::Refused(t), Err(e)) | (Tip::RefusedOrMatched(t), Err(e)) if e.contains(t) => {}
+            (Tip::RefusedOrMatched(_), Ok(p)) if mali_ref::differences(&r, &p).is_empty() => {}
+            (Tip::Compiled { ours, mesa }, Ok(p)) => {
+                let d = mali_ref::differences(&r, &p);
+                let want = format!("vs.varying: {ours} words ours, {mesa} reference");
+                if d.len() != 1 || !d[0].starts_with(&want) {
+                    moved.push(format!("{full}: expected only `{want}`, got:\n{}", d.join("\n")));
+                }
+            }
+            (tip, Ok(_)) => moved.push(format!("{full}: now compiles (pinned {tip:?}); move its entry")),
+            (tip, Err(e)) => moved.push(format!("{full}: pinned {tip:?}, refused with: {e}")),
+        }
+    }
+    assert!(moved.is_empty(), "{}", moved.join("\n"));
+}
+
+#[test]
+fn g310_same_words() {
+    for (new, old) in SAME_WORDS {
+        assert_eq!(mesa_words(new), mesa_words(old), "{new}: Mesa's program is {old}'s");
+    }
+}
+
+/// The byte compare of every new reference: the step that takes one turns
+/// its entry into a match (`Tip::Compiled` ones through `CapEdit`).
+#[test]
+#[ignore = "the vertex loop steps V1-V5 of docs/notes/mali-vsloop-lowering.md are not all lowered"]
+fn g310_shapes_compare() {
+    let failed: Vec<&str> = G310_SHAPES
+        .iter()
+        .filter(|(name, _, _)| {
+            std::panic::catch_unwind(|| mali_ref::assert_matches(&format!("deqp_vsloop_{name}"))).is_err()
+        })
+        .map(|s| s.0)
+        .collect();
+    assert!(failed.is_empty(), "differ from Mesa: {failed:?}");
 }
