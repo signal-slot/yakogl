@@ -5177,7 +5177,10 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     /* the highp locals copy gl_FragCoord alone; a read beside the copy
      * that the walk narrowed ([`Fs::frag_coord16`]) may meet the fp32 copy
      * in a highp tree, where Mesa reads it at fp32: no reference */
-    let copies = highp_locals_copy(m, &prec, vals, f.ir_live, &|v| f.hp32(v, 0))?;
+    /* or an integer's conversion and the fp32 arithmetic on it
+     * ([`Fs::fp32_lane`]), fp32 in Mesa's program whatever takes it
+     * (deqp_mixprec2_seq_side's `in0 = float(in1)`) */
+    let copies = highp_locals_copy(m, &prec, vals, f.ir_live, &|v| f.hp32(v, 0) || f.fp32_lane(v))?;
     f.mixed |= !copies || (f.fc_copy && f.frag16.is_some());
     f.ir_vals = vals;
     f.mark_live();
@@ -7273,11 +7276,12 @@ fn walk_nodes(
                  * `int e`, `S32_TO_F32 r1, u2.w0` then `FMA.f32 r0, r1^,
                  * r0^, 0x0.neg` on the load's own word, and its constant
                  * lane's `FMA.f32 r1, 0x34000000.h1, r2^, 0x0.neg`) */
+                /* a highp varying's lane is the load's fp32 word as well:
+                 * it has no `f2fmp` (deqp_mixprec2_seq_side's `int(in0 +
+                 * in2)` of `in0 = float(in1)` and `in2 = v_in2.y`:
+                 * `S32_TO_F32 r0, r0^` then `FADD.f32 r0, r0^, r1^`) */
                 let raw = |f: &Fs<'_>, v: Val| {
-                    f.alu_of(v).is_none()
-                        && f.input_lane(v).is_some_and(|(loc, _)| {
-                            (loc as usize) < MAX_VARYINGS && f.prec.other >> (f.mat_base(loc) & 31) & 1 == 0
-                        })
+                    f.alu_of(v).is_none() && f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS)
                 };
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));

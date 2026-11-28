@@ -33,7 +33,10 @@ mod mali_ref;
 /// later one overwrites is dropped before the walk (`mod.rs`
 /// `fragment_live`), and a constant lane times a constant zero lane beside
 /// a computed lane is the algebraic rule's 0.0.
-const LOWERED: &[&str] = &["rnd_sconv36"];
+/// `seq_side` since the same item (mixprec2 M2-3): an fp32 sum reads a
+/// highp varying's lane as loaded, and a highp local may hold an integer's
+/// fp32 conversion.
+const LOWERED: &[&str] = &["rnd_sconv36", "seq_side"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -49,7 +52,6 @@ const REFUSED: &[(&str, &str)] = &[
      * are dropped): the last store's own forms are refused */
     ("rnd_swz4", OPERAND),
     ("rnd_tex140", LANE),
-    ("seq_side", MIX),
     ("struct_nested", MIX),
 ];
 
@@ -144,7 +146,6 @@ fn rnd_tex140() {
 /// (`operator.sequence.side_effects.highp_float_int_fragment`): an fp32 sum of
 /// a converted int and a highp varying lane.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn seq_side() {
     mali_ref::assert_matches("deqp_mixprec2_seq_side");
 }

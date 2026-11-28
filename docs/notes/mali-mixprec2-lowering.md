@@ -394,4 +394,45 @@ the rule's 0.0.
 | `deqp_fsint2_rnd_trig93` | integer or boolean value | refused: arithmetic |
 | `deqp_texmisc_tk_rnd_bias_two` | texture look-up kind | refused: `gl_FragColor` lane |
 
-The other 1,390 Mali host tests are unchanged.
+No other Mali host test moved (`--lib mali::` and every `tests/mali_*.rs`
+with the feature set of section 5: 1,398 passed before the step, 1,402
+after, 0 failed).
+
+### M2-3 (the highp varying lane)
+
+The fp32 sum or product arm of the walk reads a highp varying's lane as
+the load's word, as it did a mediump one's (`raw`), and
+`highp_locals_copy` lets a highp local hold an integer's fp32 conversion
+(`Fs::fp32_lane`). `deqp_mixprec2_seq_side` is **byte-equal**; 1,405 Mali
+host tests pass, 0 fail.
+
+Not done: the 32-bit `Fneg` operand of `random.texture.fragment.145` (no
+reference was drawn: the host dEQP build that gives the case's `.qpa` is
+not on this machine).
+
+### M2-2, not landed
+
+Tried and taken out again; `struct_nested` (and mixcol's
+`int_uniform_struct`, the same dEQP case) stay refused with the
+mixed-precision text. What the attempt found, in order:
+
+1. Widening a 16-bit `Kind::Uniform` operand of the fp32 arm with
+   `Fs::widen_any` (and a negated one as `fneg` of the widened value,
+   Mesa's `F16_TO_F32 r3, u2.w1.h0` then `FADD.f32 r1, r1^, r3^.neg`)
+   takes the pair off this text.
+2. `vectorise` then pairs `r` and `g`, two scalar products that each read
+   a float uniform of its own. `nir_opt_vectorize` pairs no two sources
+   of distinct definitions, so each must be a lane of its own (`Leaf::Pack`
+   of two `lane_tree`s; Mesa's `FMA.v2f16 r3, r3^.h00, u3.w1.h00` and
+   `FMA.v2f16 r0, r0^.h00, u3.w0.h00`, then `MKVEC.v2i16 r0, r3^.h0,
+   r0^.h0`). An arm for that got past the refusal at the uniform pair.
+3. The colour's second word is then an fp16 product beside the fp32 sum
+   narrowed at the store (`MKVEC.v2i16 r2, r2^.h0, r1.h0`). The pair
+   graph has no leaf for a general fp32 tree narrowed alone (`Leaf::MkInt`,
+   `Leaf::Wide32` and `Leaf::WideLane` are single conversions): it needs
+   one that emits the tree's 32-bit rows (`F16_TO_F32`, `S32_TO_F32`,
+   `FADD.f32`) at Mesa's places among the conversions, then the
+   `FADD.f32 r1.h0`. That is the open work of M2-2.
+
+Steps 1 and 2 alone would let unreferenced shapes compile, so neither is
+in the tree.
